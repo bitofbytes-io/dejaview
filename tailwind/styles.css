@@ -566,8 +566,6 @@
 	}
 
 	.advantage-badge {
-		width: 5rem;
-		height: 5rem;
 		border-radius: 50%;
 		background: var(--color-gold);
 		color: var(--color-theater-black);
@@ -575,10 +573,8 @@
 		align-items: center;
 		justify-content: center;
 		font-family: var(--font-display);
-		font-size: 2rem;
 		font-weight: 700;
 		box-shadow: 0 0 20px rgba(217, 119, 6, 0.4);
-		flex-shrink: 0;
 	}
 
 	/* Award Cards */
