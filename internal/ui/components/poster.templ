@@ -32,20 +32,15 @@ templ PosterCard(entry *model.Entry, showRatings bool) {
 
 templ posterCardContent(entry *model.Entry, showRatings bool) {
 	if entry.PickedByPerson != nil {
-		<div class="picker-badge" title={ "Picked by " + entry.PickedByPerson.Name }>
-			{ entry.PickedByPerson.Name }
+		<div class={ "picker-badge", entry.PickedByPerson.ColorClass() } title={ "Picked by " + entry.PickedByPerson.Name }>
+			{ entry.PickedByPerson.Initial }
 		</div>
 	}
 	@Poster(entry.Movie, "w-full")
 
-	<div class="poster-overlay">
-		<h3 class="font-display font-semibold text-gold truncate">{ entry.Movie.Title }</h3>
-		if entry.Movie.ReleaseYear != nil {
-			<p class="text-sm text-cream-ticket opacity-70">{ ui.IntToStr(*entry.Movie.ReleaseYear) }</p>
-		}
-
-		if showRatings && len(entry.Ratings) > 0 {
-			<div class="flex items-center gap-1 mt-2">
+	if showRatings && len(entry.Ratings) > 0 {
+		<div class="poster-overlay">
+			<div class="flex items-center gap-1">
 				for _, rating := range entry.Ratings {
 					<span class={ "rating-badge text-xs", rating.RatingColor() }>
 						{ rating.Person.Initial }
@@ -57,8 +52,8 @@ templ posterCardContent(entry *model.Entry, showRatings bool) {
 					</span>
 				}
 			</div>
-		}
-	</div>
+		</div>
+	}
 }
 
 // DraggablePosterCard renders a draggable movie poster card for reordering

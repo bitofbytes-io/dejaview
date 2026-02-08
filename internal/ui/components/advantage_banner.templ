@@ -8,13 +8,15 @@ import (
 // AdvantageBanner shows who has the 3-pick advantage
 templ AdvantageBanner(holder *model.Person, fromGroup int) {
 	<div class="advantage-banner">
-		<div class="advantage-badge w-12 h-12 sm:w-20 sm:h-20 text-xl sm:text-3xl flex-shrink-0">
-			if holder != nil {
+		if holder != nil {
+			<div class={ "advantage-badge w-12 h-12 sm:w-20 sm:h-20 text-xl sm:text-3xl flex-shrink-0", holder.ColorClass() }>
 				{ holder.Initial }
-			} else {
+			</div>
+		} else {
+			<div class="advantage-badge w-12 h-12 sm:w-20 sm:h-20 text-xl sm:text-3xl flex-shrink-0">
 				?
-			}
-		</div>
+			</div>
+		}
 		<div class="flex-1 min-w-0">
 			if holder != nil {
 				<div class="text-base sm:text-xl font-display font-bold text-cream mb-1">
