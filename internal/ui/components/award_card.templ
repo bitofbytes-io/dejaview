@@ -10,7 +10,7 @@ templ AwardCard(award model.Award) {
 		</div>
 		<div class="award-title">{ award.Title }</div>
 		if award.Winner != nil {
-			<div class="award-winner-badge">{ award.Winner.Initial }</div>
+			<div class={ "award-winner-badge", award.Winner.ColorClass() }>{ award.Winner.Initial }</div>
 			<div class="award-winner-name">{ award.Winner.Name }</div>
 		} else {
 			<div class="award-winner-badge award-empty">?</div>
