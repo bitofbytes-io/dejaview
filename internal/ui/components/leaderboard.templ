@@ -35,7 +35,7 @@ templ LeaderboardItem(rank int, entry model.LeaderboardEntry, maxValue float64) 
 			}
 		</div>
 		<div class="leaderboard-person">
-			<span class="leaderboard-initial">{ entry.Person.Initial }</span>
+			<span class={ "leaderboard-initial", entry.Person.ColorClass() }>{ entry.Person.Initial }</span>
 			<span class="leaderboard-name">{ entry.Person.Name }</span>
 		</div>
 		<div class="leaderboard-bar-container">
