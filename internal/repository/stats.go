@@ -270,13 +270,29 @@ func (r *StatsRepository) GetSelfRatingStats(ctx context.Context) ([]model.SelfR
 // GetPickMetadataStats returns runtime and release year stats per person
 func (r *StatsRepository) GetPickMetadataStats(ctx context.Context) ([]model.PickMetadataStats, error) {
 	query := `
+		WITH pick_variance AS (
+			SELECT 
+				e.picked_by_person_id,
+				e.id as entry_id,
+				STDDEV_POP(r.score) as variance
+			FROM entries e
+			JOIN ratings r ON e.id = r.entry_id
+			WHERE e.picked_by_person_id IS NOT NULL
+			GROUP BY e.picked_by_person_id, e.id
+			HAVING COUNT(r.score) = 4
+		)
 		SELECT 
 			e.picked_by_person_id,
 			COALESCE(SUM(m.runtime_minutes), 0) as total_runtime,
 			COALESCE(AVG(m.release_year), 0) as avg_release_year,
-			COUNT(*) as pick_count
+			COALESCE(AVG(m.runtime_minutes), 0) as avg_runtime,
+			COALESCE(MIN(m.release_year), 0) as min_release_year,
+			COALESCE(MAX(m.release_year), 0) as max_release_year,
+			COUNT(*) as pick_count,
+			COALESCE(AVG(pv.variance), 0) as avg_pick_variance
 		FROM entries e
 		JOIN movies m ON e.movie_id = m.id
+		LEFT JOIN pick_variance pv ON e.id = pv.entry_id
 		WHERE e.picked_by_person_id IS NOT NULL
 		GROUP BY e.picked_by_person_id`
 
@@ -289,7 +305,16 @@ func (r *StatsRepository) GetPickMetadataStats(ctx context.Context) ([]model.Pic
 	var stats []model.PickMetadataStats
 	for rows.Next() {
 		var s model.PickMetadataStats
-		if err := rows.Scan(&s.PersonID, &s.TotalRuntime, &s.AvgReleaseYear, &s.PickCount); err != nil {
+		if err := rows.Scan(
+			&s.PersonID,
+			&s.TotalRuntime,
+			&s.AvgReleaseYear,
+			&s.AvgRuntime,
+			&s.MinReleaseYear,
+			&s.MaxReleaseYear,
+			&s.PickCount,
+			&s.AvgPickVariance,
+		); err != nil {
 			return nil, fmt.Errorf("scan pick metadata stats: %w", err)
 		}
 		stats = append(stats, s)
@@ -430,6 +455,53 @@ func (r *StatsRepository) GetCurrentGroup(ctx context.Context) (int, error) {
 	}
 
 	return group, nil
+}
+
+// GetSelfInflationStats returns how often each person rated their own pick above group average
+func (r *StatsRepository) GetSelfInflationStats(ctx context.Context) ([]model.SelfInflationStats, error) {
+	query := `
+		WITH fully_rated_entries AS (
+			SELECT entry_id
+			FROM ratings
+			GROUP BY entry_id
+			HAVING COUNT(*) = 4
+		),
+		entry_averages AS (
+			SELECT entry_id, AVG(score) as avg_score
+			FROM ratings
+			WHERE entry_id IN (SELECT entry_id FROM fully_rated_entries)
+			GROUP BY entry_id
+		),
+		self_inflation AS (
+			SELECT 
+				e.picked_by_person_id as person_id,
+				COUNT(*) as cnt
+			FROM entries e
+			JOIN ratings r ON e.id = r.entry_id AND e.picked_by_person_id = r.person_id
+			JOIN entry_averages ea ON e.id = ea.entry_id
+			WHERE e.picked_by_person_id IS NOT NULL AND r.score > ea.avg_score
+			GROUP BY e.picked_by_person_id
+		)
+		SELECT p.id, COALESCE(si.cnt, 0)
+		FROM persons p
+		LEFT JOIN self_inflation si ON p.id = si.person_id`
+
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("get self inflation stats: %w", err)
+	}
+	defer rows.Close()
+
+	var stats []model.SelfInflationStats
+	for rows.Next() {
+		var s model.SelfInflationStats
+		if err := rows.Scan(&s.PersonID, &s.SelfInflationCount); err != nil {
+			return nil, fmt.Errorf("scan self inflation stats: %w", err)
+		}
+		stats = append(stats, s)
+	}
+
+	return stats, rows.Err()
 }
 
 // GetPickCounts returns total picks per person
