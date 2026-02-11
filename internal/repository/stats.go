@@ -504,6 +504,57 @@ func (r *StatsRepository) GetSelfInflationStats(ctx context.Context) ([]model.Se
 	return stats, rows.Err()
 }
 
+// GetLastPickRatingStats returns average rating received on last picks per person
+func (r *StatsRepository) GetLastPickRatingStats(ctx context.Context) ([]model.LastPickRatingStats, error) {
+	query := `
+		WITH group_bounds AS (
+			SELECT 
+				group_number,
+				MAX(position) as max_pos
+			FROM entries
+			GROUP BY group_number
+		),
+		last_picks AS (
+			SELECT e.id as entry_id, e.picked_by_person_id
+			FROM entries e
+			JOIN group_bounds gb ON e.group_number = gb.group_number AND e.position = gb.max_pos
+			WHERE e.picked_by_person_id IS NOT NULL
+		),
+		fully_rated_last_picks AS (
+			SELECT lp.entry_id, lp.picked_by_person_id
+			FROM last_picks lp
+			WHERE (SELECT COUNT(*) FROM ratings WHERE entry_id = lp.entry_id) = 4
+		),
+		last_pick_ratings AS (
+			SELECT 
+				frlp.picked_by_person_id as person_id,
+				AVG(r.score) as avg_rating
+			FROM fully_rated_last_picks frlp
+			JOIN ratings r ON frlp.entry_id = r.entry_id
+			GROUP BY frlp.picked_by_person_id
+		)
+		SELECT p.id, COALESCE(lpr.avg_rating, 0)
+		FROM persons p
+		LEFT JOIN last_pick_ratings lpr ON p.id = lpr.person_id`
+
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("get last pick rating stats: %w", err)
+	}
+	defer rows.Close()
+
+	var stats []model.LastPickRatingStats
+	for rows.Next() {
+		var s model.LastPickRatingStats
+		if err := rows.Scan(&s.PersonID, &s.LastPickAvgRating); err != nil {
+			return nil, fmt.Errorf("scan last pick rating stats: %w", err)
+		}
+		stats = append(stats, s)
+	}
+
+	return stats, rows.Err()
+}
+
 // GetPickCounts returns total picks per person
 func (r *StatsRepository) GetPickCounts(ctx context.Context) (map[uuid.UUID]int, error) {
 	query := `

@@ -21,6 +21,7 @@ type PersonStats struct {
 	MaxReleaseYear        int     // latest release year of their picks
 	AvgPickVariance       float64 // average rating variance of their picks (how divisive)
 	SelfInflationCount    int     // times they rated their own pick higher than group avg
+	LastPickAvgRating     float64 // average rating received on last picks specifically
 }
 
 // Award represents a silly superlative award
@@ -137,4 +138,10 @@ type PickMetadataStats struct {
 type SelfInflationStats struct {
 	PersonID           uuid.UUID
 	SelfInflationCount int
+}
+
+// LastPickRatingStats holds avg rating received on last picks per person
+type LastPickRatingStats struct {
+	PersonID          uuid.UUID
+	LastPickAvgRating float64
 }

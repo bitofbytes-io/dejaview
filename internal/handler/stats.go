@@ -89,6 +89,11 @@ func (h *StatsHandler) buildStatsData(ctx context.Context) (*model.StatsData, er
 		return nil, fmt.Errorf("get self inflation stats: %w", err)
 	}
 
+	lastPickRatingStats, err := h.statsRepo.GetLastPickRatingStats(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get last pick rating stats: %w", err)
+	}
+
 	movieVariance, err := h.statsRepo.GetMovieRatingVariance(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get movie variance: %w", err)
@@ -113,6 +118,7 @@ func (h *StatsHandler) buildStatsData(ctx context.Context) (*model.StatsData, er
 		selfRatingStats,
 		pickMetadataStats,
 		selfInflationStats,
+		lastPickRatingStats,
 		pickCounts,
 	)
 
@@ -154,6 +160,7 @@ func (h *StatsHandler) buildPersonStatsMap(
 	selfRatingStats []model.SelfRatingStats,
 	pickMetadataStats []model.PickMetadataStats,
 	selfInflationStats []model.SelfInflationStats,
+	lastPickRatingStats []model.LastPickRatingStats,
 	pickCounts map[uuid.UUID]int,
 ) map[uuid.UUID]model.PersonStats {
 	statsMap := make(map[uuid.UUID]model.PersonStats)
@@ -220,6 +227,14 @@ func (h *StatsHandler) buildPersonStatsMap(
 		if ps, ok := statsMap[sis.PersonID]; ok {
 			ps.SelfInflationCount = sis.SelfInflationCount
 			statsMap[sis.PersonID] = ps
+		}
+	}
+
+	// Add last pick rating stats
+	for _, lprs := range lastPickRatingStats {
+		if ps, ok := statsMap[lprs.PersonID]; ok {
+			ps.LastPickAvgRating = lprs.LastPickAvgRating
+			statsMap[lprs.PersonID] = ps
 		}
 	}
 
@@ -570,6 +585,27 @@ func (h *StatsHandler) calculateAwards(statsMap map[uuid.UUID]model.PersonStats,
 			Winner:      winner,
 			Value:       fmt.Sprintf("%.0f decades", value),
 		})
+	}
+
+	// The Underdog - most last picks but highest avg rating on those picks
+	if winner, value := h.findMax(statsMap, func(ps model.PersonStats) float64 {
+		if ps.LastPickCount == 0 || ps.LastPickAvgRating == 0 {
+			return 0
+		}
+		// Weight by number of last picks to reward consistency
+		return ps.LastPickAvgRating
+	}); winner != nil && value > 0 {
+		ps := statsMap[winner.ID]
+		if ps.LastPickCount > 0 {
+			awards = append(awards, model.Award{
+				ID:          "underdog",
+				Title:       "The Underdog",
+				Description: "The algorithm was wrong about you",
+				Icon:        "dog",
+				Winner:      winner,
+				Value:       fmt.Sprintf("%.1f avg on %d last pick(s)", value, ps.LastPickCount),
+			})
+		}
 	}
 
 	return awards
