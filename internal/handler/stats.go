@@ -217,7 +217,7 @@ func (h *StatsHandler) buildPersonStatsMap(
 			ps.AvgRuntimePerPick = pms.AvgRuntime
 			ps.MinReleaseYear = pms.MinReleaseYear
 			ps.MaxReleaseYear = pms.MaxReleaseYear
-			ps.AvgPickVariance = pms.AvgPickVariance
+			ps.AvgPickStdDev = pms.AvgPickStdDev
 			statsMap[pms.PersonID] = ps
 		}
 	}
@@ -504,12 +504,12 @@ func (h *StatsHandler) calculateAwards(statsMap map[uuid.UUID]model.PersonStats,
 		})
 	}
 
-	// The Hype Machine - person whose picks have highest avg variance
+	// The Hype Machine - person whose picks have highest avg stddev
 	if winner, value := h.findMax(statsMap, func(ps model.PersonStats) float64 {
 		if ps.TotalPicks == 0 {
 			return 0
 		}
-		return ps.AvgPickVariance
+		return ps.AvgPickStdDev
 	}); winner != nil && value > 0 {
 		awards = append(awards, model.Award{
 			ID:          "hype_machine",
@@ -517,24 +517,24 @@ func (h *StatsHandler) calculateAwards(statsMap map[uuid.UUID]model.PersonStats,
 			Description: "Their picks start arguments",
 			Icon:        "megaphone",
 			Winner:      winner,
-			Value:       fmt.Sprintf("%.1f avg variance", value),
+			Value:       fmt.Sprintf("%.1f avg stddev", value),
 		})
 	}
 
-	// The Safe Bet - person whose picks have lowest avg variance
+	// The Safe Bet - person whose picks have lowest avg stddev
 	if winner, value := h.findMin(statsMap, func(ps model.PersonStats) float64 {
-		if ps.TotalPicks == 0 {
+		if ps.TotalPicks == 0 || ps.AvgPickStdDev == 0 {
 			return 999
 		}
-		return ps.AvgPickVariance
-	}); winner != nil && value < 999 && value >= 0 {
+		return ps.AvgPickStdDev
+	}); winner != nil && value < 999 {
 		awards = append(awards, model.Award{
 			ID:          "safe_bet",
 			Title:       "The Safe Bet",
 			Description: "Everyone kinda likes them",
 			Icon:        "handshake",
 			Winner:      winner,
-			Value:       fmt.Sprintf("%.1f avg variance", value),
+			Value:       fmt.Sprintf("%.1f avg stddev", value),
 		})
 	}
 
@@ -574,8 +574,9 @@ func (h *StatsHandler) calculateAwards(statsMap map[uuid.UUID]model.PersonStats,
 		if ps.TotalPicks <= 1 || ps.MinReleaseYear == 0 {
 			return 0
 		}
-		decades := (ps.MaxReleaseYear - ps.MinReleaseYear) / 10
-		return float64(decades)
+		// Calculate distinct decades spanned (inclusive)
+		decades := float64(ps.MaxReleaseYear/10 - ps.MinReleaseYear/10 + 1)
+		return decades
 	}); winner != nil && value > 0 {
 		awards = append(awards, model.Award{
 			ID:          "century_hopper",
@@ -583,7 +584,7 @@ func (h *StatsHandler) calculateAwards(statsMap map[uuid.UUID]model.PersonStats,
 			Description: "Four generations, one queue",
 			Icon:        "calendar",
 			Winner:      winner,
-			Value:       fmt.Sprintf("%.0f decades", value),
+			Value:       fmt.Sprintf("%.0f decade(s)", value),
 		})
 	}
 

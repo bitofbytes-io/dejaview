@@ -19,7 +19,7 @@ type PersonStats struct {
 	AvgRuntimePerPick     float64 // average runtime per movie they picked
 	MinReleaseYear        int     // earliest release year of their picks
 	MaxReleaseYear        int     // latest release year of their picks
-	AvgPickVariance       float64 // average rating variance of their picks (how divisive)
+	AvgPickStdDev         float64 // average rating std dev of their picks (how divisive)
 	SelfInflationCount    int     // times they rated their own pick higher than group avg
 	LastPickAvgRating     float64 // average rating received on last picks specifically
 }
@@ -124,14 +124,14 @@ type SelfRatingStats struct {
 
 // PickMetadataStats holds runtime and release year stats per person
 type PickMetadataStats struct {
-	PersonID        uuid.UUID
-	TotalRuntime    int
-	AvgReleaseYear  float64
-	AvgRuntime      float64
-	MinReleaseYear  int
-	MaxReleaseYear  int
-	PickCount       int
-	AvgPickVariance float64
+	PersonID       uuid.UUID
+	TotalRuntime   int
+	AvgReleaseYear float64
+	AvgRuntime     float64
+	MinReleaseYear int
+	MaxReleaseYear int
+	PickCount      int
+	AvgPickStdDev  float64
 }
 
 // SelfInflationStats holds how often someone rates their own pick above group average
