@@ -84,6 +84,16 @@ func (h *StatsHandler) buildStatsData(ctx context.Context) (*model.StatsData, er
 		return nil, fmt.Errorf("get pick metadata stats: %w", err)
 	}
 
+	selfInflationStats, err := h.statsRepo.GetSelfInflationStats(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get self inflation stats: %w", err)
+	}
+
+	lastPickRatingStats, err := h.statsRepo.GetLastPickRatingStats(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get last pick rating stats: %w", err)
+	}
+
 	movieVariance, err := h.statsRepo.GetMovieRatingVariance(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get movie variance: %w", err)
@@ -107,6 +117,8 @@ func (h *StatsHandler) buildStatsData(ctx context.Context) (*model.StatsData, er
 		deviationStats,
 		selfRatingStats,
 		pickMetadataStats,
+		selfInflationStats,
+		lastPickRatingStats,
 		pickCounts,
 	)
 
@@ -147,6 +159,8 @@ func (h *StatsHandler) buildPersonStatsMap(
 	deviationStats []model.DeviationStats,
 	selfRatingStats []model.SelfRatingStats,
 	pickMetadataStats []model.PickMetadataStats,
+	selfInflationStats []model.SelfInflationStats,
+	lastPickRatingStats []model.LastPickRatingStats,
 	pickCounts map[uuid.UUID]int,
 ) map[uuid.UUID]model.PersonStats {
 	statsMap := make(map[uuid.UUID]model.PersonStats)
@@ -200,7 +214,27 @@ func (h *StatsHandler) buildPersonStatsMap(
 		if ps, ok := statsMap[pms.PersonID]; ok {
 			ps.TotalRuntimePicked = pms.TotalRuntime
 			ps.AvgReleaseYear = pms.AvgReleaseYear
+			ps.AvgRuntimePerPick = pms.AvgRuntime
+			ps.MinReleaseYear = pms.MinReleaseYear
+			ps.MaxReleaseYear = pms.MaxReleaseYear
+			ps.AvgPickStdDev = pms.AvgPickStdDev
 			statsMap[pms.PersonID] = ps
+		}
+	}
+
+	// Add self inflation stats
+	for _, sis := range selfInflationStats {
+		if ps, ok := statsMap[sis.PersonID]; ok {
+			ps.SelfInflationCount = sis.SelfInflationCount
+			statsMap[sis.PersonID] = ps
+		}
+	}
+
+	// Add last pick rating stats
+	for _, lprs := range lastPickRatingStats {
+		if ps, ok := statsMap[lprs.PersonID]; ok {
+			ps.LastPickAvgRating = lprs.LastPickAvgRating
+			statsMap[lprs.PersonID] = ps
 		}
 	}
 
@@ -400,6 +434,179 @@ func (h *StatsHandler) calculateAwards(statsMap map[uuid.UUID]model.PersonStats,
 			Winner:      winner,
 			Value:       fmt.Sprintf("%dh %dm total", hours, mins),
 		})
+	}
+
+	// The Grade Inflator - biggest gap between avg rating given vs received
+	if winner, value := h.findMax(statsMap, func(ps model.PersonStats) float64 {
+		if ps.TotalPicks == 0 || ps.MoviesRated == 0 {
+			return 0
+		}
+		return ps.AvgRatingGiven - ps.AvgRatingReceived
+	}); winner != nil && value > 0.5 {
+		awards = append(awards, model.Award{
+			ID:          "grade_inflator",
+			Title:       "The Grade Inflator",
+			Description: "Dishes out 9s, gets back 5s",
+			Icon:        "balloon",
+			Winner:      winner,
+			Value:       fmt.Sprintf("%.1f point gap", value),
+		})
+	}
+
+	// The Snooze Button - shortest average runtime per pick
+	if winner, value := h.findMin(statsMap, func(ps model.PersonStats) float64 {
+		if ps.TotalPicks == 0 {
+			return 999
+		}
+		return ps.AvgRuntimePerPick
+	}); winner != nil && value < 999 && value > 0 {
+		awards = append(awards, model.Award{
+			ID:          "snooze_button",
+			Title:       "The Snooze Button",
+			Description: "90 minutes or bust",
+			Icon:        "alarm-clock",
+			Winner:      winner,
+			Value:       fmt.Sprintf("%.0f min avg", value),
+		})
+	}
+
+	// The Binge Enabler - longest average runtime per pick
+	if winner, value := h.findMax(statsMap, func(ps model.PersonStats) float64 {
+		if ps.TotalPicks == 0 {
+			return 0
+		}
+		return ps.AvgRuntimePerPick
+	}); winner != nil && value > 0 {
+		awards = append(awards, model.Award{
+			ID:          "binge_enabler",
+			Title:       "The Binge Enabler",
+			Description: "Every pick is a commitment",
+			Icon:        "hourglass",
+			Winner:      winner,
+			Value:       fmt.Sprintf("%.0f min avg", value),
+		})
+	}
+
+	// The Time Traveler - biggest spread in release years
+	if winner, value := h.findMax(statsMap, func(ps model.PersonStats) float64 {
+		if ps.TotalPicks <= 1 || ps.MinReleaseYear == 0 {
+			return 0
+		}
+		return float64(ps.MaxReleaseYear - ps.MinReleaseYear)
+	}); winner != nil && value > 0 {
+		awards = append(awards, model.Award{
+			ID:          "time_traveler",
+			Title:       "The Time Traveler",
+			Description: "From Hitchcock to TikTok",
+			Icon:        "clock",
+			Winner:      winner,
+			Value:       fmt.Sprintf("%d year spread", int(value)),
+		})
+	}
+
+	// The Hype Machine - person whose picks have highest avg stddev
+	if winner, value := h.findMax(statsMap, func(ps model.PersonStats) float64 {
+		if ps.TotalPicks == 0 {
+			return 0
+		}
+		return ps.AvgPickStdDev
+	}); winner != nil && value > 0 {
+		awards = append(awards, model.Award{
+			ID:          "hype_machine",
+			Title:       "The Hype Machine",
+			Description: "Their picks start arguments",
+			Icon:        "megaphone",
+			Winner:      winner,
+			Value:       fmt.Sprintf("%.1f avg stddev", value),
+		})
+	}
+
+	// The Safe Bet - person whose picks have lowest avg stddev
+	if winner, value := h.findMin(statsMap, func(ps model.PersonStats) float64 {
+		if ps.TotalPicks == 0 || ps.AvgPickStdDev == 0 {
+			return 999
+		}
+		return ps.AvgPickStdDev
+	}); winner != nil && value < 999 {
+		awards = append(awards, model.Award{
+			ID:          "safe_bet",
+			Title:       "The Safe Bet",
+			Description: "Everyone kinda likes them",
+			Icon:        "handshake",
+			Winner:      winner,
+			Value:       fmt.Sprintf("%.1f avg stddev", value),
+		})
+	}
+
+	// The Revisionist - rates own picks higher than group avg most often
+	if winner, value := h.findMax(statsMap, func(ps model.PersonStats) float64 {
+		return float64(ps.SelfInflationCount)
+	}); winner != nil && value > 0 {
+		awards = append(awards, model.Award{
+			ID:          "revisionist",
+			Title:       "The Revisionist",
+			Description: "I still stand by it!",
+			Icon:        "pen",
+			Winner:      winner,
+			Value:       fmt.Sprintf("%d times", int(value)),
+		})
+	}
+
+	// The Validator - ratings closest to group average (opposite of outlier)
+	if winner, value := h.findMin(statsMap, func(ps model.PersonStats) float64 {
+		if ps.MoviesRated == 0 {
+			return 999
+		}
+		return ps.AvgDeviationFromGroup
+	}); winner != nil && value < 999 {
+		awards = append(awards, model.Award{
+			ID:          "validator",
+			Title:       "The Validator",
+			Description: "The voice of the people",
+			Icon:        "checkmark",
+			Winner:      winner,
+			Value:       fmt.Sprintf("%.1f points from avg", value),
+		})
+	}
+
+	// The Century Hopper - picks spanning the most decades
+	if winner, value := h.findMax(statsMap, func(ps model.PersonStats) float64 {
+		if ps.TotalPicks <= 1 || ps.MinReleaseYear == 0 {
+			return 0
+		}
+		// Calculate distinct decades spanned (inclusive)
+		decades := float64(ps.MaxReleaseYear/10 - ps.MinReleaseYear/10 + 1)
+		return decades
+	}); winner != nil && value > 0 {
+		awards = append(awards, model.Award{
+			ID:          "century_hopper",
+			Title:       "The Century Hopper",
+			Description: "Four generations, one queue",
+			Icon:        "calendar",
+			Winner:      winner,
+			Value:       fmt.Sprintf("%.0f decade(s)", value),
+		})
+	}
+
+	// The Underdog - most last picks but highest avg rating on those picks
+	if winner, value := h.findMax(statsMap, func(ps model.PersonStats) float64 {
+		if ps.LastPickCount == 0 || ps.LastPickAvgRating == 0 {
+			return 0
+		}
+		// Weight by number of last picks to reward consistency
+		return ps.LastPickAvgRating
+	}); winner != nil && value > 0 {
+		ps := statsMap[winner.ID]
+		if ps.LastPickCount > 0 {
+			awards = append(awards, model.Award{
+				ID:          "underdog",
+				Title:       "The Underdog",
+				Description: "The algorithm was wrong about you",
+				Icon:        "dog",
+				Winner:      winner,
+				Value:       fmt.Sprintf("%.1f avg on %d last pick(s)", value, ps.LastPickCount),
+			})
+		}
 	}
 
 	return awards
