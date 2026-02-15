@@ -1,6 +1,6 @@
 package components
 
-// Icon renders an SVG icon with vintage cinema styling
+// Icon renders an icon (SVG or emoji) with vintage cinema styling
 // name: the icon identifier
 // class: optional CSS classes (e.g., "text-2xl", "text-gold")
 templ Icon(name string, class string) {
@@ -54,27 +54,27 @@ templ Icon(name string, class string) {
 			<path d="M8 17 L16 17 L15 20 L9 20 Z"/>
 		</svg>
 	} else if name == "crown" {
-		<span class={ class } style="font-size: 1.5em;">👑</span>
+		<span class={ "icon", class } style="font-size: 1.5em;" aria-hidden="true">👑</span>
 	} else if name == "slot-machine" {
-		<span class={ class } style="font-size: 1.5em;">🎰</span>
+		<span class={ "icon", class } style="font-size: 1.5em;" aria-hidden="true">🎰</span>
 	} else if name == "briefcase" {
-		<span class={ class } style="font-size: 1.5em;">💼</span>
+		<span class={ "icon", class } style="font-size: 1.5em;" aria-hidden="true">💼</span>
 	} else if name == "monocle" {
-		<span class={ class } style="font-size: 1.5em;">🧐</span>
+		<span class={ "icon", class } style="font-size: 1.5em;" aria-hidden="true">🧐</span>
 	} else if name == "smile" {
-		<span class={ class } style="font-size: 1.5em;">😊</span>
+		<span class={ "icon", class } style="font-size: 1.5em;" aria-hidden="true">😊</span>
 	} else if name == "theater-masks" {
-		<span class={ class } style="font-size: 1.5em;">🎭</span>
+		<span class={ "icon", class } style="font-size: 1.5em;" aria-hidden="true">🎭</span>
 	} else if name == "sweat-smile" {
-		<span class={ class } style="font-size: 1.5em;">😅</span>
+		<span class={ "icon", class } style="font-size: 1.5em;" aria-hidden="true">😅</span>
 	} else if name == "ruler" {
-		<span class={ class } style="font-size: 1.5em;">📏</span>
+		<span class={ "icon", class } style="font-size: 1.5em;" aria-hidden="true">📏</span>
 	} else if name == "dice" {
-		<span class={ class } style="font-size: 1.5em;">🎲</span>
+		<span class={ "icon", class } style="font-size: 1.5em;" aria-hidden="true">🎲</span>
 	} else if name == "vhs-tape" {
-		<span class={ class } style="font-size: 1.5em;">📼</span>
+		<span class={ "icon", class } style="font-size: 1.5em;" aria-hidden="true">📼</span>
 	} else if name == "popcorn" {
-		<span class={ class } style="font-size: 1.5em;">🍿</span>
+		<span class={ "icon", class } style="font-size: 1.5em;" aria-hidden="true">🍿</span>
 	} else if name == "chart-up" {
 		<svg class={ "icon", class } viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
 			<line x1="4" y1="20" x2="4" y2="4"/>
@@ -89,17 +89,17 @@ templ Icon(name string, class string) {
 			<rect x="15" y="14" width="4" height="6"/>
 		</svg>
 	} else if name == "stopwatch" {
-		<span class={ class } style="font-size: 1.5em;">⏱️</span>
+		<span class={ "icon", class } style="font-size: 1.5em;" aria-hidden="true">⏱️</span>
 	} else if name == "calendar" {
-		<span class={ class } style="font-size: 1.5em;">📅</span>
+		<span class={ "icon", class } style="font-size: 1.5em;" aria-hidden="true">📅</span>
 	} else if name == "star" {
 		<svg class={ "icon", class } viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" aria-hidden="true">
 			<path d="M12 2 L14.5 9 L22 9 L16 14 L18.5 21 L12 16 L5.5 21 L8 14 L2 9 L9.5 9 Z"/>
 		</svg>
 	} else if name == "train" {
-		<span class={ class } style="font-size: 1.5em;">🚂</span>
+		<span class={ "icon", class } style="font-size: 1.5em;" aria-hidden="true">🚂</span>
 	} else if name == "handshake" {
-		<span class={ class } style="font-size: 1.5em;">🤝</span>
+		<span class={ "icon", class } style="font-size: 1.5em;" aria-hidden="true">🤝</span>
 	} else if name == "gift" {
 		<svg class={ "icon", class } viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
 			<rect x="5" y="11" width="14" height="9" rx="0.5"/>
@@ -145,21 +145,21 @@ templ Icon(name string, class string) {
 			<path d="M10 11 L13 11 Q14 11 14 12 Q14 13 13 13 Q14 13 14 14 Q14 15 13 15 L10 15" stroke-width="1.5" fill="none" stroke-linecap="round"/>
 		</svg>
 	} else if name == "hourglass" {
-		<span class={ class } style="font-size: 1.5em;">⏳</span>
+		<span class={ "icon", class } style="font-size: 1.5em;" aria-hidden="true">⏳</span>
 	} else if name == "clock" {
-		<span class={ class } style="font-size: 1.5em;">🕐</span>
+		<span class={ "icon", class } style="font-size: 1.5em;" aria-hidden="true">🕐</span>
 	} else if name == "megaphone" {
-		<span class={ class } style="font-size: 1.5em;">📣</span>
+		<span class={ "icon", class } style="font-size: 1.5em;" aria-hidden="true">📣</span>
 	} else if name == "balloon" {
-		<span class={ class } style="font-size: 1.5em;">🎈</span>
+		<span class={ "icon", class } style="font-size: 1.5em;" aria-hidden="true">🎈</span>
 	} else if name == "alarm-clock" {
-		<span class={ class } style="font-size: 1.5em;">⏰</span>
+		<span class={ "icon", class } style="font-size: 1.5em;" aria-hidden="true">⏰</span>
 	} else if name == "pen" {
-		<span class={ class } style="font-size: 1.5em;">✏️</span>
+		<span class={ "icon", class } style="font-size: 1.5em;" aria-hidden="true">✏️</span>
 	} else if name == "checkmark" {
-		<span class={ class } style="font-size: 1.5em;">✅</span>
+		<span class={ "icon", class } style="font-size: 1.5em;" aria-hidden="true">✅</span>
 	} else if name == "dog" {
-		<span class={ class } style="font-size: 1.5em;">🐶</span>
+		<span class={ "icon", class } style="font-size: 1.5em;" aria-hidden="true">🐶</span>
 	} else {
 		<svg class={ "icon", class } viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
 			<circle cx="12" cy="12" r="10"/>
