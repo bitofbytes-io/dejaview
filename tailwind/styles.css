@@ -119,6 +119,12 @@
 		flex-shrink: 0;
 	}
 
+	/* Emoji Icon Sizing */
+	.icon-emoji {
+		font-size: 1.125em;
+		line-height: 1;
+	}
+
 	/* Typography */
 	.font-display {
 		font-family: var(--font-display);
