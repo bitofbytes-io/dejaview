@@ -20,4 +20,20 @@ var FamilyNames = map[string]string{
 	"A": "Aiden",
 }
 
+// personColorClasses maps initials to person-specific CSS color classes
+var personColorClasses = map[string]string{
+	"D": "person-daniel",
+	"J": "person-jennifer",
+	"C": "person-caleb",
+	"A": "person-aiden",
+}
+
+// ColorClass returns the person-specific CSS class for neon color styling
+func (p *Person) ColorClass() string {
+	if cls, ok := personColorClasses[p.Initial]; ok {
+		return cls
+	}
+	return ""
+}
+
 

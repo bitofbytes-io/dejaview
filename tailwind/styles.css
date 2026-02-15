@@ -3,44 +3,50 @@
 @source "../internal/ui";
 
 /* =============================================================================
-   DEJAVIEW - MODERN CINEPHILE AESTHETIC
-   A refined, contemporary dark interface with tasteful vintage cinema touches.
-   Clean typography, subtle accents, minimal ornamentation.
+   DEJAVIEW - RETRO VHS NIGHT
+   80s/90s VHS nostalgia — neon pinks and cyans on deep purple, CRT effects,
+   retro pixel fonts, and playful VHS-tape inspired UI elements.
    ============================================================================= */
 
 @layer base {
 	:root {
-		/* Primary Palette - Refined Cinema */
-		--color-theater-black: #09090b;
-		--color-surface: #18181b;
-		--color-surface-raised: #27272a;
-		--color-curtain-red: #991b1b;
-		--color-curtain-dark: #7f1d1d;
-		--color-gold: #d97706;
-		--color-gold-muted: #b45309;
-		--color-cream: #fafaf9;
-		--color-cream-muted: #a8a29e;
+		/* Primary Palette - Retro VHS */
+		--color-theater-black: #1a0a2e;
+		--color-surface: #2d1b4e;
+		--color-surface-raised: #3d2b5e;
+		--color-curtain-red: #ff2d95;
+		--color-curtain-dark: #cc2477;
+		--color-gold: #00f0ff;
+		--color-gold-muted: #00c4d4;
+		--color-cream: #e0d8f0;
+		--color-cream-muted: #8a7e9e;
 
 		/* Status Colors */
 		--color-success: #22c55e;
 		--color-error: #ef4444;
 		--color-warning: #f59e0b;
 
-		/* Rating Colors */
-		--color-rating-low: #ef4444;
-		--color-rating-mid: #f59e0b;
-		--color-rating-high: #22c55e;
+		/* Rating Colors - Neon */
+		--color-rating-low: #ff2d95;
+		--color-rating-mid: #ffe600;
+		--color-rating-high: #4ade80;
 
 		/* Typography */
-		--font-display: 'Outfit', system-ui, sans-serif;
-		--font-body: 'DM Sans', system-ui, sans-serif;
-		--font-mono: 'JetBrains Mono', monospace;
+		--font-display: 'Press Start 2P', monospace;
+		--font-body: 'VT323', monospace;
+		--font-mono: 'Space Mono', monospace;
 
-		/* Shadows */
-		--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-		--shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
-		--shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.3);
-		--shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.4);
+		/* Shadows - Purple-tinted */
+		--shadow-sm: 0 1px 2px rgba(26, 10, 46, 0.6);
+		--shadow-md: 0 4px 6px rgba(26, 10, 46, 0.5);
+		--shadow-lg: 0 10px 15px rgba(26, 10, 46, 0.5);
+		--shadow-xl: 0 20px 25px rgba(26, 10, 46, 0.6);
+
+		/* Person Colors */
+		--color-person-daniel: #00f0ff;
+		--color-person-jennifer: #ff2d95;
+		--color-person-caleb: #ffe600;
+		--color-person-aiden: #a78bfa;
 	}
 
 	* {
@@ -48,9 +54,36 @@
 	}
 
 	body {
-		background-color: var(--color-theater-black);
+		background: radial-gradient(ellipse at center, #1a0a2e 0%, #0d0518 100%);
 		color: var(--color-cream);
 		min-height: 100vh;
+		position: relative;
+	}
+
+	/* CRT Scanline overlay */
+	body::after {
+		content: '';
+		position: fixed;
+		inset: 0;
+		background: repeating-linear-gradient(
+			0deg,
+			transparent 0px,
+			transparent 2px,
+			rgba(0, 0, 0, 0.04) 2px,
+			rgba(0, 0, 0, 0.04) 4px
+		);
+		pointer-events: none;
+		z-index: 9999;
+	}
+
+	/* CRT screen vignette */
+	body::before {
+		content: '';
+		position: fixed;
+		inset: 0;
+		background: radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 0, 0.4) 100%);
+		pointer-events: none;
+		z-index: 9998;
 	}
 
 	/* Subtle scrollbar */
@@ -102,19 +135,55 @@
 	.text-marquee {
 		font-family: var(--font-display);
 		text-transform: uppercase;
-		letter-spacing: 0.1em;
-		color: var(--color-cream);
+		letter-spacing: 0.15em;
+		color: var(--color-gold);
 		font-weight: 600;
+		text-shadow: 0 0 8px rgba(0, 240, 255, 0.5), 0 0 20px rgba(0, 240, 255, 0.2);
 	}
 
 	.text-cream-ticket {
 		color: var(--color-cream-muted);
 	}
 
+	/* ========== MARQUEE TICKER ========== */
+	.marquee-container {
+		background: linear-gradient(90deg, var(--color-curtain-red), var(--color-gold), var(--color-curtain-red));
+		padding: 4px 0;
+		overflow: hidden;
+		position: relative;
+	}
+
+	.marquee-track {
+		display: flex;
+		animation: marquee 20s linear infinite;
+		white-space: nowrap;
+	}
+
+	.marquee-track span {
+		font-family: var(--font-display);
+		font-size: 10px;
+		color: var(--color-theater-black);
+		padding: 2px 24px;
+		text-transform: uppercase;
+		letter-spacing: 2px;
+	}
+
 	/* ========== HEADER ========== */
 	.header-bar {
 		background: var(--color-surface);
-		border-bottom: 1px solid var(--color-surface-raised);
+		border-bottom: 3px solid var(--color-curtain-red);
+		position: relative;
+	}
+
+	.header-bar::after {
+		content: '';
+		position: absolute;
+		bottom: -3px;
+		left: 0;
+		right: 0;
+		height: 3px;
+		background: var(--color-curtain-red);
+		box-shadow: 0 0 10px var(--color-curtain-red), 0 0 30px var(--color-curtain-red);
 	}
 
 	/* ========== INPUT FIELDS ========== */
@@ -132,6 +201,7 @@
 		outline: none;
 		border-color: var(--color-gold);
 		background: var(--color-surface-raised);
+		box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
 	}
 
 	.input-field::placeholder {
@@ -150,12 +220,13 @@
 		border-radius: 8px;
 		transition: all 0.15s ease;
 		text-transform: uppercase;
-		font-size: 0.875rem;
+		font-size: 0.75rem;
 	}
 
 	.btn-primary:hover {
 		background: var(--color-curtain-dark);
 		transform: translateY(-1px);
+		box-shadow: 0 0 15px rgba(255, 45, 149, 0.4);
 	}
 
 	.btn-primary:active {
@@ -168,7 +239,7 @@
 		border: 1px solid var(--color-surface-raised);
 		padding: 0.5rem 1rem;
 		border-radius: 6px;
-		font-size: 0.875rem;
+		font-size: 0.75rem;
 		font-family: var(--font-display);
 		font-weight: 500;
 		letter-spacing: 0.02em;
@@ -200,7 +271,7 @@
 	.poster-card {
 		position: relative;
 		background: var(--color-surface);
-		border: 1px solid var(--color-surface-raised);
+		border: 2px solid var(--color-surface-raised);
 		border-radius: 12px;
 		overflow: hidden;
 		transition: all 0.2s ease;
@@ -209,8 +280,8 @@
 
 	.poster-card:hover {
 		transform: translateY(-4px);
-		border-color: var(--color-gold-muted);
-		box-shadow: var(--shadow-xl);
+		border-color: var(--color-curtain-red);
+		box-shadow: 0 0 20px rgba(255, 45, 149, 0.3), 0 8px 24px rgba(0, 0, 0, 0.4);
 	}
 
 	.poster-image {
@@ -231,8 +302,8 @@
 		right: 0;
 		padding: 1rem;
 		background: linear-gradient(0deg,
-			rgba(9, 9, 11, 0.95) 0%,
-			rgba(9, 9, 11, 0.6) 60%,
+			rgba(26, 10, 46, 0.95) 0%,
+			rgba(26, 10, 46, 0.6) 60%,
 			transparent 100%);
 	}
 
@@ -261,11 +332,70 @@
 		border-radius: 6px;
 		font-family: var(--font-display);
 		font-weight: 600;
-		font-size: 0.875rem;
-		background: rgba(9, 9, 11, 0.85);
-		border: 1px solid var(--color-gold);
+		font-size: 0.625rem;
+		background: rgba(26, 10, 46, 0.85);
+		border: 2px solid var(--color-gold);
 		color: var(--color-cream);
 		z-index: 10;
+		text-shadow: 0 0 8px currentColor;
+	}
+
+	/* Person-specific picker badge colors */
+	.picker-badge.person-daniel {
+		border-color: var(--color-person-daniel);
+		color: var(--color-person-daniel);
+		box-shadow: 0 0 12px rgba(0, 240, 255, 0.3);
+	}
+
+	.picker-badge.person-jennifer {
+		border-color: var(--color-person-jennifer);
+		color: var(--color-person-jennifer);
+		box-shadow: 0 0 12px rgba(255, 45, 149, 0.3);
+	}
+
+	.picker-badge.person-caleb {
+		border-color: var(--color-person-caleb);
+		color: var(--color-person-caleb);
+		box-shadow: 0 0 12px rgba(255, 230, 0, 0.3);
+	}
+
+	.picker-badge.person-aiden {
+		border-color: var(--color-person-aiden);
+		color: var(--color-person-aiden);
+		box-shadow: 0 0 12px rgba(167, 139, 250, 0.3);
+	}
+
+	/* Person-specific colors for leaderboard, awards, and advantage */
+	.leaderboard-initial.person-daniel,
+	.award-winner-badge.person-daniel,
+	.advantage-badge.person-daniel {
+		border-color: var(--color-person-daniel);
+		color: var(--color-person-daniel);
+		background: rgba(0, 240, 255, 0.15);
+	}
+
+	.leaderboard-initial.person-jennifer,
+	.award-winner-badge.person-jennifer,
+	.advantage-badge.person-jennifer {
+		border-color: var(--color-person-jennifer);
+		color: var(--color-person-jennifer);
+		background: rgba(255, 45, 149, 0.15);
+	}
+
+	.leaderboard-initial.person-caleb,
+	.award-winner-badge.person-caleb,
+	.advantage-badge.person-caleb {
+		border-color: var(--color-person-caleb);
+		color: var(--color-person-caleb);
+		background: rgba(255, 230, 0, 0.15);
+	}
+
+	.leaderboard-initial.person-aiden,
+	.award-winner-badge.person-aiden,
+	.advantage-badge.person-aiden {
+		border-color: var(--color-person-aiden);
+		color: var(--color-person-aiden);
+		background: rgba(167, 139, 250, 0.15);
 	}
 
 	/* ========== RATING COMPONENTS ========== */
@@ -279,24 +409,24 @@
 		border-radius: 6px;
 		font-family: var(--font-display);
 		font-weight: 600;
-		font-size: 0.875rem;
+		font-size: 0.625rem;
 		border: 1px solid;
 	}
 
 	.rating-low {
-		background: rgba(239, 68, 68, 0.15);
+		background: rgba(255, 45, 149, 0.15);
 		border-color: var(--color-rating-low);
 		color: var(--color-rating-low);
 	}
 
 	.rating-mid {
-		background: rgba(245, 158, 11, 0.15);
+		background: rgba(255, 230, 0, 0.15);
 		border-color: var(--color-rating-mid);
 		color: var(--color-rating-mid);
 	}
 
 	.rating-high {
-		background: rgba(34, 197, 94, 0.15);
+		background: rgba(74, 222, 128, 0.15);
 		border-color: var(--color-rating-high);
 		color: var(--color-rating-high);
 	}
@@ -309,14 +439,15 @@
 
 	/* Rating input field */
 	.rating-input {
-		width: 4rem;
+		width: 5.5rem;
 		text-align: center;
 		background: var(--color-surface);
 		border: 1px solid var(--color-surface-raised);
 		border-radius: 6px;
-		padding: 0.5rem;
+		padding: 0.625rem 0.5rem;
 		font-family: var(--font-display);
 		font-weight: 600;
+		font-size: 0.75rem;
 		color: var(--color-cream);
 		color-scheme: dark;
 		transition: all 0.15s ease;
@@ -330,6 +461,7 @@
 	.rating-input:focus {
 		outline: none;
 		border-color: var(--color-gold);
+		box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
 	}
 
 	/* ========== CARDS & SECTIONS ========== */
@@ -346,17 +478,18 @@
 	}
 
 	.group-section {
-		border-left: 2px solid var(--color-gold-muted);
+		border-left: 2px solid var(--color-gold);
 		padding-left: 1.5rem;
 	}
 
 	.group-title {
 		font-family: var(--font-display);
-		font-size: 1.25rem;
+		font-size: 0.875rem;
 		font-weight: 600;
 		color: var(--color-cream);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
+		text-shadow: 0 0 6px var(--color-gold);
 	}
 
 	/* ========== SEARCH RESULTS ========== */
@@ -392,10 +525,11 @@
 
 	.detail-title {
 		font-family: var(--font-display);
-		font-size: 2.5rem;
+		font-size: 1.25rem;
 		font-weight: 700;
-		color: var(--color-cream);
-		line-height: 1.2;
+		color: var(--color-gold);
+		line-height: 1.6;
+		text-shadow: 0 0 8px rgba(0, 240, 255, 0.5), 0 0 20px rgba(0, 240, 255, 0.2);
 	}
 
 	.detail-meta {
@@ -502,7 +636,7 @@
 		top: 0.5rem;
 		left: 0.5rem;
 		z-index: 10;
-		background: rgba(9, 9, 11, 0.8);
+		background: rgba(26, 10, 46, 0.8);
 		color: var(--color-cream-muted);
 		padding: 0.375rem;
 		border-radius: 4px;
@@ -547,11 +681,12 @@
 	.stats-section-title {
 		font-family: var(--font-display);
 		color: var(--color-gold);
-		font-size: 1.25rem;
+		font-size: 0.75rem;
 		margin-bottom: 1rem;
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
+		text-shadow: 0 0 6px var(--color-gold);
 	}
 
 	/* Advantage Banner */
@@ -566,8 +701,6 @@
 	}
 
 	.advantage-badge {
-		width: 5rem;
-		height: 5rem;
 		border-radius: 50%;
 		background: var(--color-gold);
 		color: var(--color-theater-black);
@@ -575,10 +708,8 @@
 		align-items: center;
 		justify-content: center;
 		font-family: var(--font-display);
-		font-size: 2rem;
 		font-weight: 700;
-		box-shadow: 0 0 20px rgba(217, 119, 6, 0.4);
-		flex-shrink: 0;
+		box-shadow: 0 0 20px rgba(0, 240, 255, 0.4);
 	}
 
 	/* Award Cards */
@@ -605,7 +736,7 @@
 	.award-title {
 		font-family: var(--font-display);
 		color: var(--color-cream);
-		font-size: 0.8rem;
+		font-size: 0.5rem;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		margin-bottom: 0.75rem;
@@ -623,14 +754,16 @@
 		align-items: center;
 		justify-content: center;
 		font-family: var(--font-display);
-		font-size: 1.5rem;
+		font-size: 1rem;
 		font-weight: 700;
+		box-shadow: 0 0 15px rgba(0, 240, 255, 0.3);
 	}
 
 	.award-winner-badge.award-empty {
 		background: var(--color-surface);
 		border: 2px dashed var(--color-surface-raised);
 		color: var(--color-cream-muted);
+		box-shadow: none;
 	}
 
 	.award-winner-name {
@@ -704,6 +837,7 @@
 	.movie-award-title {
 		font-family: var(--font-display);
 		color: var(--color-cream);
+		font-size: 0.625rem;
 		font-weight: 600;
 		margin-bottom: 0.25rem;
 	}
@@ -781,7 +915,7 @@
 		justify-content: center;
 		font-family: var(--font-display);
 		font-weight: 600;
-		font-size: 0.875rem;
+		font-size: 0.625rem;
 		color: var(--color-cream);
 	}
 
@@ -800,7 +934,7 @@
 
 	.leaderboard-bar {
 		height: 100%;
-		background: linear-gradient(90deg, var(--color-gold-muted), var(--color-gold));
+		background: linear-gradient(90deg, var(--color-gold), var(--color-curtain-red));
 		border-radius: 4px;
 		transition: width 0.3s ease;
 	}
@@ -835,10 +969,11 @@
 
 	.quick-stat-value {
 		font-family: var(--font-display);
-		font-size: 1.75rem;
+		font-size: 1.25rem;
 		font-weight: 700;
 		color: var(--color-gold);
 		margin-bottom: 0.25rem;
+		text-shadow: 0 0 8px var(--color-gold);
 	}
 
 	.quick-stat-label {
@@ -859,7 +994,11 @@
 	}
 
 	.shadow-glow {
-		box-shadow: 0 0 20px rgba(217, 119, 6, 0.2);
+		box-shadow: 0 0 20px rgba(0, 240, 255, 0.2);
+	}
+
+	.text-neon-glow {
+		text-shadow: 0 0 10px currentColor, 0 0 30px currentColor;
 	}
 }
 
@@ -894,3 +1033,13 @@
 		transform: rotate(360deg);
 	}
 }
+
+@keyframes marquee {
+	0% {
+		transform: translateX(0);
+	}
+	100% {
+		transform: translateX(-50%);
+	}
+}
+
