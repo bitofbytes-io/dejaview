@@ -53,8 +53,8 @@ templ RatingInputSimple(entryID uuid.UUID, person *model.Person, currentScore *f
 
 // PersonRatingRowSimple renders a rating row without the form wrapper
 templ PersonRatingRowSimple(entry *model.Entry, person *model.Person) {
-	<div class="rating-row flex items-center gap-3 p-3 rounded-lg bg-theater-black/50">
-		<span class="font-display text-cream-ticket">{ person.Name }</span>
+	<div class="rating-row flex items-center gap-3 p-3 rounded-lg bg-theater-black/50 min-w-0">
+		<span class="font-display text-cream-ticket min-w-0 truncate" title={ person.Name }>{ person.Name }</span>
 		@RatingInputSimple(entry.ID, person, ui.GetRatingScore(entry, person.ID))
 	</div>
 }
