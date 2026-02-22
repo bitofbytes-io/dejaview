@@ -110,7 +110,7 @@ templ MovieDetailPage(entry *model.Entry, persons []*model.Person) {
 
 							<div class="divider mb-6"></div>
 
-							<div class="grid grid-cols-2 gap-4">
+							<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
 								for _, person := range persons {
 									@components.PersonRatingRowSimple(entry, person)
 								}
