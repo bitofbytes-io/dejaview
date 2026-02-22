@@ -8,9 +8,9 @@ import (
 // RatingsUpdate renders the complete response for the ratings save
 templ RatingsUpdate(entry *model.Entry, persons []*model.Person) {
 	<div class="card p-6" id="ratings-section">
-		<div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+		<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
 			<h3 class="font-display text-gold text-lg uppercase tracking-wider">Family Ratings</h3>
-			<div class="flex items-center gap-4">
+			<div class="flex items-center gap-3 flex-wrap">
 				<div id="average-rating">
 					@components.AverageRating(entry.AverageRating(), entry.RatingCount())
 				</div>
