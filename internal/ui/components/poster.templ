@@ -2,7 +2,6 @@ package components
 
 import (
 	"github.com/drywaters/dejaview/internal/model"
-	"github.com/drywaters/dejaview/internal/ui"
 )
 
 // Poster renders a movie poster with fallback
@@ -40,15 +39,10 @@ templ posterCardContent(entry *model.Entry, showRatings bool) {
 
 	if showRatings && len(entry.Ratings) > 0 {
 		<div class="poster-overlay">
-			<div class="flex items-center gap-1">
+			<div class="flex items-center justify-center gap-1">
 				for _, rating := range entry.Ratings {
 					<span class={ "rating-badge text-xs", rating.RatingColor() }>
 						{ rating.Person.Initial }
-					</span>
-				}
-				if avg := entry.AverageRating(); avg != nil {
-					<span class="ml-auto text-gold font-display font-bold text-sm">
-						{ ui.FormatFloat(*avg) }
 					</span>
 				}
 			</div>
