@@ -154,5 +154,5 @@ func (h *RatingHandler) SaveRatings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("HX-Trigger", `{"showToast": {"message": "Saved!", "type": "success"}}`)
-	partials.RatingsUpdate(entry, persons).Render(ctx, w)
+	partials.RatingsUpdate(entry, persons, true).Render(ctx, w)
 }

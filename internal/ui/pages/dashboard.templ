@@ -13,18 +13,18 @@ type GroupData struct {
 	Entries []*model.Entry
 }
 
-templ DashboardPage(groups []GroupData, persons []*model.Person, currentGroup int) {
+templ DashboardPage(groups []GroupData, persons []*model.Person, currentGroup int, isAuthenticated bool) {
 	@layout.Base("Dashboard") {
-		@layout.Header()
+		@layout.Header(isAuthenticated)
 
 		<main class="max-w-7xl mx-auto px-4 py-8" id="dashboard-content">
-			@DashboardContent(groups, persons, currentGroup)
+			@DashboardContent(groups, persons, currentGroup, isAuthenticated)
 		</main>
 	}
 }
 
 // DashboardContent renders just the inner content for HTMX partial updates
-templ DashboardContent(groups []GroupData, persons []*model.Person, currentGroup int) {
+templ DashboardContent(groups []GroupData, persons []*model.Person, currentGroup int, isAuthenticated bool) {
 	<!-- Search Section -->
 	<section class="mb-12">
 		<div class="card p-6">
@@ -38,14 +38,15 @@ templ DashboardContent(groups []GroupData, persons []*model.Person, currentGroup
 					type="search"
 					name="q"
 					placeholder="Search for a movie..."
-					class="input-field sm:flex-1"
+					class={ "input-field sm:flex-1", templ.KV("opacity-60 cursor-not-allowed", !isAuthenticated) }
 					hx-get="/api/tmdb/search"
 					hx-trigger="input changed delay:300ms, search"
 					hx-target="#search-results"
+					disabled?={ !isAuthenticated }
 				/>
 				<div class="flex flex-col sm:flex-row sm:items-center gap-2">
 					<label for="add-group-select" class="text-cream-ticket text-sm whitespace-nowrap">Add to:</label>
-					<select name="group_number" id="add-group-select" class="input-field w-full sm:w-40">
+					<select name="group_number" id="add-group-select" class={ "input-field w-full sm:w-40", templ.KV("opacity-60 cursor-not-allowed", !isAuthenticated) } disabled?={ !isAuthenticated }>
 						if len(groups) == 0 {
 							<option value="1" selected>Group 1 (New)</option>
 						} else {
@@ -59,6 +60,10 @@ templ DashboardContent(groups []GroupData, persons []*model.Person, currentGroup
 					</select>
 				</div>
 			</div>
+
+			if !isAuthenticated {
+				<p class="text-xs text-cream-ticket opacity-70 mb-4">Log in to add movies or make changes.</p>
+			}
 
 			<div id="search-results"></div>
 		</div>

@@ -17,12 +17,14 @@ import (
 // StatsHandler handles the statistics dashboard
 type StatsHandler struct {
 	statsRepo *repository.StatsRepository
+	apiToken  string
 }
 
 // NewStatsHandler creates a new StatsHandler
-func NewStatsHandler(statsRepo *repository.StatsRepository) *StatsHandler {
+func NewStatsHandler(statsRepo *repository.StatsRepository, apiToken string) *StatsHandler {
 	return &StatsHandler{
 		statsRepo: statsRepo,
+		apiToken:  apiToken,
 	}
 }
 
@@ -35,7 +37,8 @@ func (h *StatsHandler) StatsPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pages.StatsPage(statsData).Render(r.Context(), w)
+	isAuthenticated := isAuthenticatedRequest(r, h.apiToken)
+	pages.StatsPage(statsData, isAuthenticated).Render(r.Context(), w)
 }
 
 // buildStatsData aggregates all statistics and calculates awards

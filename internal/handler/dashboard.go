@@ -15,13 +15,15 @@ import (
 type DashboardHandler struct {
 	entryRepo  *repository.EntryRepository
 	personRepo *repository.PersonRepository
+	apiToken   string
 }
 
 // NewDashboardHandler creates a new DashboardHandler
-func NewDashboardHandler(entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository) *DashboardHandler {
+func NewDashboardHandler(entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository, apiToken string) *DashboardHandler {
 	return &DashboardHandler{
 		entryRepo:  entryRepo,
 		personRepo: personRepo,
+		apiToken:   apiToken,
 	}
 }
 
@@ -34,7 +36,8 @@ func (h *DashboardHandler) DashboardPage(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	pages.DashboardPage(groupDataList, persons, currentGroup).Render(r.Context(), w)
+	isAuthenticated := isAuthenticatedRequest(r, h.apiToken)
+	pages.DashboardPage(groupDataList, persons, currentGroup, isAuthenticated).Render(r.Context(), w)
 }
 
 // DashboardContent renders just the inner content for HTMX partial updates
@@ -46,7 +49,8 @@ func (h *DashboardHandler) DashboardContent(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	pages.DashboardContent(groupDataList, persons, currentGroup).Render(r.Context(), w)
+	isAuthenticated := isAuthenticatedRequest(r, h.apiToken)
+	pages.DashboardContent(groupDataList, persons, currentGroup, isAuthenticated).Render(r.Context(), w)
 }
 
 // getDashboardData retrieves all data needed for the dashboard

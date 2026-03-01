@@ -90,16 +90,16 @@ func (s *Server) Router() http.Handler {
 		r.Use(middleware.Auth(s.cfg.APIToken, s.cfg.SecureCookies))
 
 		// Dashboard
-		dashboardHandler := handler.NewDashboardHandler(s.entryRepo, s.personRepo)
+		dashboardHandler := handler.NewDashboardHandler(s.entryRepo, s.personRepo, s.cfg.APIToken)
 		r.Get("/", dashboardHandler.DashboardPage)
 		r.Get("/dashboard-content", dashboardHandler.DashboardContent)
 
 		// Stats
-		statsHandler := handler.NewStatsHandler(s.statsRepo)
+		statsHandler := handler.NewStatsHandler(s.statsRepo, s.cfg.APIToken)
 		r.Get("/stats", statsHandler.StatsPage)
 
 		// Movie detail page
-		movieHandler := handler.NewMovieHandler(s.movieRepo, s.entryRepo, s.personRepo, s.tmdbClient)
+		movieHandler := handler.NewMovieHandler(s.movieRepo, s.entryRepo, s.personRepo, s.tmdbClient, s.cfg.APIToken)
 		r.Get("/movies/{id}", movieHandler.MovieDetailPage)
 
 		// TMDB API endpoints
