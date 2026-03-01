@@ -15,6 +15,11 @@ const cookieName = "dejaview_session"
 func Auth(apiToken string, secureCookies bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if isPublicMovieReadRequest(r) {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			// Check Authorization header first (for programmatic access)
 			if authHeader := r.Header.Get("Authorization"); authHeader != "" {
 				if token, ok := strings.CutPrefix(authHeader, "Bearer "); ok {
@@ -31,6 +36,10 @@ func Auth(apiToken string, secureCookies bool) func(http.Handler) http.Handler {
 			// Fall back to cookie check (for browser access)
 			cookie, err := r.Cookie(cookieName)
 			if err != nil {
+				if shouldReturnUnauthorized(r) {
+					http.Error(w, "Unauthorized", http.StatusUnauthorized)
+					return
+				}
 				redirectToLogin(w, r)
 				return
 			}
@@ -46,6 +55,10 @@ func Auth(apiToken string, secureCookies bool) func(http.Handler) http.Handler {
 					Secure:   secureCookies,
 					SameSite: http.SameSiteLaxMode,
 				})
+				if shouldReturnUnauthorized(r) {
+					http.Error(w, "Unauthorized", http.StatusUnauthorized)
+					return
+				}
 				redirectToLogin(w, r)
 				return
 			}
@@ -53,6 +66,33 @@ func Auth(apiToken string, secureCookies bool) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func isPublicMovieReadRequest(r *http.Request) bool {
+	if !isSafeMethod(r.Method) {
+		return false
+	}
+
+	switch {
+	case r.URL.Path == "/":
+		return true
+	case r.URL.Path == "/dashboard-content":
+		return true
+	case r.URL.Path == "/movies":
+		return true
+	case strings.HasPrefix(r.URL.Path, "/movies/"):
+		return true
+	default:
+		return false
+	}
+}
+
+func isSafeMethod(method string) bool {
+	return method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions
+}
+
+func shouldReturnUnauthorized(r *http.Request) bool {
+	return strings.HasPrefix(r.URL.Path, "/api/") || !isSafeMethod(r.Method)
 }
 
 // constantTimeEqual performs a constant-time comparison to prevent timing attacks.
@@ -72,5 +112,3 @@ func redirectToLogin(w http.ResponseWriter, r *http.Request) {
 
 	http.Redirect(w, r, loginURL, http.StatusSeeOther)
 }
-
-
