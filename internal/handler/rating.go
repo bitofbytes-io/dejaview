@@ -20,6 +20,7 @@ type RatingHandler struct {
 	ratingRepo ratingRepository
 	entryRepo  entryRepository
 	personRepo personRepository
+	apiToken   string
 }
 
 type ratingRepository interface {
@@ -36,11 +37,12 @@ type personRepository interface {
 }
 
 // NewRatingHandler creates a new RatingHandler
-func NewRatingHandler(ratingRepo *repository.RatingRepository, entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository) *RatingHandler {
+func NewRatingHandler(ratingRepo *repository.RatingRepository, entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository, apiToken string) *RatingHandler {
 	return &RatingHandler{
 		ratingRepo: ratingRepo,
 		entryRepo:  entryRepo,
 		personRepo: personRepo,
+		apiToken:   apiToken,
 	}
 }
 
@@ -153,6 +155,7 @@ func (h *RatingHandler) SaveRatings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	isAuthenticated := isAuthenticatedRequest(r, h.apiToken)
 	w.Header().Set("HX-Trigger", `{"showToast": {"message": "Saved!", "type": "success"}}`)
-	partials.RatingsUpdate(entry, persons, true).Render(ctx, w)
+	partials.RatingsUpdate(entry, persons, isAuthenticated).Render(ctx, w)
 }

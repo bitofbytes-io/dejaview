@@ -116,7 +116,7 @@ func (s *Server) Router() http.Handler {
 		r.Post("/api/groups/{num}/reorder", entryHandler.Reorder)
 
 		// Rating API endpoints
-		ratingHandler := handler.NewRatingHandler(s.ratingRepo, s.entryRepo, s.personRepo)
+		ratingHandler := handler.NewRatingHandler(s.ratingRepo, s.entryRepo, s.personRepo, s.cfg.APIToken)
 		r.Put("/api/entries/{id}/ratings", ratingHandler.SaveRatings)
 	})
 

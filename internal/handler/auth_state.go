@@ -8,9 +8,13 @@ import (
 func isAuthenticatedRequest(r *http.Request, apiToken string) bool {
 	if authHeader := r.Header.Get("Authorization"); authHeader != "" {
 		if token, ok := strings.CutPrefix(authHeader, "Bearer "); ok {
-			return constantTimeEqual(token, apiToken)
+			if apiToken != "" && constantTimeEqual(token, apiToken) {
+				return true
+			}
+			// Explicit bearer token present but invalid.
+			return false
 		}
-		return false
+		// Non-bearer auth header: fall through and allow cookie auth to decide.
 	}
 
 	cookie, err := r.Cookie(cookieName)
@@ -18,5 +22,5 @@ func isAuthenticatedRequest(r *http.Request, apiToken string) bool {
 		return false
 	}
 
-	return constantTimeEqual(cookie.Value, apiToken)
+	return apiToken != "" && constantTimeEqual(cookie.Value, apiToken)
 }

@@ -110,7 +110,7 @@ templ MovieDetailPage(entry *model.Entry, persons []*model.Person, isAuthenticat
 										<div id="average-rating">
 											@components.AverageRating(entry.AverageRating(), entry.RatingCount())
 										</div>
-										<button type="submit" class={ "btn-primary", templ.KV("opacity-50 cursor-not-allowed", !isAuthenticated) } disabled?={ !isAuthenticated }>Save</button>
+										<button type="submit" class={ "btn-primary", templ.KV("opacity-50 cursor-not-allowed", !isAuthenticated) }>Save</button>
 									</div>
 								</div>
 
