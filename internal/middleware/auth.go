@@ -73,14 +73,20 @@ func isPublicMovieReadRequest(r *http.Request) bool {
 		return false
 	}
 
+	return isPublicReadEndpoint(r.URL.Path)
+}
+
+func isPublicReadEndpoint(path string) bool {
 	switch {
-	case r.URL.Path == "/":
+	case path == "/":
+		// Explicitly allow the public movie-browsing landing page.
 		return true
-	case r.URL.Path == "/dashboard-content":
+	case path == "/dashboard-content":
+		// Explicitly allow HTMX dashboard partial updates for read-only browsing.
 		return true
-	case r.URL.Path == "/movies":
+	case path == "/movies":
 		return true
-	case strings.HasPrefix(r.URL.Path, "/movies/"):
+	case strings.HasPrefix(path, "/movies/"):
 		return true
 	default:
 		return false
@@ -92,7 +98,8 @@ func isSafeMethod(method string) bool {
 }
 
 func shouldReturnUnauthorized(r *http.Request) bool {
-	return strings.HasPrefix(r.URL.Path, "/api/") || !isSafeMethod(r.Method)
+	isAPIRequest := r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/")
+	return isAPIRequest || !isSafeMethod(r.Method)
 }
 
 // constantTimeEqual performs a constant-time comparison to prevent timing attacks.

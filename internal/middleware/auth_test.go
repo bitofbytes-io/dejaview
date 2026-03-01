@@ -54,3 +54,47 @@ func TestAuth_AuthenticatedMovieWriteAllowed(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusNoContent, recorder.Code)
 	}
 }
+
+func TestAuth_UnauthenticatedSafeMethodsAllowed(t *testing.T) {
+	mw := Auth("secret", false)
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	tests := []struct {
+		name   string
+		method string
+	}{
+		{name: "head", method: http.MethodHead},
+		{name: "options", method: http.MethodOptions},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, "/movies/123", nil)
+			recorder := httptest.NewRecorder()
+
+			mw(next).ServeHTTP(recorder, req)
+
+			if recorder.Code != http.StatusNoContent {
+				t.Fatalf("expected status %d, got %d", http.StatusNoContent, recorder.Code)
+			}
+		})
+	}
+}
+
+func TestAuth_UnauthenticatedApiRootDenied(t *testing.T) {
+	mw := Auth("secret", false)
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api", nil)
+	recorder := httptest.NewRecorder()
+
+	mw(next).ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, recorder.Code)
+	}
+}
