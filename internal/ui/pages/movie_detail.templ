@@ -7,9 +7,9 @@ import (
 	"github.com/drywaters/dejaview/internal/ui/layout"
 )
 
-templ MovieDetailPage(entry *model.Entry, persons []*model.Person) {
+templ MovieDetailPage(entry *model.Entry, persons []*model.Person, isAuthenticated bool) {
 	@layout.Base(entry.Movie.Title) {
-		@layout.Header()
+		@layout.Header(isAuthenticated)
 		
 		<main class="max-w-6xl mx-auto px-4 py-8">
 			<!-- Back link -->
@@ -42,7 +42,8 @@ templ MovieDetailPage(entry *model.Entry, persons []*model.Person) {
 								hx-put={ "/api/entries/" + entry.ID.String() }
 								hx-trigger="change"
 								hx-swap="none"
-								class="input-field w-full"
+								class={ "input-field w-full", templ.KV("opacity-60 cursor-not-allowed", !isAuthenticated) }
+								disabled?={ !isAuthenticated }
 							>
 								<option value="">No one</option>
 								for _, person := range persons {
@@ -59,7 +60,8 @@ templ MovieDetailPage(entry *model.Entry, persons []*model.Person) {
 							hx-delete={ "/api/entries/" + entry.ID.String() }
 							hx-confirm="Are you sure you want to remove this movie from your collection?"
 							hx-swap="none"
-							class="btn-secondary w-full text-red-400 border-red-400 hover:bg-red-400 hover:text-theater-black"
+							class={ "btn-secondary w-full text-red-400 border-red-400 hover:bg-red-400 hover:text-theater-black", templ.KV("opacity-50 cursor-not-allowed hover:bg-transparent hover:text-red-400", !isAuthenticated) }
+							disabled?={ !isAuthenticated }
 						>
 							Remove from Collection
 						</button>
@@ -97,24 +99,29 @@ templ MovieDetailPage(entry *model.Entry, persons []*model.Person) {
 						hx-target="#ratings-section"
 						hx-swap="outerHTML"
 					>
-						<div class="card p-6" id="ratings-section">
-							<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-								<h3 class="font-display text-gold text-lg uppercase tracking-wider">Family Ratings</h3>
-								<div class="flex items-center gap-3 flex-wrap">
-									<div id="average-rating">
-										@components.AverageRating(entry.AverageRating(), entry.RatingCount())
+						<div class={ "card p-6", templ.KV("opacity-70", !isAuthenticated) } id="ratings-section">
+							if !isAuthenticated {
+								<p class="text-xs text-cream-ticket opacity-70 mb-4">Log in to save ratings or edit this movie.</p>
+							}
+							<fieldset disabled?={ !isAuthenticated }>
+								<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+									<h3 class="font-display text-gold text-lg uppercase tracking-wider">Family Ratings</h3>
+									<div class="flex items-center gap-3 flex-wrap">
+										<div id="average-rating">
+											@components.AverageRating(entry.AverageRating(), entry.RatingCount())
+										</div>
+										<button type="submit" class={ "btn-primary", templ.KV("opacity-50 cursor-not-allowed", !isAuthenticated) }>Save</button>
 									</div>
-									<button type="submit" class="btn-primary">Save</button>
 								</div>
-							</div>
 
-							<div class="divider mb-6"></div>
+								<div class="divider mb-6"></div>
 
-							<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-								for _, person := range persons {
-									@components.PersonRatingRowSimple(entry, person)
-								}
-							</div>
+								<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+									for _, person := range persons {
+										@components.PersonRatingRowSimple(entry, person)
+									}
+								</div>
+							</fieldset>
 						</div>
 					</form>
 				</div>
@@ -122,4 +129,3 @@ templ MovieDetailPage(entry *model.Entry, persons []*model.Person) {
 		</main>
 	}
 }
-

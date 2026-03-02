@@ -7,9 +7,9 @@ import (
 	"github.com/drywaters/dejaview/internal/ui/layout"
 )
 
-templ StatsPage(data *model.StatsData) {
+templ StatsPage(data *model.StatsData, isAuthenticated bool) {
 	@layout.Base("Stats") {
-		@layout.Header()
+		@layout.Header(isAuthenticated)
 
 		<main class="max-w-7xl mx-auto px-4 py-8">
 			<!-- Page Title -->

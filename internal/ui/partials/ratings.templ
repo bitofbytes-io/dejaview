@@ -6,24 +6,26 @@ import (
 )
 
 // RatingsUpdate renders the complete response for the ratings save
-templ RatingsUpdate(entry *model.Entry, persons []*model.Person) {
-	<div class="card p-6" id="ratings-section">
-		<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-			<h3 class="font-display text-gold text-lg uppercase tracking-wider">Family Ratings</h3>
-			<div class="flex items-center gap-3 flex-wrap">
-				<div id="average-rating">
-					@components.AverageRating(entry.AverageRating(), entry.RatingCount())
+templ RatingsUpdate(entry *model.Entry, persons []*model.Person, isAuthenticated bool) {
+	<div class={ "card p-6", templ.KV("opacity-70", !isAuthenticated) } id="ratings-section">
+		<fieldset disabled?={ !isAuthenticated }>
+			<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+				<h3 class="font-display text-gold text-lg uppercase tracking-wider">Family Ratings</h3>
+				<div class="flex items-center gap-3 flex-wrap">
+					<div id="average-rating">
+						@components.AverageRating(entry.AverageRating(), entry.RatingCount())
+					</div>
+					<button type="submit" class={ "btn-primary", templ.KV("opacity-50 cursor-not-allowed", !isAuthenticated) }>Save</button>
 				</div>
-				<button type="submit" class="btn-primary">Save</button>
 			</div>
-		</div>
 
-		<div class="divider mb-6"></div>
+			<div class="divider mb-6"></div>
 
-		<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-			for _, person := range persons {
-				@components.PersonRatingRowSimple(entry, person)
-			}
-		</div>
+			<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+				for _, person := range persons {
+					@components.PersonRatingRowSimple(entry, person)
+				}
+			</div>
+		</fieldset>
 	</div>
 }

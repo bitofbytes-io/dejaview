@@ -51,15 +51,19 @@ templ posterCardContent(entry *model.Entry, showRatings bool) {
 }
 
 // DraggablePosterCard renders a draggable movie poster card for reordering
-templ DraggablePosterCard(entry *model.Entry, showRatings bool) {
-	<div class="draggable-item" data-entry-id={ entry.ID.String() }>
-		<div class="drag-handle">
-			<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-				<path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z"/>
-			</svg>
+templ DraggablePosterCard(entry *model.Entry, showRatings bool, isAuthenticated bool) {
+	if isAuthenticated {
+		<div class="draggable-item" data-entry-id={ entry.ID.String() }>
+			<div class="drag-handle">
+				<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+					<path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z"/>
+				</svg>
+			</div>
+			<a href={ templ.SafeURL("/movies/" + entry.ID.String()) } class="poster-card block">
+				@posterCardContent(entry, showRatings)
+			</a>
 		</div>
-		<a href={ templ.SafeURL("/movies/" + entry.ID.String()) } class="poster-card block">
-			@posterCardContent(entry, showRatings)
-		</a>
-	</div>
+	} else {
+		@PosterCard(entry, showRatings)
+	}
 }

@@ -23,15 +23,17 @@ type MovieHandler struct {
 	entryRepo  *repository.EntryRepository
 	personRepo *repository.PersonRepository
 	tmdbClient *tmdb.Client
+	apiToken   string
 }
 
 // NewMovieHandler creates a new MovieHandler
-func NewMovieHandler(movieRepo *repository.MovieRepository, entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository, tmdbClient *tmdb.Client) *MovieHandler {
+func NewMovieHandler(movieRepo *repository.MovieRepository, entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository, tmdbClient *tmdb.Client, apiToken string) *MovieHandler {
 	return &MovieHandler{
 		movieRepo:  movieRepo,
 		entryRepo:  entryRepo,
 		personRepo: personRepo,
 		tmdbClient: tmdbClient,
+		apiToken:   apiToken,
 	}
 }
 
@@ -64,7 +66,8 @@ func (h *MovieHandler) MovieDetailPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pages.MovieDetailPage(entry, persons).Render(ctx, w)
+	isAuthenticated := isAuthenticatedRequest(r, h.apiToken)
+	pages.MovieDetailPage(entry, persons, isAuthenticated).Render(ctx, w)
 }
 
 // SearchTMDB handles TMDB movie search
