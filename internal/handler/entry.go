@@ -17,13 +17,15 @@ import (
 type EntryHandler struct {
 	entryRepo  *repository.EntryRepository
 	personRepo *repository.PersonRepository
+	apiToken   string
 }
 
 // NewEntryHandler creates a new EntryHandler
-func NewEntryHandler(entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository) *EntryHandler {
+func NewEntryHandler(entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository, apiToken string) *EntryHandler {
 	return &EntryHandler{
 		entryRepo:  entryRepo,
 		personRepo: personRepo,
+		apiToken:   apiToken,
 	}
 }
 
@@ -118,7 +120,8 @@ func (h *EntryHandler) GroupPartial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	partials.GroupSection(groupNum, entries, nil).Render(ctx, w)
+	isAuthenticated := isAuthenticatedRequest(r, h.apiToken)
+	partials.GroupSection(groupNum, entries, nil, isAuthenticated).Render(ctx, w)
 }
 
 // ReorderRequest represents the JSON body for reordering entries

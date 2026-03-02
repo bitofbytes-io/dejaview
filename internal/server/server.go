@@ -107,7 +107,7 @@ func (s *Server) Router() http.Handler {
 		r.Post("/api/tmdb/add", movieHandler.AddFromTMDB)
 
 		// Entry API endpoints
-		entryHandler := handler.NewEntryHandler(s.entryRepo, s.personRepo)
+		entryHandler := handler.NewEntryHandler(s.entryRepo, s.personRepo, s.cfg.APIToken)
 		r.Put("/api/entries/{id}", entryHandler.Update)
 		r.Delete("/api/entries/{id}", entryHandler.Delete)
 

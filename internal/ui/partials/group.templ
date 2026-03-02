@@ -7,7 +7,7 @@ import (
 )
 
 // GroupSection renders a single group section with its entries
-templ GroupSection(groupNum int, entries []*model.Entry, persons []*model.Person) {
+templ GroupSection(groupNum int, entries []*model.Entry, persons []*model.Person, isAuthenticated bool) {
 	<section class="group-section mb-12" id={ "group-" + ui.IntToStr(groupNum) }>
 		<div class="flex items-center justify-between mb-6">
 			<h2 class="group-title">
@@ -23,7 +23,7 @@ templ GroupSection(groupNum int, entries []*model.Entry, persons []*model.Person
 		} else {
 			<div class="sortable-grid grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4" data-group={ ui.IntToStr(groupNum) }>
 				for _, entry := range entries {
-					@components.DraggablePosterCard(entry, true, true)
+					@components.DraggablePosterCard(entry, true, isAuthenticated)
 				}
 			</div>
 		}
