@@ -99,7 +99,44 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		Secure:   h.secureCookies,
 		SameSite: http.SameSiteLaxMode,
 	})
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
+
+	redirectTarget := logoutRedirectTarget(r)
+	loginURL := "/login"
+	if redirectTarget != "" {
+		loginURL += "?redirect=" + url.QueryEscape(redirectTarget)
+	}
+
+	http.Redirect(w, r, loginURL, http.StatusSeeOther)
+}
+
+func logoutRedirectTarget(r *http.Request) string {
+	if redirect := r.FormValue("redirect"); isValidRedirect(redirect) && redirect != "/login" {
+		return redirect
+	}
+
+	if redirect := r.URL.Query().Get("redirect"); isValidRedirect(redirect) && redirect != "/login" {
+		return redirect
+	}
+
+	if referer := r.Referer(); referer != "" {
+		if parsed, err := url.Parse(referer); err == nil {
+			// Only trust same-origin referers.
+			if parsed.Host != "" && parsed.Host != r.Host {
+				return ""
+			}
+
+			path := parsed.Path
+			if path == "" {
+				path = "/"
+			}
+
+			if isValidRedirect(path) && path != "/login" {
+				return path
+			}
+		}
+	}
+
+	return ""
 }
 
 // constantTimeEqual performs a constant-time comparison to prevent timing attacks.

@@ -138,15 +138,17 @@ templ Header(isAuthenticated bool) {
 				<a href="/stats" class="btn-secondary text-xs sm:text-sm">
 					Stats
 				</a>
-				<form action="/logout" method="POST" class="inline">
-					<button
-						type="submit"
-						class={ "btn-secondary text-xs sm:text-sm", templ.KV("opacity-50 cursor-not-allowed", !isAuthenticated) }
-						disabled?={ !isAuthenticated }
-					>
-						Logout
-					</button>
-				</form>
+				if isAuthenticated {
+					<form action="/logout" method="POST" class="inline">
+						<button type="submit" class="btn-secondary text-xs sm:text-sm">
+							Logout
+						</button>
+					</form>
+				} else {
+					<a href="/login" class="btn-secondary text-xs sm:text-sm">
+						Login
+					</a>
+				}
 			</nav>
 			</div>
 		</div>
