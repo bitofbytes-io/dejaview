@@ -120,16 +120,18 @@ func logoutRedirectTarget(r *http.Request) string {
 
 	if referer := r.Referer(); referer != "" {
 		if parsed, err := url.Parse(referer); err == nil {
+			// Only trust same-origin referers.
+			if parsed.Host != "" && parsed.Host != r.Host {
+				return ""
+			}
+
 			path := parsed.Path
 			if path == "" {
 				path = "/"
 			}
-			target := path
-			if parsed.RawQuery != "" {
-				target += "?" + parsed.RawQuery
-			}
-			if isValidRedirect(target) && path != "/login" {
-				return target
+
+			if isValidRedirect(path) && path != "/login" {
+				return path
 			}
 		}
 	}
