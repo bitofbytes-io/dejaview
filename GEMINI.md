@@ -38,6 +38,7 @@ Dejaview is a movie tracking and rating application built with Go. It allows use
 - `make migrate-down`: Rollback the last migration.
 - `make templ`: Generate Go code from `.templ` files.
 - `make tail-watch`: Watch and rebuild Tailwind CSS changes.
+- In a fresh clone, run `make templ` before dependency-update, build, or test work if generated Templ files are missing.
 
 ### Configuration
 Configuration is loaded via `internal/config/config.go`. Local development secrets should be placed in `local.mk` (see `local.mk.example`).

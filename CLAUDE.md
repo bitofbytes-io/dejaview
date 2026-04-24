@@ -65,4 +65,5 @@ When creating PRs, assign to self with `--assignee @me`.
 
 - `*_templ.go` files are generated from `.templ` files (gitignored)
 - `static/styles.css` is generated from Tailwind (gitignored)
+- In a fresh clone, generate Templ output before dependency-update, build, or test work if the generated files are missing
 - Both must be regenerated before building; CI handles this automatically

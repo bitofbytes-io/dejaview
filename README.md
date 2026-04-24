@@ -20,10 +20,18 @@ Dejaview is a Go web app for tracking and managing movie entries. It uses server
 
 ## Development
 
+In a fresh clone, generate the Templ files before running dependency or build commands. The generated `*_templ.go` files are not committed.
+
 Generate templates and CSS, then run the app:
 
 ```
 make run
+```
+
+If you only need to prepare generated files first:
+
+```
+make templ
 ```
 
 Build the production binary:
