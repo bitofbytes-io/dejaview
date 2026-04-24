@@ -14,6 +14,7 @@
 - `make templ` / `make templ-watch`: generate Templ Go code (watch mode available).
 - `make tail-prod` / `make tail-watch`: build Tailwind CSS (watch requires Tailwind CLI).
 - `make migrate`, `make migrate-down`, `make migrate-status`: manage database migrations with Goose.
+- In a fresh clone, run `make templ` before dependency-update, build, or test work if the generated `*_templ.go` files are missing.
 
 ## Coding Style & Naming Conventions
 - Go code follows standard `gofmt` formatting and idiomatic package structure under `internal/`.
