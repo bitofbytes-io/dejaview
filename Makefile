@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help configure-image run build test docker-buildx tail-watch tail-prod migrate migrate-down migrate-status templ templ-watch
+.PHONY: help configure-image ensure-image-tag run build test docker-buildx tail-watch tail-prod migrate migrate-down migrate-status templ templ-watch
 
 # Include local.mk for local environment variables (API keys, DATABASE_URL, etc.)
 -include local.mk
@@ -7,10 +7,13 @@
 configure-image:
 	$(eval SHORT_SHA := $(shell git rev-parse --short HEAD 2>/dev/null))
 	$(eval REVISION ?= $(shell git rev-parse HEAD 2>/dev/null))
-	$(eval TAG ?= $(SHORT_SHA))
+	$(eval TAG ?= $(if $(SHORT_SHA),$(SHORT_SHA),dev))
 	$(eval VERSION ?= $(TAG))
 	$(eval SOURCE_URL ?= https://github.com/bitofbytes-io/dejaview)
 	@true
+
+ensure-image-tag: configure-image
+	@test -n "$(strip $(SHORT_SHA))" || (echo "Unable to determine git short SHA. Commit your work before building images." >&2; exit 1)
 
 # Templ code generation
 templ: ## Generate Go code from templ files
@@ -48,7 +51,7 @@ test: ## Run Go tests
 	go test -v ./...
 
 # Docker (production)
-docker-buildx: configure-image templ tail-prod ## Build and push multi-arch Docker image using buildx
+docker-buildx: ensure-image-tag templ tail-prod ## Build and push multi-arch Docker image using buildx
 	docker buildx build \
 		--platform $(PLATFORMS) \
 		--build-arg VERSION=$(VERSION) \
