@@ -20,6 +20,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+var (
+	version  = "dev"
+	revision = "unknown"
+)
+
 func main() {
 	if err := run(); err != nil {
 		slog.Error("application error", "error", err)
@@ -48,7 +53,7 @@ func run() error {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel}))
 	slog.SetDefault(logger)
 
-	slog.Info("starting dejaview", "port", cfg.Port)
+	slog.Info("starting dejaview", "port", cfg.Port, "version", version, "revision", revision)
 
 	// Connect to database
 	ctx := context.Background()
