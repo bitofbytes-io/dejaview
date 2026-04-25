@@ -1,8 +1,17 @@
 .DEFAULT_GOAL := help
-.PHONY: help run build test docker-buildx tail-watch tail-prod migrate migrate-down migrate-status templ templ-watch
+.PHONY: help configure-image run build test docker-buildx tail-watch tail-prod migrate migrate-down migrate-status templ templ-watch
 
 # Include local.mk for local environment variables (API keys, DATABASE_URL, etc.)
 -include local.mk
+
+configure-image:
+	$(eval SHORT_SHA := $(shell git rev-parse --short HEAD 2>/dev/null))
+	$(eval REVISION ?= $(shell git rev-parse HEAD 2>/dev/null))
+	$(eval TAG ?= $(SHORT_SHA))
+	$(eval VERSION ?= $(TAG))
+	$(eval SOURCE_URL ?= https://github.com/bitofbytes-io/dejaview)
+	$(eval OCI_LABEL_ARGS := --label org.opencontainers.image.source=$(SOURCE_URL) --label org.opencontainers.image.revision=$(REVISION) --label org.opencontainers.image.version=$(VERSION) --label org.opencontainers.image.title=dejaview --label org.opencontainers.image.description=DejaView web application)
+	@true
 
 # Templ code generation
 templ: ## Generate Go code from templ files
@@ -15,8 +24,8 @@ templ-watch: ## Watch templ files and regenerate on change
 run: templ tail-prod ## Generate templ, build Tailwind, and run the app
 	go run ./cmd/dejaview
 
-build: templ tail-prod ## Generate templ, build Tailwind, and build production binary
-	go build -o bin/dejaview ./cmd/dejaview
+build: configure-image templ tail-prod ## Generate templ, build Tailwind, and build production binary
+	go build -ldflags "-X main.version=$(VERSION) -X main.revision=$(REVISION)" -o bin/dejaview ./cmd/dejaview
 
 # Tailwind (using standalone CLI binary)
 tail-watch: ## Build Tailwind in watch mode (requires tailwindcss CLI)
@@ -40,9 +49,13 @@ test: ## Run Go tests
 	go test -v ./...
 
 # Docker (production)
-docker-buildx: templ tail-prod ## Build and push multi-arch Docker image using buildx
+docker-buildx: configure-image templ tail-prod ## Build and push multi-arch Docker image using buildx
 	docker buildx build \
 		--platform $(PLATFORMS) \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg REVISION=$(REVISION) \
+		--build-arg SOURCE_URL=$(SOURCE_URL) \
+		$(OCI_LABEL_ARGS) \
 		--tag $(REGISTRY)/$(IMAGE_REPO):$(TAG) \
 		--tag $(REGISTRY)/$(IMAGE_REPO):latest \
 		--push \
