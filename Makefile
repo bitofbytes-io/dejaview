@@ -10,7 +10,6 @@ configure-image:
 	$(eval TAG ?= $(SHORT_SHA))
 	$(eval VERSION ?= $(TAG))
 	$(eval SOURCE_URL ?= https://github.com/bitofbytes-io/dejaview)
-	$(eval OCI_LABEL_ARGS := --label org.opencontainers.image.source=$(SOURCE_URL) --label org.opencontainers.image.revision=$(REVISION) --label org.opencontainers.image.version=$(VERSION) --label org.opencontainers.image.title=dejaview --label org.opencontainers.image.description=DejaView web application)
 	@true
 
 # Templ code generation
@@ -55,7 +54,6 @@ docker-buildx: configure-image templ tail-prod ## Build and push multi-arch Dock
 		--build-arg VERSION=$(VERSION) \
 		--build-arg REVISION=$(REVISION) \
 		--build-arg SOURCE_URL=$(SOURCE_URL) \
-		$(OCI_LABEL_ARGS) \
 		--tag $(REGISTRY)/$(IMAGE_REPO):$(TAG) \
 		--tag $(REGISTRY)/$(IMAGE_REPO):latest \
 		--push \
