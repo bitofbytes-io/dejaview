@@ -11,10 +11,12 @@
 - `make run`: generate Templ + Tailwind, then run the app (`go run ./cmd/dejaview`).
 - `make build`: generate assets and build the production binary (`bin/dejaview`).
 - `make test`: run Go tests (`go test -v ./...`).
+- `make docker-buildx`: build and push the multi-arch Docker image; set `REGISTRY`, `IMAGE_REPO`, `PLATFORMS`, and `TAG` (and optionally `VERSION`, `REVISION`, and `SOURCE_URL` for CI parity).
 - `make templ` / `make templ-watch`: generate Templ Go code (watch mode available).
 - `make tail-prod` / `make tail-watch`: build Tailwind CSS (watch requires Tailwind CLI).
 - `make migrate`, `make migrate-down`, `make migrate-status`: manage database migrations with Goose.
 - In a fresh clone, run `make templ` before dependency-update, build, or test work if the generated `*_templ.go` files are missing.
+- GitHub Actions on `main` generates `templ`, builds Tailwind CSS, runs `make docker-buildx`, then force-pushes to the configured local bare repo (default `/srv/git/dejaview-ci.git`) to trigger deployment.
 
 ## Coding Style & Naming Conventions
 - Go code follows standard `gofmt` formatting and idiomatic package structure under `internal/`.
