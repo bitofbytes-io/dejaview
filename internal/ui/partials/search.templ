@@ -12,7 +12,7 @@ templ SearchResults(results []tmdb.SearchResult) {
 			<p>No results found. Try a different search term.</p>
 		</div>
 	} else {
-		<div class="space-y-3 max-h-96 overflow-y-auto">
+		<div class="search-results-list">
 			for _, result := range results {
 				@SearchResultCard(result)
 			}
@@ -24,7 +24,9 @@ templ SearchResultCard(result tmdb.SearchResult) {
 	<div class="search-result">
 		if result.PosterPath != nil && *result.PosterPath != "" {
 			<img
-				src={ "https://image.tmdb.org/t/p/w92" + *result.PosterPath }
+				src={ "https://image.tmdb.org/t/p/w154" + *result.PosterPath }
+				srcset={ "https://image.tmdb.org/t/p/w92" + *result.PosterPath + " 92w, https://image.tmdb.org/t/p/w154" + *result.PosterPath + " 154w" }
+				sizes="(min-width: 40rem) 80px, 64px"
 				alt={ result.Title }
 				class="search-poster"
 				loading="lazy"
@@ -37,21 +39,21 @@ templ SearchResultCard(result tmdb.SearchResult) {
 			</div>
 		}
 		
-		<div class="flex-1 min-w-0">
-			<h4 class="font-display text-gold font-semibold truncate">{ result.Title }</h4>
+		<div class="search-result-content">
+			<h4 class="search-result-title">{ result.Title }</h4>
 			<p class="text-sm text-cream-ticket opacity-70">
 				{ extractYear(result.ReleaseDate) }
 			</p>
 			if result.Overview != "" {
-				<p class="text-sm text-cream-ticket opacity-50 line-clamp-4 mt-1">
+				<p class="search-result-overview">
 					{ result.Overview }
 				</p>
 			}
 		</div>
 		
-		<form hx-post="/api/tmdb/add" hx-swap="none" class="flex-shrink-0" hx-vals="js:{group_number: document.getElementById('add-group-select').value}">
+		<form hx-post="/api/tmdb/add" hx-swap="none" class="search-result-actions" hx-vals="js:{group_number: document.getElementById('add-group-select').value}">
 			<input type="hidden" name="tmdb_id" value={ ui.IntToStr(result.ID) }/>
-			<button type="submit" class="btn-primary text-sm whitespace-nowrap">
+			<button type="submit" class="btn-primary search-add-button">
 				Add
 			</button>
 		</form>
@@ -64,4 +66,3 @@ func extractYear(releaseDate string) string {
 	}
 	return "Unknown"
 }
-
