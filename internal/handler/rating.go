@@ -10,6 +10,7 @@ import (
 
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/drywaters/dejaview/internal/repository"
+	"github.com/drywaters/dejaview/internal/session"
 	"github.com/drywaters/dejaview/internal/ui/partials"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -17,10 +18,10 @@ import (
 
 // RatingHandler handles rating-related requests
 type RatingHandler struct {
-	ratingRepo ratingRepository
-	entryRepo  entryRepository
-	personRepo personRepository
-	apiToken   string
+	ratingRepo     ratingRepository
+	entryRepo      entryRepository
+	personRepo     personRepository
+	sessionManager *session.Manager
 }
 
 type ratingRepository interface {
@@ -37,12 +38,12 @@ type personRepository interface {
 }
 
 // NewRatingHandler creates a new RatingHandler
-func NewRatingHandler(ratingRepo *repository.RatingRepository, entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository, apiToken string) *RatingHandler {
+func NewRatingHandler(ratingRepo *repository.RatingRepository, entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository, sessionManager *session.Manager) *RatingHandler {
 	return &RatingHandler{
-		ratingRepo: ratingRepo,
-		entryRepo:  entryRepo,
-		personRepo: personRepo,
-		apiToken:   apiToken,
+		ratingRepo:     ratingRepo,
+		entryRepo:      entryRepo,
+		personRepo:     personRepo,
+		sessionManager: sessionManager,
 	}
 }
 
@@ -155,7 +156,7 @@ func (h *RatingHandler) SaveRatings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isAuthenticated := isAuthenticatedRequest(r, h.apiToken)
+	isAuthenticated := isAuthenticatedRequest(r, h.sessionManager)
 	w.Header().Set("HX-Trigger", `{"showToast": {"message": "Saved!", "type": "success"}}`)
 	partials.RatingsUpdate(entry, persons, isAuthenticated).Render(ctx, w)
 }

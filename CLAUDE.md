@@ -37,9 +37,9 @@ Dejaview is a Go web app for tracking family movie watching. It uses server-side
 - `static/` - Compiled assets (styles.css, htmx.min.js, dragdrop.js, icons/)
 - `tailwind/` - Tailwind CSS source
 
-**Request flow:** Routes defined in `internal/server/server.go` use chi middleware (RequestID, RealIP, Logger, Recoverer). Auth middleware validates Bearer token or session cookie.
+**Request flow:** Routes defined in `internal/server/server.go` use chi middleware (RequestID, RealIP, Logger, Recoverer). Auth middleware validates signed browser session cookies.
 
-**Authentication:** Single shared API token. Browser uses cookie (`dejaview_session`), programmatic clients use `Authorization: Bearer <token>`.
+**Authentication:** Single shared API token as the login secret. Browser sessions use a signed cookie (`dejaview_session`); Bearer-token API authentication is not supported.
 
 ## Configuration
 

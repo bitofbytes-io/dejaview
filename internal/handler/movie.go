@@ -6,9 +6,11 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/drywaters/dejaview/internal/repository"
+	"github.com/drywaters/dejaview/internal/session"
 	"github.com/drywaters/dejaview/internal/tmdb"
 	"github.com/drywaters/dejaview/internal/ui/pages"
 	"github.com/drywaters/dejaview/internal/ui/partials"
@@ -19,21 +21,21 @@ import (
 
 // MovieHandler handles movie-related requests
 type MovieHandler struct {
-	movieRepo  *repository.MovieRepository
-	entryRepo  *repository.EntryRepository
-	personRepo *repository.PersonRepository
-	tmdbClient *tmdb.Client
-	apiToken   string
+	movieRepo      *repository.MovieRepository
+	entryRepo      *repository.EntryRepository
+	personRepo     *repository.PersonRepository
+	tmdbClient     *tmdb.Client
+	sessionManager *session.Manager
 }
 
 // NewMovieHandler creates a new MovieHandler
-func NewMovieHandler(movieRepo *repository.MovieRepository, entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository, tmdbClient *tmdb.Client, apiToken string) *MovieHandler {
+func NewMovieHandler(movieRepo *repository.MovieRepository, entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository, tmdbClient *tmdb.Client, sessionManager *session.Manager) *MovieHandler {
 	return &MovieHandler{
-		movieRepo:  movieRepo,
-		entryRepo:  entryRepo,
-		personRepo: personRepo,
-		tmdbClient: tmdbClient,
-		apiToken:   apiToken,
+		movieRepo:      movieRepo,
+		entryRepo:      entryRepo,
+		personRepo:     personRepo,
+		tmdbClient:     tmdbClient,
+		sessionManager: sessionManager,
 	}
 }
 
@@ -66,17 +68,21 @@ func (h *MovieHandler) MovieDetailPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isAuthenticated := isAuthenticatedRequest(r, h.apiToken)
+	isAuthenticated := isAuthenticatedRequest(r, h.sessionManager)
 	pages.MovieDetailPage(entry, persons, isAuthenticated).Render(ctx, w)
 }
 
 // SearchTMDB handles TMDB movie search
 func (h *MovieHandler) SearchTMDB(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	query := r.URL.Query().Get("q")
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
 
 	if query == "" {
 		partials.SearchResults(nil).Render(ctx, w)
+		return
+	}
+	if len(query) > 120 {
+		http.Error(w, "Search query too long", http.StatusBadRequest)
 		return
 	}
 
@@ -200,4 +206,3 @@ func (h *MovieHandler) AddFromTMDB(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("HX-Trigger", `{"showToast": {"message": "Movie added!", "type": "success"}, "refreshGroups": true}`)
 	w.WriteHeader(http.StatusOK)
 }
-

@@ -10,21 +10,22 @@ import (
 
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/drywaters/dejaview/internal/repository"
+	"github.com/drywaters/dejaview/internal/session"
 	"github.com/drywaters/dejaview/internal/ui/pages"
 	"github.com/google/uuid"
 )
 
 // StatsHandler handles the statistics dashboard
 type StatsHandler struct {
-	statsRepo *repository.StatsRepository
-	apiToken  string
+	statsRepo      *repository.StatsRepository
+	sessionManager *session.Manager
 }
 
 // NewStatsHandler creates a new StatsHandler
-func NewStatsHandler(statsRepo *repository.StatsRepository, apiToken string) *StatsHandler {
+func NewStatsHandler(statsRepo *repository.StatsRepository, sessionManager *session.Manager) *StatsHandler {
 	return &StatsHandler{
-		statsRepo: statsRepo,
-		apiToken:  apiToken,
+		statsRepo:      statsRepo,
+		sessionManager: sessionManager,
 	}
 }
 
@@ -37,7 +38,7 @@ func (h *StatsHandler) StatsPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isAuthenticated := isAuthenticatedRequest(r, h.apiToken)
+	isAuthenticated := isAuthenticatedRequest(r, h.sessionManager)
 	pages.StatsPage(statsData, isAuthenticated).Render(r.Context(), w)
 }
 
