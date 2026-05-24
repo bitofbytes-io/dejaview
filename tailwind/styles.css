@@ -500,14 +500,24 @@
 	}
 
 	/* ========== SEARCH RESULTS ========== */
-	.search-result {
+	.search-results-list {
 		display: flex;
-		gap: 1rem;
-		padding: 1rem;
+		flex-direction: column;
+		gap: 0.75rem;
+		max-height: clamp(14rem, calc(100dvh - 23rem), 30rem);
+		overflow-y: auto;
+	}
+
+	.search-result {
+		display: grid;
+		grid-template-columns: 64px minmax(0, 1fr);
+		gap: 0.75rem;
+		padding: 0.875rem;
 		background: var(--color-surface);
 		border: 1px solid var(--color-surface-raised);
 		border-radius: 8px;
 		transition: all 0.15s ease;
+		align-items: start;
 	}
 
 	.search-result:hover {
@@ -516,11 +526,103 @@
 	}
 
 	.search-poster {
-		width: 80px;
-		height: 120px;
+		grid-column: 1;
+		grid-row: 1 / span 2;
+		width: 64px;
+		height: 96px;
 		object-fit: cover;
 		border-radius: 6px;
 		background: var(--color-surface-raised);
+	}
+
+	.search-result-content {
+		grid-column: 2;
+		min-width: 0;
+	}
+
+	.search-result-title {
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+		color: var(--color-gold);
+		font-family: var(--font-display);
+		font-size: 0.875rem;
+		font-weight: 600;
+		line-height: 1.55;
+		overflow-wrap: anywhere;
+	}
+
+	.search-result-overview {
+		display: -webkit-box;
+		-webkit-line-clamp: 3;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+		margin-top: 0.25rem;
+		color: var(--color-cream-muted);
+		font-size: 0.875rem;
+		opacity: 0.5;
+	}
+
+	.search-result-actions {
+		grid-column: 2;
+		justify-self: end;
+		align-self: end;
+		min-width: 0;
+	}
+
+	.search-add-button {
+		min-height: 2.75rem;
+		min-width: 5.75rem;
+		padding: 0.625rem 0.875rem;
+		font-size: 0.625rem;
+		white-space: nowrap;
+	}
+
+	@media (min-width: 40rem) {
+		.search-results-list {
+			max-height: 24rem;
+		}
+
+		.search-result {
+			display: flex;
+			gap: 1rem;
+			padding: 1rem;
+		}
+
+		.search-poster {
+			width: 80px;
+			height: 120px;
+			flex-shrink: 0;
+		}
+
+		.search-result-content {
+			flex: 1;
+			min-width: 0;
+		}
+
+		.search-result-title {
+			display: block;
+			font-size: 1rem;
+			white-space: nowrap;
+			text-overflow: ellipsis;
+		}
+
+		.search-result-overview {
+			-webkit-line-clamp: 4;
+		}
+
+		.search-result-actions {
+			flex-shrink: 0;
+			align-self: flex-start;
+		}
+
+		.search-add-button {
+			min-height: auto;
+			min-width: auto;
+			padding: 0.75rem 1.5rem;
+			font-size: 0.875rem;
+		}
 	}
 
 	/* ========== MOVIE DETAIL PAGE ========== */
@@ -1049,4 +1151,3 @@
 		transform: translateX(-50%);
 	}
 }
-
