@@ -45,8 +45,8 @@ func requestOrigin(r *http.Request) string {
 	if r.TLS != nil {
 		scheme = "https"
 	}
-	if forwardedProto := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0]); forwardedProto != "" {
-		scheme = strings.ToLower(forwardedProto)
+	if forwardedProto := strings.ToLower(strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0])); forwardedProto == "http" || forwardedProto == "https" {
+		scheme = forwardedProto
 	}
 	return normalizeOrigin(scheme + "://" + r.Host)
 }
