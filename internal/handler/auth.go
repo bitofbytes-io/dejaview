@@ -5,33 +5,30 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/drywaters/dejaview/internal/session"
 	"github.com/drywaters/dejaview/internal/ui/pages"
 )
 
-const cookieName = "dejaview_session"
-
 // AuthHandler handles authentication
 type AuthHandler struct {
-	apiToken      string
-	secureCookies bool
+	apiToken       string
+	sessionManager *session.Manager
 }
 
 // NewAuthHandler creates a new AuthHandler
-func NewAuthHandler(apiToken string, secureCookies bool) *AuthHandler {
+func NewAuthHandler(apiToken string, sessionManager *session.Manager) *AuthHandler {
 	return &AuthHandler{
-		apiToken:      apiToken,
-		secureCookies: secureCookies,
+		apiToken:       apiToken,
+		sessionManager: sessionManager,
 	}
 }
 
 // LoginPage renders the login page
 func (h *AuthHandler) LoginPage(w http.ResponseWriter, r *http.Request) {
 	// If already authenticated via valid cookie, redirect to home
-	if cookie, err := r.Cookie(cookieName); err == nil {
-		if constantTimeEqual(cookie.Value, h.apiToken) {
-			http.Redirect(w, r, "/", http.StatusSeeOther)
-			return
-		}
+	if h.sessionManager.ValidRequest(r) {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
 	}
 
 	errorType := r.URL.Query().Get("error")
@@ -58,16 +55,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set the session cookie with the token value
-	http.SetCookie(w, &http.Cookie{
-		Name:     cookieName,
-		Value:    h.apiToken,
-		Path:     "/",
-		MaxAge:   90 * 24 * 60 * 60, // 90 days
-		HttpOnly: true,
-		Secure:   h.secureCookies,
-		SameSite: http.SameSiteLaxMode,
-	})
+	cookie, err := h.sessionManager.NewCookie()
+	if err != nil {
+		http.Error(w, "Failed to create session", http.StatusInternalServerError)
+		return
+	}
+	http.SetCookie(w, cookie)
 
 	// Redirect to the original URL if provided, otherwise home
 	redirectURL := r.FormValue("redirect")
@@ -89,16 +82,7 @@ func isValidRedirect(rawURL string) bool {
 
 // Logout clears the session cookie
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
-	// Clear the cookie
-	http.SetCookie(w, &http.Cookie{
-		Name:     cookieName,
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		HttpOnly: true,
-		Secure:   h.secureCookies,
-		SameSite: http.SameSiteLaxMode,
-	})
+	http.SetCookie(w, h.sessionManager.ClearCookie())
 
 	redirectTarget := logoutRedirectTarget(r)
 	loginURL := "/login"
@@ -143,5 +127,3 @@ func logoutRedirectTarget(r *http.Request) string {
 func constantTimeEqual(a, b string) bool {
 	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
-
-

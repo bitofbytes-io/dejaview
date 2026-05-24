@@ -8,6 +8,7 @@ import (
 
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/drywaters/dejaview/internal/repository"
+	"github.com/drywaters/dejaview/internal/session"
 	"github.com/drywaters/dejaview/internal/ui/partials"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -15,17 +16,17 @@ import (
 
 // EntryHandler handles entry-related requests
 type EntryHandler struct {
-	entryRepo  *repository.EntryRepository
-	personRepo *repository.PersonRepository
-	apiToken   string
+	entryRepo      *repository.EntryRepository
+	personRepo     *repository.PersonRepository
+	sessionManager *session.Manager
 }
 
 // NewEntryHandler creates a new EntryHandler
-func NewEntryHandler(entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository, apiToken string) *EntryHandler {
+func NewEntryHandler(entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository, sessionManager *session.Manager) *EntryHandler {
 	return &EntryHandler{
-		entryRepo:  entryRepo,
-		personRepo: personRepo,
-		apiToken:   apiToken,
+		entryRepo:      entryRepo,
+		personRepo:     personRepo,
+		sessionManager: sessionManager,
 	}
 }
 
@@ -120,7 +121,7 @@ func (h *EntryHandler) GroupPartial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isAuthenticated := isAuthenticatedRequest(r, h.apiToken)
+	isAuthenticated := isAuthenticatedRequest(r, h.sessionManager)
 	partials.GroupSection(groupNum, entries, nil, isAuthenticated).Render(ctx, w)
 }
 

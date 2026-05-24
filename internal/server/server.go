@@ -2,11 +2,13 @@ package server
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/drywaters/dejaview/internal/config"
 	"github.com/drywaters/dejaview/internal/handler"
 	"github.com/drywaters/dejaview/internal/middleware"
 	"github.com/drywaters/dejaview/internal/repository"
+	"github.com/drywaters/dejaview/internal/session"
 	"github.com/drywaters/dejaview/internal/tmdb"
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -53,6 +55,7 @@ func (s *Server) Router() http.Handler {
 	r.Use(chimw.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(chimw.Recoverer)
+	r.Use(middleware.SameOrigin)
 
 	// Static files
 	const staticCacheControl = "public, max-age=86400"
@@ -80,26 +83,27 @@ func (s *Server) Router() http.Handler {
 	})
 
 	// Auth handlers
-	authHandler := handler.NewAuthHandler(s.cfg.APIToken, s.cfg.SecureCookies)
+	sessionManager := session.NewManager(s.cfg.APIToken, 90*24*time.Hour, s.cfg.SecureCookies)
+	authHandler := handler.NewAuthHandler(s.cfg.APIToken, sessionManager)
 	r.Get("/login", authHandler.LoginPage)
 	r.Post("/login", authHandler.Login)
 	r.Post("/logout", authHandler.Logout)
 
 	// Protected routes
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.Auth(s.cfg.APIToken, s.cfg.SecureCookies))
+		r.Use(middleware.Auth(sessionManager))
 
 		// Dashboard
-		dashboardHandler := handler.NewDashboardHandler(s.entryRepo, s.personRepo, s.cfg.APIToken)
+		dashboardHandler := handler.NewDashboardHandler(s.entryRepo, s.personRepo, sessionManager)
 		r.Get("/", dashboardHandler.DashboardPage)
 		r.Get("/dashboard-content", dashboardHandler.DashboardContent)
 
 		// Stats
-		statsHandler := handler.NewStatsHandler(s.statsRepo, s.cfg.APIToken)
+		statsHandler := handler.NewStatsHandler(s.statsRepo, sessionManager)
 		r.Get("/stats", statsHandler.StatsPage)
 
 		// Movie detail page
-		movieHandler := handler.NewMovieHandler(s.movieRepo, s.entryRepo, s.personRepo, s.tmdbClient, s.cfg.APIToken)
+		movieHandler := handler.NewMovieHandler(s.movieRepo, s.entryRepo, s.personRepo, s.tmdbClient, sessionManager)
 		r.Get("/movies/{id}", movieHandler.MovieDetailPage)
 
 		// TMDB API endpoints
@@ -107,7 +111,7 @@ func (s *Server) Router() http.Handler {
 		r.Post("/api/tmdb/add", movieHandler.AddFromTMDB)
 
 		// Entry API endpoints
-		entryHandler := handler.NewEntryHandler(s.entryRepo, s.personRepo, s.cfg.APIToken)
+		entryHandler := handler.NewEntryHandler(s.entryRepo, s.personRepo, sessionManager)
 		r.Put("/api/entries/{id}", entryHandler.Update)
 		r.Delete("/api/entries/{id}", entryHandler.Delete)
 
@@ -116,7 +120,7 @@ func (s *Server) Router() http.Handler {
 		r.Post("/api/groups/{num}/reorder", entryHandler.Reorder)
 
 		// Rating API endpoints
-		ratingHandler := handler.NewRatingHandler(s.ratingRepo, s.entryRepo, s.personRepo, s.cfg.APIToken)
+		ratingHandler := handler.NewRatingHandler(s.ratingRepo, s.entryRepo, s.personRepo, sessionManager)
 		r.Put("/api/entries/{id}/ratings", ratingHandler.SaveRatings)
 	})
 

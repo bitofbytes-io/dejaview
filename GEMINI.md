@@ -57,5 +57,5 @@ Configuration is loaded via `internal/config/config.go`. Local development secre
 - **Routing:** All routes are defined in `internal/server/server.go`.
 - **Database:** Raw SQL queries are preferred within the `repository` package.
 - **UI:** The UI is component-based using Templ. Pages are in `internal/ui/pages/`, and reusable components are in `internal/ui/components/`.
-- **Auth:** Simple token-based authentication via middleware.
+- **Auth:** Browser login uses the shared API token as the password and then authenticates with a signed session cookie.
 - **PRs:** Assign PRs to yourself when creating them (`--assignee @me`).

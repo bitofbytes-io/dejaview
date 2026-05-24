@@ -8,22 +8,23 @@ import (
 
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/drywaters/dejaview/internal/repository"
+	"github.com/drywaters/dejaview/internal/session"
 	"github.com/drywaters/dejaview/internal/ui/pages"
 )
 
 // DashboardHandler handles the main dashboard
 type DashboardHandler struct {
-	entryRepo  *repository.EntryRepository
-	personRepo *repository.PersonRepository
-	apiToken   string
+	entryRepo      *repository.EntryRepository
+	personRepo     *repository.PersonRepository
+	sessionManager *session.Manager
 }
 
 // NewDashboardHandler creates a new DashboardHandler
-func NewDashboardHandler(entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository, apiToken string) *DashboardHandler {
+func NewDashboardHandler(entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository, sessionManager *session.Manager) *DashboardHandler {
 	return &DashboardHandler{
-		entryRepo:  entryRepo,
-		personRepo: personRepo,
-		apiToken:   apiToken,
+		entryRepo:      entryRepo,
+		personRepo:     personRepo,
+		sessionManager: sessionManager,
 	}
 }
 
@@ -36,7 +37,7 @@ func (h *DashboardHandler) DashboardPage(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	isAuthenticated := isAuthenticatedRequest(r, h.apiToken)
+	isAuthenticated := isAuthenticatedRequest(r, h.sessionManager)
 	pages.DashboardPage(groupDataList, persons, currentGroup, isAuthenticated).Render(r.Context(), w)
 }
 
@@ -49,7 +50,7 @@ func (h *DashboardHandler) DashboardContent(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	isAuthenticated := isAuthenticatedRequest(r, h.apiToken)
+	isAuthenticated := isAuthenticatedRequest(r, h.sessionManager)
 	pages.DashboardContent(groupDataList, persons, currentGroup, isAuthenticated).Render(r.Context(), w)
 }
 
@@ -95,5 +96,3 @@ func (h *DashboardHandler) getDashboardData(ctx context.Context) ([]pages.GroupD
 
 	return groupDataList, persons, currentGroup, nil
 }
-
-
