@@ -218,6 +218,22 @@ func TestSameOriginAllowsRefererFallback(t *testing.T) {
 	}
 }
 
+func TestSameOriginRejectsCrossSiteReferer(t *testing.T) {
+	next := SameOrigin(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "https://dejaview.example/api/tmdb/add", nil)
+	req.Header.Set("Referer", "https://evil.example/movies")
+	recorder := httptest.NewRecorder()
+
+	next.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("expected status %d, got %d", http.StatusForbidden, recorder.Code)
+	}
+}
+
 func TestSameOriginIgnoresInvalidForwardedProto(t *testing.T) {
 	next := SameOrigin(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
