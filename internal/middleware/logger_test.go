@@ -10,30 +10,51 @@ import (
 )
 
 func TestLoggerEmitsDebugAccessLog(t *testing.T) {
-	var buf bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	defer slog.SetDefault(previous)
-
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
-	rec := httptest.NewRecorder()
-
-	Logger(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	})).ServeHTTP(rec, req)
-
-	logs := buf.String()
-	if !strings.Contains(logs, "http request") {
-		t.Fatalf("log output = %q, want request log", logs)
+	tests := []struct {
+		name       string
+		handler    http.Handler
+		wantStatus string
+	}{
+		{
+			name: "explicit no content",
+			handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusNoContent)
+			}),
+			wantStatus: "status=204",
+		},
+		{
+			name:       "implicit ok",
+			handler:    http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+			wantStatus: "status=200",
+		},
 	}
-	if !strings.Contains(logs, "path=/health") {
-		t.Fatalf("log output = %q, want path", logs)
-	}
-	if !strings.Contains(logs, "status=204") {
-		t.Fatalf("log output = %q, want status", logs)
-	}
-	if !strings.Contains(logs, "level=DEBUG") {
-		t.Fatalf("log output = %q, want debug level", logs)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			previous := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+			defer slog.SetDefault(previous)
+
+			req := httptest.NewRequest(http.MethodGet, "/health", nil)
+			rec := httptest.NewRecorder()
+
+			Logger(tt.handler).ServeHTTP(rec, req)
+
+			logs := buf.String()
+			if !strings.Contains(logs, "http request") {
+				t.Fatalf("log output = %q, want request log", logs)
+			}
+			if !strings.Contains(logs, "path=/health") {
+				t.Fatalf("log output = %q, want path", logs)
+			}
+			if !strings.Contains(logs, tt.wantStatus) {
+				t.Fatalf("log output = %q, want %s", logs, tt.wantStatus)
+			}
+			if !strings.Contains(logs, "level=DEBUG") {
+				t.Fatalf("log output = %q, want debug level", logs)
+			}
+		})
 	}
 }
 
