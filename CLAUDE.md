@@ -20,7 +20,7 @@ make migrate-down # Roll back last migration
 
 Dejaview is a Go web app for tracking family movie watching. It uses server-side rendering with HTMX for interactivity.
 
-**Tech stack:** Go 1.25.5, chi/v5 router, Templ templates, Tailwind CSS, PostgreSQL with pgx/v5, Goose migrations, HTMX
+**Tech stack:** Go 1.26, chi/v5 router, Templ templates, Tailwind CSS, PostgreSQL with pgx/v5, Goose migrations, HTMX
 
 **Key directories:**
 - `cmd/dejaview/main.go` - Application entry point
