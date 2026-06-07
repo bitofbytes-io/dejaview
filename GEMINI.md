@@ -4,7 +4,7 @@
 Dejaview is a movie tracking and rating application built with Go. It allows users to search for movies via the TMDB API, add them to a personal list, rate them, and view statistics. The application uses server-side rendering with Templ and enhances interactivity with HTMX.
 
 ## Tech Stack
-- **Language:** Go 1.25.5
+- **Language:** Go 1.26
 - **Web Framework:** [Chi](https://github.com/go-chi/chi)
 - **Templating:** [Templ](https://templ.guide)
 - **Styling:** [Tailwind CSS](https://tailwindcss.com)
