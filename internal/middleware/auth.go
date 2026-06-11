@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -18,12 +19,14 @@ func Auth(sessionManager *session.Manager) func(http.Handler) http.Handler {
 			}
 
 			if r.Header.Get("Authorization") != "" {
+				slog.Info("authentication failed", "reason", "unsupported_authorization_header", "path", r.URL.Path)
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
 
 			if !sessionManager.ValidRequest(r) {
 				http.SetCookie(w, sessionManager.ClearCookie())
+				slog.Info("browser authentication required", "path", r.URL.Path)
 				if shouldReturnUnauthorized(r) {
 					http.Error(w, "Unauthorized", http.StatusUnauthorized)
 					return

@@ -128,6 +128,7 @@ func (h *MovieHandler) AddFromTMDB(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var movie *model.Movie
+	reusedMovie := existingMovie != nil
 	if existingMovie != nil {
 		movie = existingMovie
 	} else {
@@ -203,6 +204,7 @@ func (h *MovieHandler) AddFromTMDB(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return success with HX-Trigger to refresh the group
+	slog.Info("movie entry added", "entry_id", entry.ID, "movie_id", movie.ID, "tmdb_id", tmdbID, "group_number", groupNumber, "reused_movie", reusedMovie)
 	w.Header().Set("HX-Trigger", `{"showToast": {"message": "Movie added!", "type": "success"}, "refreshGroups": true}`)
 	w.WriteHeader(http.StatusOK)
 }

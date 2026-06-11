@@ -78,6 +78,7 @@ func (h *EntryHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	slog.Info("entry updated", "entry_id", entryID)
 	w.Header().Set("HX-Trigger", `{"showToast": {"message": "Entry updated!", "type": "success"}, "refreshGroups": true}`)
 	w.WriteHeader(http.StatusOK)
 }
@@ -99,6 +100,7 @@ func (h *EntryHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	slog.Info("entry deleted", "entry_id", entryID)
 	w.Header().Set("HX-Trigger", `{"showToast": {"message": "Entry deleted!", "type": "success"}, "refreshGroups": true}`)
 	w.WriteHeader(http.StatusOK)
 }
@@ -165,5 +167,6 @@ func (h *EntryHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	slog.Info("entries reordered", "group_number", groupNum, "entry_count", len(entryIDs))
 	w.WriteHeader(http.StatusOK)
 }
