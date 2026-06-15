@@ -81,6 +81,9 @@ func (h *RatingHandler) SaveRatings(w http.ResponseWriter, r *http.Request) {
 		existingRatings[r.PersonID] = true
 	}
 
+	savedCount := 0
+	deletedCount := 0
+
 	// Process ratings from form: rating[personID] = score
 	for key, values := range r.Form {
 		if !strings.HasPrefix(key, "rating[") || !strings.HasSuffix(key, "]") {
@@ -111,6 +114,7 @@ func (h *RatingHandler) SaveRatings(w http.ResponseWriter, r *http.Request) {
 					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 					return
 				}
+				deletedCount++
 			}
 		} else {
 			// Parse and save the rating
@@ -133,6 +137,7 @@ func (h *RatingHandler) SaveRatings(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 				return
 			}
+			savedCount++
 		}
 	}
 
@@ -157,6 +162,7 @@ func (h *RatingHandler) SaveRatings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	isAuthenticated := isAuthenticatedRequest(r, h.sessionManager)
+	slog.Info("ratings saved", "entry_id", entryID, "saved", savedCount, "deleted", deletedCount)
 	w.Header().Set("HX-Trigger", `{"showToast": {"message": "Saved!", "type": "success"}}`)
 	partials.RatingsUpdate(entry, persons, isAuthenticated).Render(ctx, w)
 }
