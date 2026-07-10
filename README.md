@@ -7,7 +7,7 @@ Dejaview is a self-hosted movie tracker for maintaining a watch list, recording 
 - Docker 24+
 - PostgreSQL 15+
 - A [TMDB API key](https://developer.themoviedb.org/docs/getting-started)
-- Go 1.26, [Templ](https://templ.guide/), Tailwind CSS CLI, and Goose when building from a fresh clone
+- Go 1.26, [Templ](https://templ.guide/), the [Tailwind CSS CLI](https://github.com/tailwindlabs/tailwindcss/releases), and Goose when building from a fresh clone
 
 Generated Templ and CSS files are not committed, so prepare them before building the image:
 
@@ -68,6 +68,7 @@ docker run -d --name db --network dejaview \
 Apply the schema before starting the application. With Goose installed:
 
 ```bash
+go install github.com/pressly/goose/v3/cmd/goose@latest
 export DATABASE_URL='postgres://dejaview:change-me@localhost:5432/dejaview?sslmode=disable'
 goose -dir migrations postgres "$DATABASE_URL" up
 ```
