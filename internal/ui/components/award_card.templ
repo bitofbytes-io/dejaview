@@ -2,30 +2,36 @@ package components
 
 import "github.com/drywaters/dejaview/internal/model"
 
-// AwardCard renders a single award with its winner
-templ AwardCard(award model.Award) {
-	<div class="award-card">
-		<div class="award-icon">
-			@Icon(award.Icon, "text-4xl")
-		</div>
-		<div class="award-title">{ award.Title }</div>
-		if award.Winner != nil {
-			<div class={ "award-winner-badge", award.Winner.ColorClass() }>{ award.Winner.Initial }</div>
-			<div class="award-winner-name">{ award.Winner.Name }</div>
+// TrophyCard renders one friendly award and supports shared wins.
+templ TrophyCard(trophy model.Trophy) {
+	<article class="trophy-card">
+		<div class="trophy-card-icon">@Icon(trophy.Icon, "text-4xl")</div>
+		<h3>{ trophy.Title }</h3>
+		<p class="trophy-card-description">{ trophy.Description }</p>
+		if len(trophy.Winners) > 0 {
+			<div class="trophy-winners">
+				for _, winner := range trophy.Winners {
+					<div class="trophy-winner">
+						<span class={ "trophy-winner-badge", winner.ColorClass() }>{ winner.Initial }</span>
+						<span>{ winner.Name }</span>
+					</div>
+				}
+			</div>
 		} else {
-			<div class="award-winner-badge award-empty">?</div>
-			<div class="award-winner-name text-cream-muted">No winner yet</div>
+			<div class="trophy-winner trophy-winner-pending">
+				<span class="trophy-winner-badge">?</span>
+				<span>Trophy still up for grabs</span>
+			</div>
 		}
-		<div class="award-value">{ award.Value }</div>
-		<div class="award-description">{ award.Description }</div>
-	</div>
+		<div class="trophy-card-value">{ trophy.Value }</div>
+	</article>
 }
 
-// AwardGrid renders a grid of awards
-templ AwardGrid(awards []model.Award) {
-	<div class="award-grid">
-		for _, award := range awards {
-			@AwardCard(award)
+// TrophyGrid renders the three Trophy Room awards.
+templ TrophyGrid(trophies []model.Trophy) {
+	<div class="trophy-grid">
+		for _, trophy := range trophies {
+			@TrophyCard(trophy)
 		}
 	</div>
 }

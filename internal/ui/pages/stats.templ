@@ -1,6 +1,8 @@
 package pages
 
 import (
+	"fmt"
+
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/drywaters/dejaview/internal/ui"
 	"github.com/drywaters/dejaview/internal/ui/components"
@@ -8,128 +10,100 @@ import (
 )
 
 templ StatsPage(data *model.StatsData, isAuthenticated bool) {
-	@layout.Base("Stats") {
+	@layout.Base("Trophy Room") {
 		@layout.Header(isAuthenticated)
 
-		<main class="max-w-7xl mx-auto px-4 py-8">
-			<!-- Page Title -->
-			<div class="text-center mb-8">
-				<h1 class="text-4xl font-display font-bold text-gold mb-2 flex items-center justify-center gap-3">
-					@components.Icon("trophy", "text-4xl")
-					<span>The Awards Ceremony</span>
-				</h1>
-				<p class="text-cream-muted">
-					Where legends are made and egos are crushed
-				</p>
-			</div>
-
-			<!-- Advantage Banner -->
-			<section class="stats-section">
-				<h2 class="stats-section-title">
-					@components.Icon("slot-machine", "text-2xl")
-					<span>The Advantage</span>
-				</h2>
-				@components.AdvantageBanner(data.AdvantageHolder, data.AdvantageGroup)
-			</section>
-
-			<!-- Hall of Fame - Person Awards -->
-			if len(data.Awards) > 0 {
-				<section class="stats-section">
-					<h2 class="stats-section-title">
-						@components.Icon("trophy", "text-2xl")
-						<span>Hall of Fame</span>
-					</h2>
-					@components.AwardGrid(data.Awards)
-				</section>
-			}
-
-			<!-- Movie Superlatives -->
-			if len(data.MovieAwards) > 0 {
-				<section class="stats-section">
-					<h2 class="stats-section-title">
-						@components.Icon("clapperboard", "text-2xl")
-						<span>Movie Superlatives</span>
-					</h2>
-					@components.MovieAwardGrid(data.MovieAwards)
-				</section>
-			}
-
-			<!-- Leaderboards -->
-			if len(data.Leaderboards) > 0 {
-				<section class="stats-section">
-					<h2 class="stats-section-title">
-						@components.Icon("chart-up", "text-2xl")
-						<span>The Leaderboards</span>
-					</h2>
-					@components.LeaderboardGrid(data.Leaderboards)
-				</section>
-			}
-
-			<!-- Quick Stats -->
-			<section class="stats-section">
-				<h2 class="stats-section-title">
-					@components.Icon("bar-chart", "text-2xl")
-					<span>Quick Stats</span>
-				</h2>
-				<div class="quick-stats-grid">
-					<div class="quick-stat">
-						<div class="quick-stat-icon">
-							@components.Icon("clapperboard", "text-2xl")
-						</div>
-						<div class="quick-stat-value">{ ui.IntToStr(data.TotalMoviesWatched) }</div>
-						<div class="quick-stat-label">Movies Watched</div>
-					</div>
-					<div class="quick-stat">
-						<div class="quick-stat-icon">
-							@components.Icon("stopwatch", "text-2xl")
-						</div>
-						<div class="quick-stat-value">{ formatRuntime(data.TotalWatchTimeMinutes) }</div>
-						<div class="quick-stat-label">Total Watch Time</div>
-					</div>
-					<div class="quick-stat">
-						<div class="quick-stat-icon">
-							@components.Icon("calendar", "text-2xl")
-						</div>
-						<div class="quick-stat-value">{ ui.IntToStr(data.TotalGroups) }</div>
-						<div class="quick-stat-label">Groups</div>
-					</div>
-					<div class="quick-stat">
-						<div class="quick-stat-icon">
-							@components.Icon("star", "text-2xl")
-						</div>
-						<div class="quick-stat-value">{ ui.IntToStr(data.FullyRatedMovies) }</div>
-						<div class="quick-stat-label">Fully Rated</div>
-					</div>
+		<main class="trophy-room max-w-6xl mx-auto px-4 py-8">
+			<header class="trophy-room-hero">
+				<div class="trophy-room-hero-icon">
+					@components.Icon("trophy", "text-5xl")
 				</div>
-			</section>
+				<p class="trophy-room-kicker">Family Movie Night Presents</p>
+				<h1>Family Trophy Room</h1>
+				<p class="trophy-room-subtitle">High fives, popcorn, and the movies we loved most.</p>
+			</header>
 
-			<!-- Empty State -->
 			if data.TotalMoviesWatched == 0 {
-				<div class="text-center py-16">
-					<div class="text-6xl mb-4">
-						@components.Icon("theater-masks", "text-6xl")
+				<section class="trophy-room-empty">
+					<div class="text-6xl mb-4">@components.Icon("popcorn", "text-6xl")</div>
+					<h2>The show starts soon!</h2>
+					<p>Add a movie, gather the family, and start handing out ratings.</p>
+					<a href="/" class="btn-primary mt-6 inline-flex">Find Our First Movie</a>
+				</section>
+			} else {
+				<section class="trophy-room-section trophy-room-bonus">
+					<h2 class="trophy-room-section-title">
+						@components.Icon("slot-machine", "text-2xl")
+						<span>Next Movie Night Bonus</span>
+					</h2>
+					@components.AdvantageBanner(data.AdvantageHolder, data.AdvantageGroup)
+				</section>
+
+				<section class="trophy-room-section">
+					<div class="trophy-room-heading">
+						<h2 class="trophy-room-section-title">
+							@components.Icon("trophy", "text-2xl")
+							<span>Family High Fives</span>
+						</h2>
+						<p>Three simple trophies. Plenty of bragging rights.</p>
 					</div>
-					<h2 class="font-display text-gold text-2xl mb-2">No Stats Yet!</h2>
-					<p class="text-cream-muted">
-						Watch some movies and rate them to unlock the awards ceremony.
-					</p>
-				</div>
+					@components.TrophyGrid(data.Trophies)
+				</section>
+
+				<section class="trophy-room-section">
+					<div class="trophy-room-heading">
+						<h2 class="trophy-room-section-title">
+							@components.Icon("star", "text-2xl")
+							<span>Family Top Five</span>
+						</h2>
+						<p>Our highest-rated movies, according to the whole crew.</p>
+					</div>
+					if len(data.TopMovies) > 0 {
+						@components.TopMovieList(data.TopMovies)
+					} else {
+						<div class="top-movies-empty">
+							@components.Icon("star", "text-3xl")
+							<div>
+								<h3>Our chart is warming up</h3>
+								<p>Rate a movie as a family to unlock the top five.</p>
+							</div>
+						</div>
+					}
+				</section>
+
+				<section class="family-totals" aria-label="Family movie night totals">
+					<div class="family-total">
+						@components.Icon("clapperboard", "text-2xl")
+						<strong>{ ui.IntToStr(data.TotalMoviesWatched) }</strong>
+						<span>Movies Watched</span>
+					</div>
+					<div class="family-total">
+						@components.Icon("stopwatch", "text-2xl")
+						<strong>{ formatRuntime(data.TotalWatchTimeMinutes) }</strong>
+						<span>Movie Time Together</span>
+					</div>
+					<div class="family-total">
+						@components.Icon("star", "text-2xl")
+						<strong>{ ui.IntToStr(data.FullyRatedMovies) }</strong>
+						<span>Family-Rated Movies</span>
+					</div>
+				</section>
 			}
 		</main>
 	}
 }
 
 func formatRuntime(minutes int) string {
-	if minutes == 0 {
-		return "0h"
+	if minutes <= 0 {
+		return "0m"
 	}
 	hours := minutes / 60
 	mins := minutes % 60
 	if hours > 0 && mins > 0 {
-		return ui.IntToStr(hours) + "h " + ui.IntToStr(mins) + "m"
+		return fmt.Sprintf("%dh %dm", hours, mins)
 	}
 	if hours > 0 {
-		return ui.IntToStr(hours) + "h"
+		return fmt.Sprintf("%dh", hours)
 	}
-	return ui.IntToStr(mins) + "m"
+	return fmt.Sprintf("%dm", mins)
 }
