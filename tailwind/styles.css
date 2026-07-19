@@ -886,7 +886,7 @@
 	.advantage-badge {
 		align-items: center;
 		background: var(--color-gold);
-		border: 2px solid currentColor;
+		border: 2px solid currentcolor;
 		border-radius: 50%;
 		box-shadow: 0 0 20px rgba(0, 240, 255, 0.4);
 		color: var(--color-theater-black);
