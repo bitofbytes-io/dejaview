@@ -1,0 +1,51 @@
+package components
+
+import (
+	"fmt"
+	"strconv"
+
+	"github.com/drywaters/dejaview/internal/model"
+	"github.com/drywaters/dejaview/internal/ui"
+)
+
+// TopMovieList renders the family's five highest-rated movies.
+templ TopMovieList(movies []model.RankedMovie) {
+	<ol class="top-movies-list">
+		for i, ranked := range movies {
+			<li>
+				<a href={ templ.SafeURL("/movies/" + ranked.Entry.ID.String()) } class="top-movie-row">
+					<div class={ "top-movie-rank", rankClass(i + 1) } aria-label={ "Rank " + strconv.Itoa(i + 1) }>
+						{ strconv.Itoa(i + 1) }
+					</div>
+					<div class="top-movie-poster">
+						@Poster(ranked.Entry.Movie, "w-full")
+					</div>
+					<div class="top-movie-info">
+						<h3>{ ranked.Entry.Movie.Title }</h3>
+						<div class="top-movie-meta">
+							if ranked.Entry.Movie.ReleaseYear != nil {
+								<span>{ ui.IntToStr(*ranked.Entry.Movie.ReleaseYear) }</span>
+							}
+							<span>Group { ui.IntToStr(ranked.Entry.GroupNumber) }</span>
+							if ranked.Entry.PickedByPerson != nil {
+								<span>Picked by { ranked.Entry.PickedByPerson.Name }</span>
+							}
+						</div>
+					</div>
+					<div class="top-movie-score">
+						@Icon("star", "text-xl")
+						<strong>{ fmt.Sprintf("%.1f", ranked.AverageRating) }</strong>
+						<span>Family score</span>
+					</div>
+				</a>
+			</li>
+		}
+	</ol>
+}
+
+func rankClass(rank int) string {
+	if rank <= 3 {
+		return "top-movie-rank-" + strconv.Itoa(rank)
+	}
+	return ""
+}

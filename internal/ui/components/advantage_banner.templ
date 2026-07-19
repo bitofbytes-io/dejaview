@@ -5,7 +5,7 @@ import (
 	"github.com/drywaters/dejaview/internal/ui"
 )
 
-// AdvantageBanner shows who has the 3-pick advantage
+// AdvantageBanner shows who has the next movie-night bonus.
 templ AdvantageBanner(holder *model.Person, fromGroup int) {
 	<div class="advantage-banner">
 		if holder != nil {
@@ -20,17 +20,17 @@ templ AdvantageBanner(holder *model.Person, fromGroup int) {
 		<div class="flex-1 min-w-0">
 			if holder != nil {
 				<div class="text-base sm:text-xl font-display font-bold text-cream mb-1">
-					{ holder.Name } has the 3-Pick Advantage!
+					{ holder.Name } has the 3-Pick Bonus!
 				</div>
 				<div class="text-sm sm:text-base text-cream-muted">
-					Last pick from Group { ui.IntToStr(fromGroup) } means 3 entries in the next draw
+					Group { ui.IntToStr(fromGroup) } unlocked 3 entries in the next draw
 				</div>
 			} else {
 				<div class="text-base sm:text-xl font-display font-bold text-cream mb-1">
-					No Advantage Holder Yet
+					The Bonus Is Ready to Play
 				</div>
 				<div class="text-sm sm:text-base text-cream-muted">
-					Complete the first group to determine who gets the advantage
+					Finish the first group to see who gets 3 entries next time
 				</div>
 			}
 		</div>
