@@ -69,20 +69,6 @@ func TestCalculateTrophiesLeavesIneligibleAwardsOpen(t *testing.T) {
 	}
 }
 
-func TestFormatRuntime(t *testing.T) {
-	tests := map[int]string{
-		0:   "0m",
-		45:  "45m",
-		60:  "1h",
-		125: "2h 5m",
-	}
-	for minutes, want := range tests {
-		if got := formatRuntime(minutes); got != want {
-			t.Errorf("formatRuntime(%d) = %q, want %q", minutes, got, want)
-		}
-	}
-}
-
 func testPerson(name, initial string) *model.Person {
 	return &model.Person{ID: uuid.New(), Name: name, Initial: initial}
 }

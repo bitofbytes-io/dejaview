@@ -11,6 +11,7 @@ import (
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/drywaters/dejaview/internal/repository"
 	"github.com/drywaters/dejaview/internal/session"
+	"github.com/drywaters/dejaview/internal/ui"
 	"github.com/drywaters/dejaview/internal/ui/pages"
 )
 
@@ -167,20 +168,5 @@ func runtimeValue(winners []*model.Person, minutes int) string {
 	if len(winners) == 0 {
 		return "Waiting for movie picks"
 	}
-	return fmt.Sprintf("%s of picks", formatRuntime(minutes))
-}
-
-func formatRuntime(minutes int) string {
-	if minutes <= 0 {
-		return "0m"
-	}
-	hours := minutes / 60
-	mins := minutes % 60
-	if hours > 0 && mins > 0 {
-		return fmt.Sprintf("%dh %dm", hours, mins)
-	}
-	if hours > 0 {
-		return fmt.Sprintf("%dh", hours)
-	}
-	return fmt.Sprintf("%dm", mins)
+	return fmt.Sprintf("%s of picks", ui.FormatRuntime(minutes))
 }
