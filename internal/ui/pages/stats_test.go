@@ -38,9 +38,10 @@ func TestStatsPageRendersTrophiesAndRankedMovies(t *testing.T) {
 			Title: "Crowd Pleaser", Description: "Big cheers", Icon: "popcorn",
 			Winners: []*model.Person{winner}, Value: "9.2 family average",
 		}},
-		TopMovies:          []model.RankedMovie{{Entry: entry, AverageRating: 9.2}},
-		TotalMoviesWatched: 1,
-		FullyRatedMovies:   1,
+		TopMovies:             []model.RankedMovie{{Entry: entry, AverageRating: 9.2}},
+		TotalMoviesWatched:    1,
+		TotalWatchTimeMinutes: 10040,
+		FullyRatedMovies:      1,
 	}
 
 	html := renderStatsPage(t, data)
@@ -52,6 +53,10 @@ func TestStatsPageRendersTrophiesAndRankedMovies(t *testing.T) {
 		"The Family Favorite",
 		"9.2",
 		"/movies/" + entry.ID.String(),
+		"167h 20m",
+		`<span class="family-total-label">Movies Watched</span>`,
+		`<span class="family-total-label">Movie Time Together</span>`,
+		`<span class="family-total-label">Family-Rated Movies</span>`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("populated Trophy Room did not contain %q", want)

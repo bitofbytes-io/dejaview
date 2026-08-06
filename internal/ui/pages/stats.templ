@@ -73,17 +73,17 @@ templ StatsPage(data *model.StatsData, isAuthenticated bool) {
 					<div class="family-total">
 						@components.Icon("clapperboard", "text-2xl")
 						<strong>{ ui.IntToStr(data.TotalMoviesWatched) }</strong>
-						<span>Movies Watched</span>
+						<span class="family-total-label">Movies Watched</span>
 					</div>
 					<div class="family-total">
 						@components.Icon("stopwatch", "text-2xl")
 						<strong>{ ui.FormatRuntime(data.TotalWatchTimeMinutes) }</strong>
-						<span>Movie Time Together</span>
+						<span class="family-total-label">Movie Time Together</span>
 					</div>
 					<div class="family-total">
 						@components.Icon("star", "text-2xl")
 						<strong>{ ui.IntToStr(data.FullyRatedMovies) }</strong>
-						<span>Family-Rated Movies</span>
+						<span class="family-total-label">Family-Rated Movies</span>
 					</div>
 				</section>
 			}
