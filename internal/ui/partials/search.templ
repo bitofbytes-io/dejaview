@@ -8,7 +8,7 @@ import (
 // SearchResults renders TMDB search results
 templ SearchResults(results []tmdb.SearchResult) {
 	if results == nil || len(results) == 0 {
-		<div class="text-center py-8 text-cream-ticket opacity-50">
+		<div class="search-results-empty text-center py-8">
 			<p>No results found. Try a different search term.</p>
 		</div>
 	} else {
@@ -41,7 +41,7 @@ templ SearchResultCard(result tmdb.SearchResult) {
 		
 		<div class="search-result-content">
 			<h4 class="search-result-title">{ result.Title }</h4>
-			<p class="text-sm text-cream-ticket opacity-70">
+			<p class="search-result-year text-sm">
 				{ extractYear(result.ReleaseDate) }
 			</p>
 			if result.Overview != "" {

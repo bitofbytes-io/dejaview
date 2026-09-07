@@ -551,15 +551,19 @@
 		overflow-wrap: anywhere;
 	}
 
+	.search-result-year,
+	.search-result-overview,
+	.search-results-empty {
+		color: #f5f0ff;
+	}
+
 	.search-result-overview {
 		display: -webkit-box;
 		-webkit-line-clamp: 3;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
 		margin-top: 0.25rem;
-		color: var(--color-cream-muted);
 		font-size: 0.875rem;
-		opacity: 0.5;
 	}
 
 	.search-result-actions {
