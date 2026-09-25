@@ -5,24 +5,24 @@ import "github.com/drywaters/dejaview/internal/model"
 // TrophyCard renders one friendly award and supports shared wins.
 templ TrophyCard(trophy model.Trophy) {
 	<article class="trophy-card">
-		<div class="trophy-card-icon">@Icon(trophy.Icon, "text-4xl")</div>
+		<div class="trophy-card-icon">@Icon(trophy.Icon, "")</div>
 		<h3>{ trophy.Title }</h3>
 		<p class="trophy-card-description">{ trophy.Description }</p>
-		if len(trophy.Winners) > 0 {
-			<div class="trophy-winners">
+		<div class="trophy-winners">
+			if len(trophy.Winners) > 0 {
 				for _, winner := range trophy.Winners {
-					<div class="trophy-winner">
-						<span class={ "trophy-winner-badge", winner.ColorClass() }>{ winner.Initial }</span>
+					<span class={ "trophy-winner", winner.ColorClass() }>
+						<span class="trophy-winner-badge" aria-hidden="true">{ winner.Initial }</span>
 						<span>{ winner.Name }</span>
-					</div>
+					</span>
 				}
-			</div>
-		} else {
-			<div class="trophy-winner trophy-winner-pending">
-				<span class="trophy-winner-badge">?</span>
-				<span>Trophy still up for grabs</span>
-			</div>
-		}
+			} else {
+				<span class="trophy-winner trophy-winner-pending">
+					<span class="trophy-winner-badge" aria-hidden="true">?</span>
+					<span>Still up for grabs</span>
+				</span>
+			}
+		</div>
 		<div class="trophy-card-value">{ trophy.Value }</div>
 	</article>
 }

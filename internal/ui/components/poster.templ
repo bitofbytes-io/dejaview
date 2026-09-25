@@ -2,9 +2,10 @@ package components
 
 import (
 	"github.com/drywaters/dejaview/internal/model"
+	"github.com/drywaters/dejaview/internal/ui"
 )
 
-// Poster renders a movie poster with fallback
+// Poster renders a movie poster, or a blank tape sleeve when there is none
 templ Poster(movie *model.Movie, size string) {
 	if movie.PosterURL != nil && *movie.PosterURL != "" {
 		<img
@@ -14,38 +15,37 @@ templ Poster(movie *model.Movie, size string) {
 			loading="lazy"
 		/>
 	} else {
-		<div class={ "poster-placeholder", size }>
-			<svg class="w-16 h-16" fill="currentColor" viewBox="0 0 24 24">
-				<path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/>
-			</svg>
+		<div class={ "poster-placeholder", size } role="img" aria-label={ movie.Title }>
+			<span class="ph-title">{ movie.Title }</span>
+			if movie.ReleaseYear != nil {
+				<span class="ph-year">{ ui.IntToStr(*movie.ReleaseYear) }</span>
+			}
 		</div>
 	}
 }
 
 // PosterCard renders a clickable movie poster card
 templ PosterCard(entry *model.Entry, showRatings bool) {
-	<a href={ templ.SafeURL("/movies/" + entry.ID.String()) } class="poster-card block">
+	<a href={ templ.SafeURL("/movies/" + entry.ID.String()) } class="poster-card">
 		@posterCardContent(entry, showRatings)
 	</a>
 }
 
 templ posterCardContent(entry *model.Entry, showRatings bool) {
 	if entry.PickedByPerson != nil {
-		<div class={ "picker-badge", entry.PickedByPerson.ColorClass() } title={ "Picked by " + entry.PickedByPerson.Name }>
+		<span class={ "picker-badge", entry.PickedByPerson.ColorClass() } title={ "Picked by " + entry.PickedByPerson.Name }>
 			{ entry.PickedByPerson.Initial }
-		</div>
+		</span>
 	}
-	@Poster(entry.Movie, "w-full")
+	@Poster(entry.Movie, "")
 
 	if showRatings && len(entry.Ratings) > 0 {
 		<div class="poster-overlay">
-			<div class="flex items-center justify-center gap-1">
-				for _, rating := range entry.Ratings {
-					<span class={ "rating-badge text-xs", rating.RatingColor() }>
-						{ rating.Person.Initial }
-					</span>
-				}
-			</div>
+			for _, rating := range entry.Ratings {
+				<span class={ "rating-badge", rating.RatingColor() } title={ rating.Person.Name + ": " + ui.FormatFloat(rating.Score) }>
+					{ rating.Person.Initial }
+				</span>
+			}
 		</div>
 	}
 }
@@ -54,12 +54,12 @@ templ posterCardContent(entry *model.Entry, showRatings bool) {
 templ DraggablePosterCard(entry *model.Entry, showRatings bool, isAuthenticated bool) {
 	if isAuthenticated {
 		<div class="draggable-item" data-entry-id={ entry.ID.String() }>
-			<div class="drag-handle">
-				<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+			<div class="drag-handle" aria-label="Drag to reorder" title="Drag to reorder">
+				<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
 					<path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z"/>
 				</svg>
 			</div>
-			<a href={ templ.SafeURL("/movies/" + entry.ID.String()) } class="poster-card block">
+			<a href={ templ.SafeURL("/movies/" + entry.ID.String()) } class="poster-card">
 				@posterCardContent(entry, showRatings)
 			</a>
 		</div>

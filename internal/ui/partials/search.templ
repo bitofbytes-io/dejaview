@@ -8,8 +8,8 @@ import (
 // SearchResults renders TMDB search results
 templ SearchResults(results []tmdb.SearchResult) {
 	if results == nil || len(results) == 0 {
-		<div class="search-results-empty text-center py-8">
-			<p>No results found. Try a different search term.</p>
+		<div class="search-results-empty">
+			<p>No matches. Try a different title.</p>
 		</div>
 	} else {
 		<div class="search-results-list">
@@ -32,16 +32,16 @@ templ SearchResultCard(result tmdb.SearchResult) {
 				loading="lazy"
 			/>
 		} else {
-			<div class="search-poster bg-theater-black flex items-center justify-center">
-				<svg class="w-8 h-8 text-gold opacity-30" fill="currentColor" viewBox="0 0 24 24">
+			<div class="search-poster search-poster-empty" aria-hidden="true">
+				<svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
 					<path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/>
 				</svg>
 			</div>
 		}
 		
-		<div class="search-result-content">
+		<div class="search-result-content min-w-0">
 			<h4 class="search-result-title">{ result.Title }</h4>
-			<p class="search-result-year text-sm">
+			<p class="search-result-year">
 				{ extractYear(result.ReleaseDate) }
 			</p>
 			if result.Overview != "" {
@@ -53,9 +53,7 @@ templ SearchResultCard(result tmdb.SearchResult) {
 		
 		<form hx-post="/api/tmdb/add" hx-swap="none" class="search-result-actions" hx-vals="js:{group_number: document.getElementById('add-group-select').value}">
 			<input type="hidden" name="tmdb_id" value={ ui.IntToStr(result.ID) }/>
-			<button type="submit" class="btn-primary search-add-button">
-				Add
-			</button>
+			<button type="submit" class="btn-primary btn-sm">Add</button>
 		</form>
 	</div>
 }
