@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DejaView movie detail, desktop</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="late-show-tokens.css">
+<link rel="stylesheet" href="ds/dejaview/components/bundle.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wght@0,400..800;1,400&family=IBM+Plex+Mono:wght@400;500;600&family=Unbounded:wght@500..800&family=VT323&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0d0a12;font-family:"Archivo",system-ui,sans-serif;color:#f3eff7}
+a{color:#4de3f5}a:hover{color:#f3eff7}
+</style>
+</helmet>
+<div class="dv-page dv-grain dv-crt tape-{{wear}}" style="width: 1440px; height: 1180px; overflow: hidden; background: var(--screen);">
+  <header class="header-bar">
+    <div class="header-inner" style="max-width: 1280px; padding: 12px 32px;">
+      <a class="wordmark" href="Main.dc.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width: 28px; height: 28px; color: var(--neon-rose);" aria-hidden="true"><rect x="2.5" y="9" width="19" height="11" rx="1"></rect><path d="M2.5 9 L21.5 4.5 L21.5 9 Z"></path><line x1="6" y1="5.5" x2="6" y2="9"></line><line x1="9" y1="6" x2="9" y2="9"></line><line x1="12" y1="6.5" x2="12" y2="9"></line><line x1="15" y1="7" x2="15" y2="9"></line><line x1="18" y1="7.5" x2="18" y2="9"></line></svg>
+        <span>Deja<em>View</em></span>
+      </a>
+      <div class="header-osd" aria-hidden="true">
+        <span class="osd"><span class="osd-blink">▶</span> Play</span>
+        <span class="osd osd-dim">SP 0:12:34</span>
+      </div>
+      <nav class="nav" aria-label="Main">
+        <a class="nav-link" href="Main.dc.html" aria-current="page">Movies</a>
+        <a class="nav-link" href="TrophyRoom.dc.html">Trophy room</a>
+        <button class="nav-link" type="button">Log out</button>
+      </nav>
+    </div>
+  </header>
+
+  <main style="max-width: 1280px; margin: 0 auto; padding: 24px 32px 32px; box-sizing: border-box;">
+    <a href="Main.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-weight: 600; text-decoration: none; margin-bottom: 16px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px;" aria-hidden="true"><path d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+      Back to movies
+    </a>
+    <div style="display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 40px; align-items: start;">
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <div style="border-radius: 12px; overflow: hidden; border: 1px solid var(--line); box-shadow: var(--shadow-card);">
+          <div class="art" style="background: #6b1d1d; padding: 24px;">
+            <span class="art-sun" style="background: #ffb13b; width: 420px; height: 420px; left: -110px; top: 40px;"></span>
+            <span class="art-band" style="background: #2a0d0d; height: 160px; bottom: 0;"></span>
+            <span class="art-title" style="position: relative; font-size: 34px; line-height: 38px;">Back to the Future</span>
+          </div>
+        </div>
+        <div class="card" style="display: flex; flex-direction: column; gap: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span class="text-kicker">Group</span>
+            <span class="osd osd-rose">Tape 11</span>
+          </div>
+          <div>
+            <label class="field-label" for="picker">Picked by</label>
+            <select id="picker" class="input-field"><option>Jennifer</option><option>Daniel</option><option>Caleb</option><option>Aiden</option><option>No one</option></select>
+          </div>
+          <button class="btn-danger" type="button" style="width: 100%;">Remove from collection</button>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 24px;">
+        <div>
+          <h1 class="rgb-split" style="margin: 0; font-family: var(--font-display); font-size: 44px; line-height: 50px; font-weight: 800; letter-spacing: -0.01em;">Back to the Future</h1>
+          <div class="font-mono" style="margin-top: 8px; font-size: 15px; line-height: 20px; color: var(--ink-muted); display: flex; gap: 12px; align-items: center;">
+            <span>1985</span><span aria-hidden="true">·</span><span>1h 56m</span><span aria-hidden="true">·</span>
+            <span style="display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-sans); font-weight: 600; color: var(--ink);"><span class="picker-badge person-jennifer" style="position: static; width: 24px; height: 24px; font-size: 12px;">J</span>Picked by Jennifer</span>
+          </div>
+        </div>
+
+        <section class="card">
+          <h2 class="card-title">Synopsis</h2>
+          <p style="margin: 0; font-size: 18px; line-height: 28px; color: var(--ink-muted); max-width: 64ch;">Eighties teenager Marty McFly is accidentally sent back in time to 1955, inadvertently disrupting his parents' first meeting and attracting his mother's romantic interest. Marty must repair the damage to history by rekindling his parents' romance and, with the help of his eccentric inventor friend Doc Brown, return to 1985.</p>
+        </section>
+
+        <form class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px;">
+            <h2 class="card-title" style="margin: 0;">Family ratings</h2>
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <span class="text-kicker">Average</span>
+              <span class="rating-badge rating-badge-lg rating-high">8.9</span>
+              <span class="font-mono" style="font-size: 13px; color: var(--ink-muted);">4 of 4 rated</span>
+              <button class="btn-primary" type="submit">Save ratings</button>
+            </div>
+          </div>
+          <hr class="divider" style="margin: 24px 0;">
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+            <div class="rating-row person-daniel"><span class="rating-person"><span class="initial">D</span>Daniel</span><input class="rating-input" type="number" min="0" max="10" step="0.5" value="9" aria-label="Daniel's rating"></div>
+            <div class="rating-row person-jennifer"><span class="rating-person"><span class="initial">J</span>Jennifer</span><input class="rating-input" type="number" min="0" max="10" step="0.5" value="9.5" aria-label="Jennifer's rating"></div>
+            <div class="rating-row person-caleb"><span class="rating-person"><span class="initial">C</span>Caleb</span><input class="rating-input" type="number" min="0" max="10" step="0.5" value="7.5" aria-label="Caleb's rating"></div>
+            <div class="rating-row person-aiden"><span class="rating-person"><span class="initial">A</span>Aiden</span><input class="rating-input" type="number" min="0" max="10" step="0.5" value="9.5" aria-label="Aiden's rating"></div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"tapeWear":{"editor":"enum","options":["clean","worn","rewound"],"default":"worn","section":"Tape"},"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() { return { wear: this.props.tapeWear ?? 'worn' }; }
+}
+</script>
+</body>
+</html>

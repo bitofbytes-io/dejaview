@@ -9,29 +9,45 @@ import (
 
 templ StatsPage(data *model.StatsData, isAuthenticated bool) {
 	@layout.Base("Trophy Room") {
-		@layout.Header(isAuthenticated)
+		@layout.Header(isAuthenticated, "stats")
 
-		<main class="trophy-room max-w-6xl mx-auto px-4 py-8">
+		<main class="trophy-room page page-narrow">
 			<header class="trophy-room-hero">
+				<span class="tracking-band" aria-hidden="true"></span>
 				<div class="trophy-room-hero-icon">
-					@components.Icon("trophy", "text-5xl")
+					@components.Icon("trophy", "")
 				</div>
-				<p class="trophy-room-kicker">Family Movie Night Presents</p>
+				<p class="trophy-room-kicker"><span class="osd-blink">&#9654;</span> Family movie night presents</p>
 				<h1>Family Trophy Room</h1>
-				<p class="trophy-room-subtitle">High fives, popcorn, and the movies we loved most.</p>
+				<p class="trophy-room-subtitle">The movies we loved most, and who picked them.</p>
 			</header>
 
 			if data.TotalMoviesWatched == 0 {
 				<section class="trophy-room-empty">
-					<div class="text-6xl mb-4">@components.Icon("popcorn", "text-6xl")</div>
+					@components.Icon("popcorn", "")
 					<h2>The show starts soon!</h2>
 					<p>Add a movie, gather the family, and start handing out ratings.</p>
-					<a href="/" class="btn-primary mt-6 inline-flex">Find Our First Movie</a>
+					<a href="/" class="btn-primary">Find Our First Movie</a>
 				</section>
 			} else {
+				<section class="family-totals" aria-label="Family movie night totals">
+					<div class="family-total">
+						<strong>{ ui.IntToStr(data.TotalMoviesWatched) }</strong>
+						<span class="family-total-label">Movies Watched</span>
+					</div>
+					<div class="family-total">
+						<strong>{ ui.FormatRuntime(data.TotalWatchTimeMinutes) }</strong>
+						<span class="family-total-label">Movie Time Together</span>
+					</div>
+					<div class="family-total">
+						<strong>{ ui.IntToStr(data.FullyRatedMovies) }</strong>
+						<span class="family-total-label">Family-Rated Movies</span>
+					</div>
+				</section>
+
 				<section class="trophy-room-section trophy-room-bonus">
 					<h2 class="trophy-room-section-title">
-						@components.Icon("slot-machine", "text-2xl")
+						@components.Icon("slot-machine", "")
 						<span>Next Movie Night Bonus</span>
 					</h2>
 					@components.AdvantageBanner(data.AdvantageHolder, data.AdvantageGroup)
@@ -40,10 +56,10 @@ templ StatsPage(data *model.StatsData, isAuthenticated bool) {
 				<section class="trophy-room-section">
 					<div class="trophy-room-heading">
 						<h2 class="trophy-room-section-title">
-							@components.Icon("trophy", "text-2xl")
+							@components.Icon("trophy", "")
 							<span>Family High Fives</span>
 						</h2>
-						<p>Three simple trophies. Plenty of bragging rights.</p>
+						<p>Three trophies. Plenty of bragging rights.</p>
 					</div>
 					@components.TrophyGrid(data.Trophies)
 				</section>
@@ -51,40 +67,22 @@ templ StatsPage(data *model.StatsData, isAuthenticated bool) {
 				<section class="trophy-room-section">
 					<div class="trophy-room-heading">
 						<h2 class="trophy-room-section-title">
-							@components.Icon("star", "text-2xl")
+							@components.Icon("star", "")
 							<span>Family Top Five</span>
 						</h2>
-						<p>Our highest-rated movies, according to the whole crew.</p>
+						<p>Highest-rated by the whole crew.</p>
 					</div>
 					if len(data.TopMovies) > 0 {
 						@components.TopMovieList(data.TopMovies)
 					} else {
 						<div class="top-movies-empty">
-							@components.Icon("star", "text-3xl")
+							@components.Icon("star", "")
 							<div>
 								<h3>Our chart is warming up</h3>
 								<p>Rate a movie as a family to unlock the top five.</p>
 							</div>
 						</div>
 					}
-				</section>
-
-				<section class="family-totals" aria-label="Family movie night totals">
-					<div class="family-total">
-						@components.Icon("clapperboard", "text-2xl")
-						<strong>{ ui.IntToStr(data.TotalMoviesWatched) }</strong>
-						<span class="family-total-label">Movies Watched</span>
-					</div>
-					<div class="family-total">
-						@components.Icon("stopwatch", "text-2xl")
-						<strong>{ ui.FormatRuntime(data.TotalWatchTimeMinutes) }</strong>
-						<span class="family-total-label">Movie Time Together</span>
-					</div>
-					<div class="family-total">
-						@components.Icon("star", "text-2xl")
-						<strong>{ ui.IntToStr(data.FullyRatedMovies) }</strong>
-						<span class="family-total-label">Family-Rated Movies</span>
-					</div>
 				</section>
 			}
 		</main>

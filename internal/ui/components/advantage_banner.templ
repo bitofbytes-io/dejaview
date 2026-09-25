@@ -7,35 +7,22 @@ import (
 
 // AdvantageBanner shows who has the next movie-night bonus.
 templ AdvantageBanner(holder *model.Person, fromGroup int) {
-	<div class="advantage-banner">
-		if holder != nil {
-			<div class={ "advantage-badge w-12 h-12 sm:w-20 sm:h-20 text-xl sm:text-3xl flex-shrink-0", holder.ColorClass() }>
-				{ holder.Initial }
+	if holder != nil {
+		<div class={ "advantage-banner", holder.ColorClass() }>
+			<div class="advantage-badge" aria-hidden="true">{ holder.Initial }</div>
+			<div class="min-w-0">
+				<p class="advantage-title">{ holder.Name } has the 3-pick bonus</p>
+				<p class="advantage-sub">Group { ui.IntToStr(fromGroup) } unlocked 3 entries in the next draw.</p>
 			</div>
-		} else {
-			<div class="advantage-badge w-12 h-12 sm:w-20 sm:h-20 text-xl sm:text-3xl flex-shrink-0">
-				?
+			<span class="advantage-tickets" aria-hidden="true">3 × tickets</span>
+		</div>
+	} else {
+		<div class="advantage-banner">
+			<div class="advantage-badge" aria-hidden="true">?</div>
+			<div class="min-w-0">
+				<p class="advantage-title">The bonus is ready to play</p>
+				<p class="advantage-sub">Finish the first group to see who gets 3 entries next time.</p>
 			</div>
-		}
-		<div class="flex-1 min-w-0">
-			if holder != nil {
-				<div class="text-base sm:text-xl font-display font-bold text-cream mb-1">
-					{ holder.Name } has the 3-Pick Bonus!
-				</div>
-				<div class="text-sm sm:text-base text-cream-muted">
-					Group { ui.IntToStr(fromGroup) } unlocked 3 entries in the next draw
-				</div>
-			} else {
-				<div class="text-base sm:text-xl font-display font-bold text-cream mb-1">
-					The Bonus Is Ready to Play
-				</div>
-				<div class="text-sm sm:text-base text-cream-muted">
-					Finish the first group to see who gets 3 entries next time
-				</div>
-			}
 		</div>
-		<div class="text-4xl sm:text-6xl flex-shrink-0">
-			@Icon("slot-machine", "")
-		</div>
-	</div>
+	}
 }

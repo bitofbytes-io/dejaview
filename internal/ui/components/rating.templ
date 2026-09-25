@@ -20,7 +20,7 @@ templ EmptyRatingBadge() {
 
 // RatingInputSimple renders an editable rating input without form wrapper
 templ RatingInputSimple(entryID uuid.UUID, person *model.Person, currentScore *float64) {
-	<div class="flex items-center gap-2">
+	<div class="rating-controls">
 		<input
 			type="number"
 			name={ "rating[" + person.ID.String() + "]" }
@@ -35,15 +35,17 @@ templ RatingInputSimple(entryID uuid.UUID, person *model.Person, currentScore *f
 			}
 			placeholder="—"
 			class="rating-input"
+			aria-label={ person.Name + "'s rating" }
 		/>
 		if currentScore != nil {
 			<button
 				type="button"
 				onclick="this.previousElementSibling.value = ''"
-				class="text-red-400 hover:text-red-300 transition-colors"
+				class="btn-icon rating-clear"
 				title="Clear rating"
+				aria-label={ "Clear " + person.Name + "'s rating" }
 			>
-				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
 				</svg>
 			</button>
@@ -53,26 +55,27 @@ templ RatingInputSimple(entryID uuid.UUID, person *model.Person, currentScore *f
 
 // PersonRatingRowSimple renders a rating row without the form wrapper
 templ PersonRatingRowSimple(entry *model.Entry, person *model.Person) {
-	<div class="rating-row flex items-center gap-3 p-3 rounded-lg bg-theater-black/50 min-w-0">
-		<span class="font-display text-cream-ticket min-w-0 truncate" title={ person.Name }>{ person.Name }</span>
+	<div class={ "rating-row", person.ColorClass() }>
+		<span class="rating-person min-w-0" title={ person.Name }>
+			<span class="initial" aria-hidden="true">{ person.Initial }</span>
+			<span class="truncate">{ person.Name }</span>
+		</span>
 		@RatingInputSimple(entry.ID, person, ui.GetRatingScore(entry, person.ID))
 	</div>
 }
 
 // AverageRating renders the average rating display
 templ AverageRating(avg *float64, ratingCount int) {
-	<div class="flex items-center gap-3">
-		<span class="text-gold font-display text-sm uppercase tracking-wider">Average</span>
+	<div class="ratings-average">
+		<span class="text-kicker">Average</span>
 		if avg != nil {
-			<span class={ "rating-badge text-lg", model.ScoreColorClass(*avg) }>
+			<span class={ "rating-badge rating-badge-lg", model.ScoreColorClass(*avg) }>
 				{ ui.FormatFloat(*avg) }
 			</span>
-			<span class="text-sm text-cream-ticket opacity-60">
-				({ ui.IntToStr(ratingCount) }/4 ratings)
-			</span>
+			<span class="ratings-count">{ ui.IntToStr(ratingCount) } of 4 rated</span>
 		} else {
-			<span class="rating-badge rating-empty text-lg">—</span>
-			<span class="text-sm text-cream-ticket opacity-60">No ratings yet</span>
+			<span class="rating-badge rating-badge-lg rating-empty">—</span>
+			<span class="ratings-count">No ratings yet</span>
 		}
 	</div>
 }

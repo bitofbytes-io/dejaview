@@ -18,10 +18,10 @@ templ TopMovieList(movies []model.RankedMovie) {
 						{ strconv.Itoa(i + 1) }
 					</div>
 					<div class="top-movie-poster">
-						@Poster(ranked.Entry.Movie, "w-full")
+						@Poster(ranked.Entry.Movie, "")
 					</div>
 					<div class="top-movie-info">
-						<h3>{ ranked.Entry.Movie.Title }</h3>
+						<h3 title={ ranked.Entry.Movie.Title }>{ ranked.Entry.Movie.Title }</h3>
 						<div class="top-movie-meta">
 							if ranked.Entry.Movie.ReleaseYear != nil {
 								<span>{ ui.IntToStr(*ranked.Entry.Movie.ReleaseYear) }</span>
@@ -33,7 +33,6 @@ templ TopMovieList(movies []model.RankedMovie) {
 						</div>
 					</div>
 					<div class="top-movie-score">
-						@Icon("star", "text-xl")
 						<strong>{ fmt.Sprintf("%.1f", ranked.AverageRating) }</strong>
 						<span>Family score</span>
 					</div>

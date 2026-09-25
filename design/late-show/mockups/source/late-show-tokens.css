@@ -1,0 +1,55 @@
+/* Late Show tokens as CSS variables (from the DejaView design system's tokens.json). */
+:root {
+  --screen: #0d0a12;
+  --surface: #16121d;
+  --surface-raised: #201a2a;
+  --surface-sunken: #08060b;
+  --line: #2c2438;
+  --line-control: #7a6c90;
+  --ink: #f3eff7;
+  --ink-muted: #b9b0c7;
+  --ink-faint: #8f859f;
+  --neon-rose: #ff4f93;
+  --neon-rose-deep: #d93a78;
+  --neon-cyan: #4de3f5;
+  --neon-amber: #ffc857;
+  --neon-mint: #6ff0b0;
+  --neon-violet: #b7a1ff;
+  --signal-error: #ff7a45;
+  --medal-bronze: #e0925a;
+  --on-neon: #1a0510;
+  --person-daniel: var(--neon-cyan);
+  --person-jennifer: var(--neon-rose);
+  --person-caleb: var(--neon-amber);
+  --person-aiden: var(--neon-violet);
+  --rating-low: var(--neon-rose);
+  --rating-mid: var(--neon-amber);
+  --rating-high: var(--neon-mint);
+  --focus: var(--neon-cyan);
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-6: 24px; --space-8: 32px; --space-12: 48px; --space-16: 64px;
+  --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-pill: 999px;
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 12px 32px rgba(0, 0, 0, 0.45);
+  --shadow-lift: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 18px 40px rgba(0, 0, 0, 0.6);
+  --glow-rose: 0 0 0 1px rgba(255, 79, 147, 0.7), 0 0 20px rgba(255, 79, 147, 0.35);
+  --glow-amber: 0 0 16px rgba(255, 200, 87, 0.4);
+  --grain-opacity: 0.08;
+  --scanline-opacity: 0.18;
+  --vignette-opacity: 0.28;
+  --rgb-split: -1.5px 0 0 rgba(255, 45, 120, 0.7), 1.5px 0 0 rgba(60, 220, 255, 0.7);
+  --rgb-split-strong: -2.5px 0 0 rgba(255, 45, 120, 0.8), 2.5px 0 0 rgba(60, 220, 255, 0.8);
+  --chroma-edge: -3px 0 0 rgba(255, 45, 120, 0.75), 3px 0 0 rgba(60, 220, 255, 0.75);
+  --disabled-opacity: 0.5;
+  --font-display: "Unbounded", "Archivo", system-ui, sans-serif;
+  --font-sans: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-osd: "VT323", "IBM Plex Mono", ui-monospace, monospace;
+}
+/* Mockup-only: fake poster art (no real posters are reproduced). */
+.art { position: relative; display: flex; flex-direction: column; justify-content: flex-end; aspect-ratio: 2 / 3; padding: 12px; overflow: hidden; }
+.art .art-title { font-family: var(--font-display); font-weight: 800; font-size: 15px; line-height: 18px; color: #fff8ee; text-transform: uppercase; letter-spacing: 0.01em; }
+.art .art-sun { position: absolute; border-radius: 999px; }
+.art .art-band { position: absolute; left: 0; right: 0; }
+.poster-card .art { padding-bottom: 44px; }
+.art .art-title { text-shadow: var(--split, none); }
+.poster-card .art.no-ratings { padding-bottom: 12px; }
