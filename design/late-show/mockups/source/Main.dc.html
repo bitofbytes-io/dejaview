@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DejaView dashboard, desktop</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="late-show-tokens.css">
+<link rel="stylesheet" href="ds/dejaview/components/bundle.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wght@0,400..800;1,400&family=IBM+Plex+Mono:wght@400;500;600&family=Unbounded:wght@500..800&family=VT323&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0d0a12;font-family:"Archivo",system-ui,sans-serif;color:#f3eff7}
+a{color:#4de3f5}a:hover{color:#f3eff7}
+</style>
+</helmet>
+<div class="dv-page dv-grain dv-crt tape-{{wear}}" style="width: 1440px; height: 1600px; overflow: hidden; background: var(--screen);">
+  <div class="marquee-container" aria-hidden="true">
+    <div class="marquee-track">
+      <span><b>★</b> Now playing <b>★</b> Family movie night <b>★</b> Be kind, rewind <b>★</b> Now playing <b>★</b> Family movie night <b>★</b> Be kind, rewind <b>★</b> Now playing <b>★</b> Family movie night</span>
+    </div>
+  </div>
+  <header class="header-bar">
+    <div class="header-inner" style="max-width: 1280px; padding: 12px 32px;">
+      <a class="wordmark" href="Main.dc.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width: 28px; height: 28px; color: var(--neon-rose);" aria-hidden="true"><rect x="2.5" y="9" width="19" height="11" rx="1"></rect><path d="M2.5 9 L21.5 4.5 L21.5 9 Z"></path><line x1="6" y1="5.5" x2="6" y2="9"></line><line x1="9" y1="6" x2="9" y2="9"></line><line x1="12" y1="6.5" x2="12" y2="9"></line><line x1="15" y1="7" x2="15" y2="9"></line><line x1="18" y1="7.5" x2="18" y2="9"></line></svg>
+        <span>Deja<em>View</em></span>
+      </a>
+      <div class="header-osd" aria-hidden="true">
+        <span class="osd"><span class="osd-blink">▶</span> Play</span>
+        <span class="osd osd-dim">SP 0:12:34</span>
+      </div>
+      <nav class="nav" aria-label="Main">
+        <a class="nav-link" href="Main.dc.html" aria-current="page">Movies</a>
+        <a class="nav-link" href="TrophyRoom.dc.html">Trophy room</a>
+        <button class="nav-link" type="button">Log out</button>
+      </nav>
+    </div>
+  </header>
+
+  <main style="max-width: 1280px; margin: 0 auto; padding: 32px; display: flex; flex-direction: column; gap: 48px; box-sizing: border-box;">
+    <section class="card" style="padding: 24px;">
+      <h2 class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width: 20px; height: 20px; color: var(--neon-rose);" aria-hidden="true"><circle cx="10" cy="10" r="6"></circle><path d="M14.5 14.5 L20 20"></path></svg>
+        Add movie
+      </h2>
+      <div style="display: flex; gap: 16px; align-items: flex-end;">
+        <div style="flex-grow: 1;">
+          <label class="field-label" for="q">Search TMDB</label>
+          <input id="q" class="input-field" type="search" value="goonies" placeholder="Search for a movie…">
+        </div>
+        <div style="width: 220px;">
+          <label class="field-label" for="grp">Add to</label>
+          <select id="grp" class="input-field"><option>Group 12 (4)</option><option>+ New group</option></select>
+        </div>
+      </div>
+      <div class="search-results-list" style="margin-top: 16px;">
+        <div class="search-result" style="grid-template-columns: 72px minmax(0, 1fr) auto; padding: 12px;">
+          <div class="search-poster" style="width: 72px; background: #1f4e5a;"></div>
+          <div>
+            <h4 class="search-result-title">The Goonies</h4>
+            <p class="search-result-year">1985</p>
+            <p class="search-result-overview" style="display: block;">A young teenager and his friends embark on an adventure to find a legendary pirate's treasure, hoping to save their homes from demolition.</p>
+          </div>
+          <button class="btn-primary btn-sm" type="button">Add</button>
+        </div>
+        <div class="search-result" style="grid-template-columns: 72px minmax(0, 1fr) auto; padding: 12px;">
+          <div class="search-poster" style="width: 72px; background: #5a2f1f;"></div>
+          <div>
+            <h4 class="search-result-title">The Goonies: Making the Adventure</h4>
+            <p class="search-result-year">2010</p>
+            <p class="search-result-overview" style="display: block;">A behind-the-scenes documentary about the making of the 1985 film.</p>
+          </div>
+          <button class="btn-primary btn-sm" type="button">Add</button>
+        </div>
+      </div>
+    </section>
+
+    <sc-for list="{{groups}}" as="g" hint-placeholder-count="2">
+      <section class="{{g.sectionClass}}">
+        <div class="group-head">
+          <h2 class="group-title"><span class="tape-no">{{g.tape}}</span>{{g.name}}</h2>
+          <span class="group-count">{{g.count}}</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px;">
+          <sc-for list="{{g.movies}}" as="m" hint-placeholder-count="5">
+            <div class="draggable-item">
+              <a class="poster-card" href="MovieDetail.dc.html">
+                <span class="picker-badge {{m.pickerClass}}" title="Picked by {{m.pickerName}}">{{m.picker}}</span>
+                <div class="art {{m.artClass}}" style="background: {{m.bg}};">
+                  <span class="art-sun" style="{{m.sun}}"></span>
+                  <span class="art-band" style="{{m.band}}"></span>
+                  <span class="art-title" style="position: relative;">{{m.title}}</span>
+                </div>
+                <sc-if value="{{m.hasRatings}}" hint-placeholder-val="{{true}}">
+                  <div class="poster-overlay">
+                    <sc-for list="{{m.ratings}}" as="r" hint-placeholder-count="4">
+                      <span class="rating-badge {{r.cls}}">{{r.i}}</span>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </a>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+    </sc-for>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"tapeWear":{"editor":"enum","options":["clean","worn","rewound"],"default":"worn","section":"Tape"},"$preview":{"width":1440,"height":1600}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var P = { D: ['person-daniel', 'Daniel'], J: ['person-jennifer', 'Jennifer'], C: ['person-caleb', 'Caleb'], A: ['person-aiden', 'Aiden'] };
+    function r(s) { return s.split(' ').filter(Boolean).map(function (x) { var cls = x[1] === 'h' ? 'rating-high' : x[1] === 'm' ? 'rating-mid' : 'rating-low'; return { i: x[0], cls: cls }; }); }
+    function mv(title, picker, bg, sunColor, sunPos, bandColor, bandPos, ratings) {
+      var rs = r(ratings || '');
+      return { title: title, picker: picker, pickerClass: P[picker][0], pickerName: P[picker][1], bg: bg,
+        sun: 'background:' + sunColor + ';' + sunPos, band: 'background:' + bandColor + ';' + bandPos,
+        ratings: rs, hasRatings: rs.length > 0, artClass: rs.length ? '' : 'no-ratings' };
+    }
+    return {
+      wear: this.props.tapeWear ?? 'worn',
+      groups: [
+        { name: 'Group 12', tape: 'Tape 12', count: '4 movies', sectionClass: 'group-section is-current', movies: [
+          mv('The Goonies', 'D', '#1f4e5a', '#f2b544', 'width:120px;height:120px;right:-30px;top:40px;', '#12303a', 'height:90px;bottom:0;'),
+          mv('E.T.', 'J', '#1b1f4a', '#f4efe2', 'width:150px;height:150px;left:40px;top:50px;', '#0e1030', 'height:110px;bottom:0;'),
+          mv('Flight of the Navigator', 'C', '#3b3f47', '#c9d4dc', 'width:160px;height:40px;left:30px;top:90px;', '#2a2d33', 'height:60px;bottom:0;'),
+          mv('The NeverEnding Story', 'A', '#2f4a2a', '#e8d9a8', 'width:90px;height:90px;left:60px;top:40px;', '#1d3019', 'height:120px;bottom:0;')
+        ] },
+        { name: 'Group 11', tape: 'Tape 11', count: '5 movies', sectionClass: 'group-section', movies: [
+          mv('Back to the Future', 'J', '#6b1d1d', '#ffb13b', 'width:200px;height:200px;left:-40px;top:20px;', '#2a0d0d', 'height:70px;bottom:0;', 'Dh Jh Cm Ah'),
+          mv('Ghostbusters', 'C', '#161616', '#c8281e', 'width:110px;height:110px;left:60px;top:60px;', '#2a2a2a', 'height:80px;bottom:0;', 'Dh Jm Ch Ah'),
+          mv('The Princess Bride', 'A', '#3d2a52', '#e6c9a8', 'width:130px;height:130px;right:20px;top:30px;', '#231733', 'height:100px;bottom:0;', 'Dh Jh Ch Am'),
+          mv('Honey, I Shrunk the Kids', 'D', '#2d6b2a', '#f2e14a', 'width:70px;height:70px;left:30px;top:50px;', '#1c4219', 'height:130px;bottom:0;', 'Dm Jl Ch Am'),
+          mv('Labyrinth', 'J', '#20232e', '#9aa4c7', 'width:170px;height:170px;left:30px;top:30px;', '#12141c', 'height:90px;bottom:0;', 'Dm Jh Cl Am')
+        ] }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

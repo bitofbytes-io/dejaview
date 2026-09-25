@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DejaView trophy room, phone</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="late-show-tokens.css">
+<link rel="stylesheet" href="ds/dejaview/components/bundle.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wght@0,400..800;1,400&family=IBM+Plex+Mono:wght@400;500;600&family=Unbounded:wght@500..800&family=VT323&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0d0a12;font-family:"Archivo",system-ui,sans-serif;color:#f3eff7}
+a{color:#4de3f5}a:hover{color:#f3eff7}
+</style>
+</helmet>
+<div class="dv-page dv-grain dv-crt tape-{{wear}}" style="width: 390px; height: 1700px; overflow: hidden; background: var(--screen);">
+  <div class="marquee-container" aria-hidden="true">
+    <div class="marquee-track">
+      <span><b>▶</b> Play <b>★</b> SP 0:12:34 <b>★</b> Be kind, rewind <b>★</b> Family movie night <b>★</b> Now playing</span>
+    </div>
+  </div>
+  <header class="header-bar">
+    <div class="header-inner" style="padding: 8px 8px 8px 16px;">
+      <a class="wordmark" href="DashboardPhone.dc.html" style="font-size: 18px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width: 24px; height: 24px; color: var(--neon-rose);" aria-hidden="true"><rect x="2.5" y="9" width="19" height="11" rx="1"></rect><path d="M2.5 9 L21.5 4.5 L21.5 9 Z"></path><line x1="6" y1="5.5" x2="6" y2="9"></line><line x1="9" y1="6" x2="9" y2="9"></line><line x1="12" y1="6.5" x2="12" y2="9"></line><line x1="15" y1="7" x2="15" y2="9"></line><line x1="18" y1="7.5" x2="18" y2="9"></line></svg>
+        <span>Deja<em>View</em></span>
+      </a>
+      <nav class="nav" aria-label="Main">
+        <a class="nav-link" href="DashboardPhone.dc.html" style="padding: 0 10px;">Movies</a>
+        <button class="nav-link" type="button" style="padding: 0 10px;">Log out</button>
+      </nav>
+    </div>
+  </header>
+
+  <main style="padding: 0 16px 24px; display: flex; flex-direction: column; gap: 28px; box-sizing: border-box;">
+    <header class="trophy-room-hero" style="padding: 32px 0 0;">
+      <span class="tracking-band" style="top: 6px; animation: none;" aria-hidden="true"></span>
+      <p class="trophy-room-kicker"><span class="osd-blink">▶</span> Family movie night presents</p>
+      <h1>Trophy room</h1>
+      <p class="trophy-room-subtitle" style="font-size: 16px; line-height: 24px;">The movies we loved most, and who picked them.</p>
+    </header>
+
+    <section class="family-totals">
+      <div class="family-total"><strong>48</strong><span class="family-total-label">Watched</span></div>
+      <div class="family-total"><strong>94H</strong><span class="family-total-label">Together</span></div>
+      <div class="family-total"><strong>41</strong><span class="family-total-label">Rated</span></div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 12px;">
+      <h2 class="card-title" style="margin: 0;">Next movie night bonus</h2>
+      <div class="advantage-banner person-caleb">
+        <div class="advantage-badge">C</div>
+        <div>
+          <p class="advantage-title">Caleb has the 3-pick bonus</p>
+          <p class="advantage-sub">Group 11 unlocked 3 entries in the next draw.</p>
+        </div>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 12px;">
+      <h2 class="card-title" style="margin: 0;">Family high fives</h2>
+      <div class="trophy-grid">
+        <article class="trophy-card">
+          <div class="trophy-card-icon" style="color: var(--neon-amber);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" style="width: 24px; height: 24px;" aria-hidden="true"><path d="M5 9 L7 21 H17 L19 9 Z"></path><line x1="10" y1="9" x2="10.5" y2="21"></line><line x1="14" y1="9" x2="13.5" y2="21"></line><circle cx="8" cy="7" r="2"></circle><circle cx="12" cy="5.5" r="2.2"></circle><circle cx="16" cy="7" r="2"></circle></svg></div>
+          <h3>Crowd Pleaser</h3>
+          <p class="trophy-card-description">Whose picks earn the biggest family cheers</p>
+          <div class="trophy-winners"><span class="trophy-winner person-jennifer"><span class="trophy-winner-badge">J</span>Jennifer</span></div>
+          <div class="trophy-card-value"><b>8.7</b> family average</div>
+        </article>
+        <article class="trophy-card">
+          <div class="trophy-card-icon" style="color: var(--neon-amber);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" style="width: 24px; height: 24px;" aria-hidden="true"><path d="M12 2 L14.5 9 L22 9 L16 14 L18.5 21 L12 16 L5.5 21 L8 14 L2 9 L9.5 9 Z"></path></svg></div>
+          <h3>Biggest Fan</h3>
+          <p class="trophy-card-description">The one who always finds something to love</p>
+          <div class="trophy-winners"><span class="trophy-winner person-daniel"><span class="trophy-winner-badge">D</span>Daniel</span><span class="trophy-winner person-aiden"><span class="trophy-winner-badge">A</span>Aiden</span></div>
+          <div class="trophy-card-value">Tied at <b>8.1</b> average rating</div>
+        </article>
+        <article class="trophy-card">
+          <div class="trophy-card-icon" style="color: var(--neon-rose);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="width: 24px; height: 24px;" aria-hidden="true"><circle cx="12" cy="13" r="8"></circle><line x1="12" y1="13" x2="12" y2="9"></line><line x1="10" y1="2.5" x2="14" y2="2.5"></line><line x1="12" y1="2.5" x2="12" y2="5"></line></svg></div>
+          <h3>Movie Marathoner</h3>
+          <p class="trophy-card-description">For keeping family movie night rolling</p>
+          <div class="trophy-winners"><span class="trophy-winner person-caleb"><span class="trophy-winner-badge">C</span>Caleb</span></div>
+          <div class="trophy-card-value"><b>31h 40m</b> of movies picked</div>
+        </article>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 12px;">
+      <h2 class="card-title" style="margin: 0;">Family top five</h2>
+      <ol class="top-movies-list">
+        <li><a class="top-movie-row" href="MovieDetailPhone.dc.html"><span class="top-movie-rank top-movie-rank-1">1</span><span class="top-movie-poster" style="background: #6b1d1d;"></span><span class="top-movie-info"><h3>Back to the Future</h3><div class="top-movie-meta">1985 · Group 11</div></span><span class="top-movie-score"><strong>8.9</strong></span></a></li>
+        <li><a class="top-movie-row" href="MovieDetailPhone.dc.html"><span class="top-movie-rank top-movie-rank-2">2</span><span class="top-movie-poster" style="background: #3d2a52;"></span><span class="top-movie-info"><h3>The Princess Bride</h3><div class="top-movie-meta">1987 · Group 11</div></span><span class="top-movie-score"><strong>8.8</strong></span></a></li>
+        <li><a class="top-movie-row" href="MovieDetailPhone.dc.html"><span class="top-movie-rank top-movie-rank-3">3</span><span class="top-movie-poster" style="background: #161616;"></span><span class="top-movie-info"><h3>Ghostbusters</h3><div class="top-movie-meta">1984 · Group 11</div></span><span class="top-movie-score"><strong>8.5</strong></span></a></li>
+        <li><a class="top-movie-row" href="MovieDetailPhone.dc.html"><span class="top-movie-rank">4</span><span class="top-movie-poster" style="background: #1f4e5a;"></span><span class="top-movie-info"><h3>The Goonies</h3><div class="top-movie-meta">1985 · Group 9</div></span><span class="top-movie-score"><strong>8.2</strong></span></a></li>
+        <li><a class="top-movie-row" href="MovieDetailPhone.dc.html"><span class="top-movie-rank">5</span><span class="top-movie-poster" style="background: #20232e;"></span><span class="top-movie-info"><h3>Labyrinth</h3><div class="top-movie-meta">1986 · Group 11</div></span><span class="top-movie-score"><strong>7.9</strong></span></a></li>
+      </ol>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"tapeWear":{"editor":"enum","options":["clean","worn","rewound"],"default":"worn","section":"Tape"},"$preview":{"width":390,"height":1700}}'>
+class Component extends DCLogic {
+  renderVals() { return { wear: this.props.tapeWear ?? 'worn' }; }
+}
+</script>
+</body>
+</html>

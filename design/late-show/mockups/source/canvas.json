@@ -1,0 +1,100 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "DashboardPhone.dc.html": {
+      "h": 1720,
+      "title": "Dashboard · phone",
+      "w": 390,
+      "x": 0,
+      "y": 2000
+    },
+    "LoginPhone.dc.html": {
+      "h": 844,
+      "title": "Sign in · phone",
+      "w": 390,
+      "x": 1410,
+      "y": 2000
+    },
+    "Main.dc.html": {
+      "h": 1600,
+      "title": "Dashboard · desktop",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "MovieDetail.dc.html": {
+      "h": 1180,
+      "title": "Movie detail · desktop",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "MovieDetailPhone.dc.html": {
+      "h": 1400,
+      "title": "Movie detail · phone",
+      "w": 390,
+      "x": 470,
+      "y": 2000
+    },
+    "TrophyRoom.dc.html": {
+      "h": 1640,
+      "title": "Trophy room · desktop",
+      "w": 1440,
+      "x": 3040,
+      "y": 0
+    },
+    "TrophyRoomPhone.dc.html": {
+      "h": 1700,
+      "title": "Trophy room · phone",
+      "w": 390,
+      "x": 940,
+      "y": 2000
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-09-25T02:31:00Z",
+    "v": 1
+  },
+  "designSystems": [
+    {
+      "title": "DejaView",
+      "namespace": "dejaview",
+      "artifact": "https://claude.ai/artifact/2NkPNCGwrm1CuyzfU24hhU",
+      "version": "1790303568-3b0c",
+      "copiedAt": "2026-09-25T02:40:00Z"
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "desktop": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Late Show · desktop",
+      "w": 240,
+      "x": 0,
+      "y": -320
+    },
+    "phone": {
+      "kind": "title1",
+      "maxW": 1800,
+      "text": "Late Show · phone",
+      "w": 240,
+      "x": 0,
+      "y": 1720
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "MovieDetail.dc.html",
+    "TrophyRoom.dc.html",
+    "DashboardPhone.dc.html",
+    "MovieDetailPhone.dc.html",
+    "TrophyRoomPhone.dc.html",
+    "LoginPhone.dc.html"
+  ],
+  "pages": [],
+  "title": "DejaView Late Show Mockups"
+}
