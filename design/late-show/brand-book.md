@@ -25,7 +25,7 @@ The theme is `late-show`, dark only.
 - Hairlines are `line` (decorative). Anything you click or type into has a `line-control` border.
 - Text or icons on any neon fill are `on-neon`, never white. White on rose is 2.7:1; `on-neon` is 6.3:1.
 - People: `person-daniel` (cyan), `person-jennifer` (rose), `person-caleb` (amber), `person-aiden` (violet). Always as a solid disc with the initial in `on-neon`, so color is never the only cue.
-- Ratings: `rating-low` under 5, `rating-mid` 5 to under 7.5, `rating-high` 7.5 and up. The number is always printed.
+- Ratings: `rating-low` under 4, `rating-mid` 4 to under 7, `rating-high` 7 and up (the thresholds in `model.ScoreColorClass`). The number is always printed.
 - Errors and destructive actions use `signal-error` (orange) with a word or icon, so they never read as the rose brand color.
 - No gradients except the poster scrim and the scanline and vignette layers. No purple-to-pink fills.
 

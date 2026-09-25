@@ -104,7 +104,7 @@ The entry link, poster URL or title and year, picker initial and person class, r
 
 ## RatingBadge
 
-A score or a person's initial on a solid fill in the rating color: `rating-low` (under 5, `rating-low`), `rating-mid` (5 to under 7.5), `rating-high` (7.5 and up), `rating-empty` for no score.
+A score or a person's initial on a solid fill in the rating color: `rating-low` (under 4), `rating-mid` (4 to under 7), `rating-high` (7 and up), matching `model.ScoreColorClass`, `rating-empty` for no score.
 
 ### Use
 - Text is always `on-neon` in the mono `score` style, so the number or initial carries the meaning and color only reinforces it.
