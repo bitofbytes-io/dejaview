@@ -39,7 +39,7 @@ The old names were misleading (`gold` was cyan, `curtain-red` was pink), which m
 - Header: one row at all widths. Wrap "View" in `<em>`. Use `nav-link` instead of `btn-secondary` for nav, and set `aria-current="page"`.
 - Replace `text-marquee`, `text-gold`, `text-neon-glow` and `shadow-glow`. Neon glow text-shadows become `rgb-split`, on display type and `osd` text only.
 - Header: add the `header-osd` block (▶ PLAY and the tape counter) between the wordmark and the nav.
-- `group-section`: drop the cyan left border. Add the `group-head` row and a `tape-no` span reading TAPE 12.
+- `group-section`: drop the cyan left border. Add the `group-head` row. (An earlier draft also had a TAPE 12 label; it was dropped as redundant with the group name.)
 - Rating rows: add the person class and an `initial` disc. Make the clear control a `btn-icon` with a label.
 - Delete button: use `btn-danger` instead of the inline `text-red-400 border-red-400` utilities.
 - Toasts: the script builds `toast-icon` spans instead of solid green or red panels.

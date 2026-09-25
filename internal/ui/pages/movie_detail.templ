@@ -84,7 +84,7 @@ templ MovieDetailPage(entry *model.Entry, persons []*model.Person, isAuthenticat
 templ movieGroupCard(entry *model.Entry, persons []*model.Person, isAuthenticated bool) {
 	<div class="detail-row">
 		<span class="text-kicker">Group</span>
-		<span class="osd osd-rose">Tape { ui.IntToStr(entry.GroupNumber) }</span>
+		<span class="osd osd-rose">{ ui.IntToStr(entry.GroupNumber) }</span>
 	</div>
 
 	<div>

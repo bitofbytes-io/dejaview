@@ -89,7 +89,6 @@ templ GroupSection(groupNum int, entries []*model.Entry, persons []*model.Person
 	<section class={ "group-section", templ.KV("is-current", isCurrent) } id={ "group-" + ui.IntToStr(groupNum) }>
 		<div class="group-head">
 			<h2 class="group-title">
-				<span class="tape-no">Tape { ui.IntToStr(groupNum) }</span>
 				<span>Group { ui.IntToStr(groupNum) }</span>
 			</h2>
 			<span class="group-count">
