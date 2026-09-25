@@ -65,10 +65,10 @@ a{color:#4de3f5}a:hover{color:#f3eff7}
       </div>
       <p class="font-mono" style="margin: 4px 0 16px; font-size: 13px; color: var(--ink-muted);">Family average · 4 of 4 rated</p>
       <div style="display: flex; flex-direction: column; gap: 8px;">
-        <div class="rating-row person-daniel"><span class="rating-person"><span class="initial">D</span>Daniel</span><input class="rating-input" type="number" value="9" aria-label="Daniel's rating"></div>
-        <div class="rating-row person-jennifer"><span class="rating-person"><span class="initial">J</span>Jennifer</span><input class="rating-input" type="number" value="9.5" aria-label="Jennifer's rating"></div>
-        <div class="rating-row person-caleb"><span class="rating-person"><span class="initial">C</span>Caleb</span><input class="rating-input" type="number" value="7.5" aria-label="Caleb's rating"></div>
-        <div class="rating-row person-aiden"><span class="rating-person"><span class="initial">A</span>Aiden</span><input class="rating-input" type="number" value="9.5" aria-label="Aiden's rating"></div>
+        <div class="rating-row person-daniel"><span class="rating-person"><span class="initial">D</span>Daniel</span><input class="rating-input" type="number" min="0" max="10" step="0.5" value="9" aria-label="Daniel's rating"></div>
+        <div class="rating-row person-jennifer"><span class="rating-person"><span class="initial">J</span>Jennifer</span><input class="rating-input" type="number" min="0" max="10" step="0.5" value="9.5" aria-label="Jennifer's rating"></div>
+        <div class="rating-row person-caleb"><span class="rating-person"><span class="initial">C</span>Caleb</span><input class="rating-input" type="number" min="0" max="10" step="0.5" value="7.5" aria-label="Caleb's rating"></div>
+        <div class="rating-row person-aiden"><span class="rating-person"><span class="initial">A</span>Aiden</span><input class="rating-input" type="number" min="0" max="10" step="0.5" value="9.5" aria-label="Aiden's rating"></div>
       </div>
       <button class="btn-primary" type="submit" style="width: 100%; margin-top: 16px;">Save ratings</button>
     </form>

@@ -80,12 +80,6 @@
 		min-height: 100vh;
 	}
 
-	/* The tape layers cover the viewport, not the document. */
-	body.dv-grain::after,
-	body.dv-crt::before {
-		position: fixed;
-	}
-
 	::-webkit-scrollbar {
 		width: 8px;
 	}
@@ -201,7 +195,7 @@
   opacity: var(--scanline-opacity);
   background: repeating-linear-gradient(0deg, #ffffff 0 1px, rgba(255, 255, 255, 0) 1px 3px);
 }
-.marquee-track { display: flex; white-space: nowrap; animation: dv-marquee 60s linear infinite; }
+.marquee-track { display: flex; width: max-content; white-space: nowrap; animation: dv-marquee 60s linear infinite; }
 .marquee-track span {
   padding: 6px var(--space-6);
   font-size: 12px; line-height: 16px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
@@ -534,6 +528,12 @@
     repeating-linear-gradient(0deg, rgba(0, 0, 0, var(--scan)) 0 1px, rgba(0, 0, 0, 0) 1px 3px);
 }
 
+/* In the app the tape layers cover the viewport, not the document. This has to
+   live in the components layer, after the rules above, to beat their
+   position: absolute (cascade layers ignore selector specificity). */
+body.dv-grain::after,
+body.dv-crt::before { position: fixed; }
+
 /* VCR on-screen display type: VT323, uppercase, 20px minimum, with RGB split. */
 .osd {
   font-family: var(--font-osd);
@@ -658,9 +658,22 @@
 .top-movie-poster .poster-placeholder > * { display: none; }
 .top-movie-poster .poster-image, .top-movie-poster .poster-placeholder { height: 100%; }
 
+/* Movie detail: two columns from 1024px. Below that the column wrappers
+   dissolve so the cards can be reordered: poster, title, ratings,
+   synopsis, then the group card. */
+.detail-col { display: flex; flex-direction: column; gap: var(--space-6); min-width: 0; }
+@media (max-width: 1023px) {
+	.detail-col { display: contents; }
+	.detail-grid > .detail-col > .detail-poster { order: 1; }
+	.detail-grid > .detail-col > .detail-head { order: 2; }
+	.detail-grid > .detail-col > .detail-ratings { order: 3; }
+	.detail-grid > .detail-col > .detail-synopsis { order: 4; }
+	.detail-grid > .detail-col > .detail-group { order: 5; }
+}
+
 /* Movie detail */
-.detail-grid { display: grid; gap: var(--space-6); }
-@media (min-width: 1024px) { .detail-grid { grid-template-columns: 380px minmax(0, 1fr); gap: var(--space-8); align-items: start; } }
+.detail-grid { display: flex; flex-direction: column; gap: var(--space-6); }
+@media (min-width: 1024px) { .detail-grid { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: var(--space-8); align-items: start; } }
 .detail-poster { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); position: relative; }
 .detail-poster::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0, 0, 0, calc(var(--scan) * 1.4)) 0 1px, rgba(0, 0, 0, 0) 1px 3px); }
 @media (max-width: 1023px) { .detail-poster { max-width: 240px; } }
@@ -668,6 +681,7 @@
 @media (min-width: 640px) { .detail-title { font-size: 40px; line-height: 46px; } }
 .detail-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-top: var(--space-2); font-family: var(--font-mono); font-size: 14px; line-height: 20px; color: var(--ink-muted); }
 .detail-picker { display: inline-flex; align-items: center; gap: var(--space-2); font-family: var(--font-sans); font-weight: 600; color: var(--ink); }
+.detail-meta > .detail-picker::before { content: ""; display: inline-block; width: 3px; height: 3px; margin-right: var(--space-1); border-radius: 50%; background: var(--ink-muted); }
 .detail-picker .picker-badge { position: static; width: 24px; height: 24px; font-size: 12px; box-shadow: none; }
 .synopsis-text { margin: 0; font-size: 18px; line-height: 28px; color: var(--ink-muted); max-width: 64ch; }
 .detail-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
@@ -722,6 +736,13 @@
 /* A lighter split at wordmark size keeps the letters crisp. */
 .tape-worn .wordmark { text-shadow: -1px 0 0 rgba(255, 45, 120, 0.55), 1px 0 0 rgba(60, 220, 255, 0.55), 0 0 14px rgba(255, 79, 147, 0.35); }
 @media (min-width: 1024px) { .header-inner { padding: var(--space-3) var(--space-8); } }
+
+/* Very narrow phones: keep the nav reachable by showing only the mark. */
+.wordmark { flex-shrink: 0; }
+@media (max-width: 359px) {
+	.wordmark-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+	.nav-link { padding: 0 var(--space-2); letter-spacing: 0.08em; }
+}
 
 /* Toasts sit above the tape layers. */
 #toast-container { z-index: 60; }

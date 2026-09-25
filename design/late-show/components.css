@@ -94,7 +94,7 @@
   opacity: var(--scanline-opacity);
   background: repeating-linear-gradient(0deg, #ffffff 0 1px, rgba(255, 255, 255, 0) 1px 3px);
 }
-.marquee-track { display: flex; white-space: nowrap; animation: dv-marquee 60s linear infinite; }
+.marquee-track { display: flex; width: max-content; white-space: nowrap; animation: dv-marquee 60s linear infinite; }
 .marquee-track span {
   padding: 6px var(--space-6);
   font-size: 12px; line-height: 16px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;

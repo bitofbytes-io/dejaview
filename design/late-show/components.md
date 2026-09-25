@@ -132,7 +132,7 @@ Person name, initial and class, the current score, the input name.
 A TMDB match in the Add Movie card: thumbnail, title, year, and an Add button on the same row.
 
 ### Use
-- Phones: 56px thumbnail, title (2 lines max) and year, `btn-primary btn-sm` Add on the right. The overview is hidden to keep results scannable.
+- Phones: 56px thumbnail, title (2 lines max) and year, a full-size `btn-primary` Add on the right (44px tall; never `btn-sm` on phones). The overview is hidden to keep results scannable.
 - From 640px: 72px thumbnail and a 2-line overview in `ink-muted`.
 - Rows are `surface-sunken` wells inside the card; hover shows a `line-control` border.
 - Title in `body-strong` `ink`, never the neon cyan titles of the old theme.

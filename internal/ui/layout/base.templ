@@ -146,9 +146,9 @@ templ toastScript() {
 templ Header(isAuthenticated bool, current string) {
 	<header class="header-bar">
 		<div class="header-inner">
-			<a href="/" class="wordmark">
+			<a href="/" class="wordmark" aria-label="DejaView home">
 				@components.Icon("clapperboard-logo", "dv-mark")
-				<span>Deja<em>View</em></span>
+				<span class="wordmark-text">Deja<em>View</em></span>
 			</a>
 			<div class="header-osd" aria-hidden="true">
 				<span class="osd"><span class="osd-blink">&#9654;</span> Play</span>

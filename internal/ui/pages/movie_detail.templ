@@ -20,21 +20,21 @@ templ MovieDetailPage(entry *model.Entry, persons []*model.Person, isAuthenticat
 			</a>
 
 			<div class="detail-grid">
-				<!-- Poster Column -->
-				<div class="flex flex-col gap-4 min-w-0">
+				<!-- Poster column: poster and group card -->
+				<div class="detail-col">
 					<div class="detail-poster">
 						@components.Poster(entry.Movie, "")
 					</div>
 
-					<!-- Group & Actions (after the ratings on phones) -->
-					<div class="card hidden lg:flex flex-col gap-4">
-						@movieGroupCard(entry, persons, isAuthenticated, "picked-by-desktop")
+					<!-- Group & Actions (last on phones) -->
+					<div class="detail-group card flex flex-col gap-4">
+						@movieGroupCard(entry, persons, isAuthenticated)
 					</div>
 				</div>
 
-				<!-- Details Column -->
-				<div class="flex flex-col gap-6 min-w-0">
-					<div>
+				<!-- Details column: title, ratings, synopsis -->
+				<div class="detail-col">
+					<div class="detail-head">
 						<h1 class="detail-title">{ entry.Movie.Title }</h1>
 						<div class="detail-meta">
 							if entry.Movie.ReleaseYear != nil {
@@ -44,18 +44,21 @@ templ MovieDetailPage(entry *model.Entry, persons []*model.Person, isAuthenticat
 								<span aria-hidden="true">·</span>
 								<span>{ entry.Movie.FormattedRuntime() }</span>
 							}
-							if entry.PickedByPerson != nil {
-								<span aria-hidden="true">·</span>
-								<span class="detail-picker">
+							<span id="detail-picker" class="detail-picker" hidden?={ entry.PickedByPerson == nil }>
+								if entry.PickedByPerson != nil {
 									<span class={ "picker-badge", entry.PickedByPerson.ColorClass() } aria-hidden="true">{ entry.PickedByPerson.Initial }</span>
-									Picked by { entry.PickedByPerson.Name }
-								</span>
-							}
+									<span class="detail-picker-name">Picked by { entry.PickedByPerson.Name }</span>
+								} else {
+									<span class="picker-badge" aria-hidden="true"></span>
+									<span class="detail-picker-name"></span>
+								}
+							</span>
 						</div>
 					</div>
 
 					<!-- Ratings Form -->
 					<form
+						class="detail-ratings"
 						hx-put={ "/api/entries/" + entry.ID.String() + "/ratings" }
 						hx-trigger="submit"
 						hx-target="#ratings-section"
@@ -66,31 +69,28 @@ templ MovieDetailPage(entry *model.Entry, persons []*model.Person, isAuthenticat
 
 					<!-- Synopsis -->
 					if entry.Movie.Synopsis != nil && *entry.Movie.Synopsis != "" {
-						<section class="card">
+						<section class="detail-synopsis card">
 							<h2 class="card-title">Synopsis</h2>
 							<p class="synopsis-text">{ *entry.Movie.Synopsis }</p>
 						</section>
 					}
-
-					<div class="card flex flex-col gap-4 lg:hidden">
-						@movieGroupCard(entry, persons, isAuthenticated, "picked-by-mobile")
-					</div>
 				</div>
 			</div>
+			@pickerSync()
 		</main>
 	}
 }
 
-templ movieGroupCard(entry *model.Entry, persons []*model.Person, isAuthenticated bool, selectID string) {
+templ movieGroupCard(entry *model.Entry, persons []*model.Person, isAuthenticated bool) {
 	<div class="detail-row">
 		<span class="text-kicker">Group</span>
 		<span class="osd osd-rose">Tape { ui.IntToStr(entry.GroupNumber) }</span>
 	</div>
 
 	<div>
-		<label for={ selectID } class="field-label">Picked by</label>
+		<label for="picked-by" class="field-label">Picked by</label>
 		<select
-			id={ selectID }
+			id="picked-by"
 			name="picked_by_person_id"
 			hx-put={ "/api/entries/" + entry.ID.String() }
 			hx-trigger="change"
@@ -101,9 +101,9 @@ templ movieGroupCard(entry *model.Entry, persons []*model.Person, isAuthenticate
 			<option value="">No one</option>
 			for _, person := range persons {
 				if entry.PickedByPersonID != nil && *entry.PickedByPersonID == person.ID {
-					<option value={ person.ID.String() } selected>{ person.Name }</option>
+					<option value={ person.ID.String() } data-initial={ person.Initial } data-color={ person.ColorClass() } selected>{ person.Name }</option>
 				} else {
-					<option value={ person.ID.String() }>{ person.Name }</option>
+					<option value={ person.ID.String() } data-initial={ person.Initial } data-color={ person.ColorClass() }>{ person.Name }</option>
 				}
 			}
 		</select>
@@ -144,4 +144,34 @@ templ ratingsCard(entry *model.Entry, persons []*model.Person, isAuthenticated b
 			</div>
 		</fieldset>
 	</div>
+}
+
+// pickerSync keeps the "Picked by" line under the title in step with the
+// picker select once a change has saved (the request swaps nothing).
+templ pickerSync() {
+	<script>
+		(function () {
+			var select = document.getElementById('picked-by');
+			var line = document.getElementById('detail-picker');
+			if (!select || !line) {
+				return;
+			}
+			select.addEventListener('htmx:afterRequest', function (evt) {
+				if (!evt.detail || !evt.detail.successful) {
+					return;
+				}
+				var option = select.options[select.selectedIndex];
+				var badge = line.querySelector('.picker-badge');
+				var name = line.querySelector('.detail-picker-name');
+				if (!option || !option.value) {
+					line.hidden = true;
+					return;
+				}
+				badge.className = 'picker-badge ' + (option.dataset.color || '');
+				badge.textContent = option.dataset.initial || '';
+				name.textContent = 'Picked by ' + option.textContent.trim();
+				line.hidden = false;
+			});
+		})();
+	</script>
 }
