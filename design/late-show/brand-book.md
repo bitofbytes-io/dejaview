@@ -54,7 +54,7 @@ Press Start 2P is gone and VT323 no longer sets body text. Those two were the ma
 | CRT vignette | `dv-crt` | off | `vignette-opacity` 0.28 | 0.40 |
 | Film grain | `dv-grain` | 0.05 | `grain-opacity` 0.08 | 0.11 |
 | RGB split on display and OSD type | `rgb-split`, `osd` | off | `rgb-split` | `rgb-split-strong` |
-| Tracking error band | `tracking-band` | off | on | on |
+| Tracking error band | `tracking-roll` + `tracking-band` | off | on | on |
 
 - Put `dv-page dv-grain dv-crt` on `<body>` and the layers on fixed pseudo-elements, so they cover the viewport, not the document.
 - Posters get their own scanlines (1.4 × the page's) and, on hover, the `chroma-edge`: a red and cyan ghost either side, like a tape slipping.
