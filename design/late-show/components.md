@@ -75,7 +75,7 @@ Content and an optional title.
 
 ## GroupSection
 
-The heading row for one group of movies, like a tape label: TAPE 12 in `osd` `neon-rose`, the group name in the display face, and the count on the right.
+The heading row for one group of movies: the group name in the display face and the count on the right.
 
 ### Use
 - Groups are separated by a `line` rule and `space-12`, not by a neon left border.
