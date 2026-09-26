@@ -8,4 +8,4 @@
 - `make build` creates `bin/` and regenerates Templ and minified CSS before writing `bin/dejaview`.
 - Database helpers are `make migrate`, `make migrate-status`, and `make migrate-down`; they require `DATABASE_URL` to be configured locally.
 - Run `make test` and verify affected rendered routes for handler or template changes.
-- To match CI validation, run `make test build`, `go vet ./...`, and `go test -race ./internal/handler ./internal/repository` with the local test database configured.
+- To match CI validation, configure `DEJAVIEW_TEST_DATABASE_URL` locally for repository tests, then run `make test build`, `go vet ./...`, and `go test -race ./internal/handler ./internal/repository`.
