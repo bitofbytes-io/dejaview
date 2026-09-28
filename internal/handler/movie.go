@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -21,11 +22,28 @@ import (
 
 // MovieHandler handles movie-related requests
 type MovieHandler struct {
-	movieRepo      *repository.MovieRepository
-	entryRepo      *repository.EntryRepository
-	personRepo     *repository.PersonRepository
-	tmdbClient     *tmdb.Client
+	movieRepo      movieRepository
+	entryRepo      movieEntryRepository
+	personRepo     personRepository
+	tmdbClient     tmdbClient
 	sessionManager *session.Manager
+}
+
+type movieRepository interface {
+	GetByTMDBId(ctx context.Context, tmdbID int) (*model.Movie, error)
+	Create(ctx context.Context, input model.CreateMovieInput) (*model.Movie, error)
+}
+
+type movieEntryRepository interface {
+	GetByID(ctx context.Context, id uuid.UUID) (*model.Entry, error)
+	GetByMovieAndGroup(ctx context.Context, movieID uuid.UUID, groupNumber int) (*model.Entry, error)
+	Create(ctx context.Context, input model.CreateEntryInput) (*model.Entry, error)
+}
+
+type tmdbClient interface {
+	Search(ctx context.Context, query string) (*tmdb.SearchResponse, error)
+	GetMovie(ctx context.Context, tmdbID int) (*tmdb.MovieDetails, error)
+	PosterURL(path string, size string) string
 }
 
 // NewMovieHandler creates a new MovieHandler
