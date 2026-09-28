@@ -3,6 +3,7 @@ package tmdb
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -100,12 +101,12 @@ func (c *Client) Search(ctx context.Context, query string) (*SearchResponse, err
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return nil, fmt.Errorf("create request: %w", redactURLError(err))
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("execute request: %w", err)
+		return nil, fmt.Errorf("execute request: %w", redactURLError(err))
 	}
 	defer resp.Body.Close()
 
@@ -132,12 +133,12 @@ func (c *Client) GetMovie(ctx context.Context, tmdbID int) (*MovieDetails, error
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return nil, fmt.Errorf("create request: %w", redactURLError(err))
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("execute request: %w", err)
+		return nil, fmt.Errorf("execute request: %w", redactURLError(err))
 	}
 	defer resp.Body.Close()
 
@@ -156,6 +157,32 @@ func (c *Client) GetMovie(ctx context.Context, tmdbID int) (*MovieDetails, error
 	}
 
 	return &result, nil
+}
+
+// redactURLError removes the api_key query parameter from the URL that
+// *url.Error embeds in its message, so transport failures never leak the key
+// into logs. Other errors are returned unchanged.
+func redactURLError(err error) error {
+	var urlErr *url.Error
+	if !errors.As(err, &urlErr) {
+		return err
+	}
+	redacted := *urlErr
+	redacted.URL = redactAPIKey(urlErr.URL)
+	return &redacted
+}
+
+func redactAPIKey(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "[unparseable TMDB URL]"
+	}
+	query := u.Query()
+	if query.Has("api_key") {
+		query.Set("api_key", "REDACTED")
+		u.RawQuery = query.Encode()
+	}
+	return u.String()
 }
 
 // PosterURL constructs the full URL for a poster image
