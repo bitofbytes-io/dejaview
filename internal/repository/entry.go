@@ -427,7 +427,9 @@ func (r *EntryRepository) update(ctx context.Context, id uuid.UUID, input model.
 	return nil
 }
 
-// moveEntryToGroup moves an entry to the end of targetGroup within tx.
+// moveEntryToGroup moves an entry to the end of targetGroup within tx. It
+// returns with the entry row locked, so the entry stays in targetGroup until
+// tx ends.
 func moveEntryToGroup(ctx context.Context, tx pgx.Tx, id uuid.UUID, targetGroup int) error {
 	var sourceGroup int
 	var movieID uuid.UUID
@@ -438,12 +440,15 @@ func moveEntryToGroup(ctx context.Context, tx pgx.Tx, id uuid.UUID, targetGroup 
 	if err != nil {
 		return fmt.Errorf("move entry read group: %w", err)
 	}
-	if sourceGroup == targetGroup {
-		return nil
-	}
 
 	// Lock both groups in ascending order so concurrent moves cannot deadlock.
-	for _, group := range []int{min(sourceGroup, targetGroup), max(sourceGroup, targetGroup)} {
+	// A same-group request still takes the lock so the recheck below cannot
+	// miss a concurrent move that has not committed yet.
+	groups := []int{min(sourceGroup, targetGroup)}
+	if sourceGroup != targetGroup {
+		groups = append(groups, max(sourceGroup, targetGroup))
+	}
+	for _, group := range groups {
 		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(1, $1)", group); err != nil {
 			return fmt.Errorf("move entry lock group: %w", err)
 		}
@@ -461,6 +466,9 @@ func moveEntryToGroup(ctx context.Context, tx pgx.Tx, id uuid.UUID, targetGroup 
 	}
 	if lockedGroup != sourceGroup {
 		return ErrEntryGroupChanged
+	}
+	if sourceGroup == targetGroup {
+		return nil
 	}
 
 	var exists bool

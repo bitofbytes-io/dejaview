@@ -9,6 +9,7 @@ import (
 
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -144,6 +145,68 @@ func TestEntryUpdateConcurrentMovesPostgres(t *testing.T) {
 	}
 }
 
+// waitForBlockedMove waits until some session is waiting on a lock in this
+// database, which in these tests can only be the pending move. It fails if the
+// move finishes first.
+func waitForBlockedMove(t *testing.T, ctx context.Context, pool *pgxpool.Pool, moved <-chan error) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		var waiting bool
+		if err := pool.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM pg_locks l
+				JOIN pg_stat_activity a ON a.pid = l.pid
+				WHERE NOT l.granted AND a.datname = current_database()
+			)`).Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+		if waiting {
+			return
+		}
+		select {
+		case err := <-moved:
+			t.Fatalf("move finished before the competing move committed: %v", err)
+		default:
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("move never blocked behind the competing move")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// competingMove moves id to group in an open transaction that holds the group
+// locks and the row lock until the caller commits it.
+func competingMove(t *testing.T, ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, group int) pgx.Tx {
+	t.Helper()
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+	if err := moveEntryToGroup(ctx, tx, id, group); err != nil {
+		t.Fatalf("competing move: %v", err)
+	}
+	return tx
+}
+
+func assertContiguousGroups(t *testing.T, ctx context.Context, pool *pgxpool.Pool, want map[int]int) {
+	t.Helper()
+	for group, wantCount := range want {
+		var count, distinct, minPosition, maxPosition int
+		if err := pool.QueryRow(ctx, `
+			SELECT COUNT(*), COUNT(DISTINCT position), MIN(position), MAX(position)
+			FROM entries WHERE group_number = $1`, group).Scan(&count, &distinct, &minPosition, &maxPosition); err != nil {
+			t.Fatal(err)
+		}
+		if count != wantCount || distinct != count || minPosition != 1 || maxPosition != count {
+			t.Fatalf("group %d has count=%d distinct=%d positions %d..%d, want %d contiguous from 1",
+				group, count, distinct, minPosition, maxPosition, wantCount)
+		}
+	}
+}
+
 // TestEntryUpdateRetriesAfterCompetingMovePostgres deterministically exercises
 // the retry path: a competing transaction moves the same entry while a second
 // move is blocked on the source group's advisory lock, so the blocked move sees
@@ -164,14 +227,7 @@ func TestEntryUpdateRetriesAfterCompetingMovePostgres(t *testing.T) {
 	contested := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Contested"), source)
 
 	// The competing move holds the source and competing group locks, uncommitted.
-	competingTx, err := pool.Begin(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = competingTx.Rollback(ctx) }()
-	if err := moveEntryToGroup(ctx, competingTx, contested.ID, competing); err != nil {
-		t.Fatalf("competing move: %v", err)
-	}
+	competingTx := competingMove(t, ctx, pool, contested.ID, competing)
 
 	targetGroup := target
 	moved := make(chan error, 1)
@@ -181,31 +237,7 @@ func TestEntryUpdateRetriesAfterCompetingMovePostgres(t *testing.T) {
 
 	// Wait until the second move has read the (still committed) source group and
 	// is blocked on the source group's advisory lock.
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		var waiting bool
-		if err := pool.QueryRow(ctx, `
-			SELECT EXISTS (
-				SELECT 1 FROM pg_locks
-				WHERE locktype = 'advisory' AND NOT granted
-				  AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
-				  AND classid = 1 AND objid = $1 AND objsubid = 2
-			)`, source).Scan(&waiting); err != nil {
-			t.Fatal(err)
-		}
-		if waiting {
-			break
-		}
-		select {
-		case err := <-moved:
-			t.Fatalf("move finished before the competing move committed: %v", err)
-		default:
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("second move never blocked on the source group lock")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitForBlockedMove(t, ctx, pool, moved)
 
 	if err := competingTx.Commit(ctx); err != nil {
 		t.Fatal(err)
@@ -221,18 +253,58 @@ func TestEntryUpdateRetriesAfterCompetingMovePostgres(t *testing.T) {
 	if group, position := entryGroupAndPosition(t, ctx, pool, contested.ID); group != target || position != 3 {
 		t.Fatalf("contested entry at group=%d position=%d, want group=%d position=3", group, position, target)
 	}
-	for group, want := range map[int]int{source: 2, competing: 2, target: 3} {
-		var count, distinct, minPosition, maxPosition int
-		if err := pool.QueryRow(ctx, `
-			SELECT COUNT(*), COUNT(DISTINCT position), MIN(position), MAX(position)
-			FROM entries WHERE group_number = $1`, group).Scan(&count, &distinct, &minPosition, &maxPosition); err != nil {
-			t.Fatal(err)
-		}
-		if count != want || distinct != count || minPosition != 1 || maxPosition != count {
-			t.Fatalf("group %d has count=%d distinct=%d positions %d..%d, want %d contiguous from 1",
-				group, count, distinct, minPosition, maxPosition, want)
-		}
+	assertContiguousGroups(t, ctx, pool, map[int]int{source: 2, competing: 2, target: 3})
+}
+
+// TestEntryUpdateSameGroupRechecksUnderLockPostgres covers a request that names
+// the entry's current group while a competing move to another group is still
+// uncommitted: the request must not report success with the entry left in the
+// other group, so it rechecks under the lock and moves the entry back.
+func TestEntryUpdateSameGroupRechecksUnderLockPostgres(t *testing.T) {
+	pool := ratingTestPool(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	repo := NewEntryRepository(pool)
+
+	// Advisory locks are database-wide, so use groups no other test touches.
+	const home, competing = 111, 112
+	for _, group := range []int{home, competing} {
+		createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Resident"), group)
+		createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Resident"), group)
 	}
+	contested := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Contested"), home)
+	var picker uuid.UUID
+	if err := pool.QueryRow(ctx, `SELECT id FROM persons ORDER BY initial LIMIT 1`).Scan(&picker); err != nil {
+		t.Fatal(err)
+	}
+
+	competingTx := competingMove(t, ctx, pool, contested.ID, competing)
+
+	homeGroup := home
+	moved := make(chan error, 1)
+	go func() {
+		moved <- repo.Update(ctx, contested.ID, model.UpdateEntryInput{GroupNumber: &homeGroup, PickedByPersonID: &picker})
+	}()
+
+	// The request reads the committed home group, then blocks behind the competing move.
+	waitForBlockedMove(t, ctx, pool, moved)
+
+	if err := competingTx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-moved; err != nil {
+		t.Fatalf("same-group update after competing move: %v", err)
+	}
+
+	entry, err := repo.GetByID(ctx, contested.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entry.GroupNumber != home || entry.Position != 3 || entry.PickedByPersonID == nil || *entry.PickedByPersonID != picker {
+		t.Fatalf("contested entry at group=%d position=%d picked_by=%v, want group=%d position=3 picked_by=%v",
+			entry.GroupNumber, entry.Position, entry.PickedByPersonID, home, picker)
+	}
+	assertContiguousGroups(t, ctx, pool, map[int]int{home: 3, competing: 2})
 }
 
 func TestEntryCreateAssignsPositionsPostgres(t *testing.T) {
