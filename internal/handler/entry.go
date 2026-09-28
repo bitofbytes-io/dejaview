@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -16,9 +18,16 @@ import (
 
 // EntryHandler handles entry-related requests
 type EntryHandler struct {
-	entryRepo      *repository.EntryRepository
+	entryRepo      entryStore
 	personRepo     *repository.PersonRepository
 	sessionManager *session.Manager
+}
+
+type entryStore interface {
+	Update(ctx context.Context, id uuid.UUID, input model.UpdateEntryInput) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	ListByGroup(ctx context.Context, groupNumber int) ([]*model.Entry, error)
+	ReorderEntries(ctx context.Context, groupNumber int, entryIDs []uuid.UUID) error
 }
 
 // NewEntryHandler creates a new EntryHandler
@@ -50,9 +59,11 @@ func (h *EntryHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	if groupStr := r.FormValue("group_number"); groupStr != "" {
 		groupNumber, err := strconv.Atoi(groupStr)
-		if err == nil {
-			input.GroupNumber = &groupNumber
+		if err != nil || groupNumber < 1 {
+			http.Error(w, "Invalid group_number", http.StatusBadRequest)
+			return
 		}
+		input.GroupNumber = &groupNumber
 	}
 
 	if _, ok := r.Form["picked_by_person_id"]; ok {
@@ -72,6 +83,18 @@ func (h *EntryHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = h.entryRepo.Update(ctx, entryID, input)
+	if errors.Is(err, repository.ErrEntryNotFound) {
+		http.Error(w, "Entry not found", http.StatusNotFound)
+		return
+	}
+	if errors.Is(err, repository.ErrEntryExistsInGroup) {
+		http.Error(w, "Movie already exists in that group", http.StatusConflict)
+		return
+	}
+	if errors.Is(err, repository.ErrEntryGroupChanged) {
+		http.Error(w, "Entry was moved by another request; refresh and try again", http.StatusConflict)
+		return
+	}
 	if err != nil {
 		slog.Error("failed to update entry", "error", err)
 		http.Error(w, "Failed to update entry", http.StatusInternalServerError)

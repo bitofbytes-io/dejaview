@@ -364,21 +364,132 @@ func (r *EntryRepository) GetCurrentGroup(ctx context.Context) (int, error) {
 	return group, nil
 }
 
-// Update updates an existing entry
+var (
+	// ErrEntryNotFound is returned when the entry to update does not exist.
+	ErrEntryNotFound = errors.New("entry not found")
+	// ErrEntryExistsInGroup is returned when moving an entry into a group
+	// that already contains the same movie.
+	ErrEntryExistsInGroup = errors.New("movie already exists in target group")
+	// ErrEntryGroupChanged is returned when concurrent moves kept changing the
+	// entry's group and the move gave up after maxMoveAttempts.
+	ErrEntryGroupChanged = errors.New("entry group changed concurrently")
+)
+
+// maxMoveAttempts bounds retries when a concurrent move changes the entry's
+// group between reading it and acquiring the group locks.
+const maxMoveAttempts = 3
+
+// Update updates an existing entry. Changing the group moves the entry to the
+// end of the target group under the same per-group advisory locks used by
+// Create and ReorderEntries.
 func (r *EntryRepository) Update(ctx context.Context, id uuid.UUID, input model.UpdateEntryInput) error {
+	var err error
+	for attempt := 0; attempt < maxMoveAttempts; attempt++ {
+		err = r.update(ctx, id, input)
+		if !errors.Is(err, ErrEntryGroupChanged) {
+			return err
+		}
+	}
+	return err
+}
+
+func (r *EntryRepository) update(ctx context.Context, id uuid.UUID, input model.UpdateEntryInput) error {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("update entry begin tx: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	if input.GroupNumber != nil {
+		if err := moveEntryToGroup(ctx, tx, id, *input.GroupNumber); err != nil {
+			return err
+		}
+	}
+
 	query := `
 		UPDATE entries
-		SET group_number = COALESCE($2, group_number),
-		    picked_by_person_id = CASE
-		    	WHEN $3::uuid IS NULL THEN picked_by_person_id
-		    	WHEN $3::uuid = '00000000-0000-0000-0000-000000000000'::uuid THEN NULL
-		    	ELSE $3::uuid
+		SET picked_by_person_id = CASE
+		    	WHEN $2::uuid IS NULL THEN picked_by_person_id
+		    	WHEN $2::uuid = '00000000-0000-0000-0000-000000000000'::uuid THEN NULL
+		    	ELSE $2::uuid
 		    END
 		WHERE id = $1`
 
-	_, err := r.pool.Exec(ctx, query, id, input.GroupNumber, input.PickedByPersonID)
-	if err != nil {
+	if _, err := tx.Exec(ctx, query, id, input.PickedByPersonID); err != nil {
 		return fmt.Errorf("update entry: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("update entry commit: %w", err)
+	}
+	return nil
+}
+
+// moveEntryToGroup moves an entry to the end of targetGroup within tx. It
+// returns with the entry row locked, so the entry stays in targetGroup until
+// tx ends.
+func moveEntryToGroup(ctx context.Context, tx pgx.Tx, id uuid.UUID, targetGroup int) error {
+	var sourceGroup int
+	var movieID uuid.UUID
+	err := tx.QueryRow(ctx, "SELECT group_number, movie_id FROM entries WHERE id = $1", id).Scan(&sourceGroup, &movieID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrEntryNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("move entry read group: %w", err)
+	}
+
+	// Lock both groups in ascending order so concurrent moves cannot deadlock.
+	// A same-group request still takes the lock so the recheck below cannot
+	// miss a concurrent move that has not committed yet.
+	groups := []int{min(sourceGroup, targetGroup)}
+	if sourceGroup != targetGroup {
+		groups = append(groups, max(sourceGroup, targetGroup))
+	}
+	for _, group := range groups {
+		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(1, $1)", group); err != nil {
+			return fmt.Errorf("move entry lock group: %w", err)
+		}
+	}
+
+	// Group changes only happen while holding the source group's lock, so a
+	// mismatch here means another move won the race; retry with fresh locks.
+	var lockedGroup int
+	err = tx.QueryRow(ctx, "SELECT group_number FROM entries WHERE id = $1 FOR UPDATE", id).Scan(&lockedGroup)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrEntryNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("move entry recheck group: %w", err)
+	}
+	if lockedGroup != sourceGroup {
+		return ErrEntryGroupChanged
+	}
+	if sourceGroup == targetGroup {
+		return nil
+	}
+
+	var exists bool
+	if err := tx.QueryRow(ctx,
+		"SELECT EXISTS (SELECT 1 FROM entries WHERE movie_id = $1 AND group_number = $2)",
+		movieID, targetGroup,
+	).Scan(&exists); err != nil {
+		return fmt.Errorf("move entry check duplicate: %w", err)
+	}
+	if exists {
+		return ErrEntryExistsInGroup
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE entries
+		SET group_number = $2,
+		    position = COALESCE((SELECT MAX(position) FROM entries WHERE group_number = $2), 0) + 1
+		WHERE id = $1`,
+		id, targetGroup,
+	); err != nil {
+		return fmt.Errorf("move entry: %w", err)
 	}
 	return nil
 }
