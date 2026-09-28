@@ -144,6 +144,97 @@ func TestEntryUpdateConcurrentMovesPostgres(t *testing.T) {
 	}
 }
 
+// TestEntryUpdateRetriesAfterCompetingMovePostgres deterministically exercises
+// the retry path: a competing transaction moves the same entry while a second
+// move is blocked on the source group's advisory lock, so the blocked move sees
+// a stale group on its locked recheck and must retry from the new group.
+func TestEntryUpdateRetriesAfterCompetingMovePostgres(t *testing.T) {
+	pool := ratingTestPool(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	repo := NewEntryRepository(pool)
+
+	// Advisory locks are database-wide, so use groups no other test touches.
+	const source, competing, target = 101, 102, 103
+	for _, group := range []int{source, competing, target} {
+		createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Resident"), group)
+		createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Resident"), group)
+	}
+	// The contested entry is last in its group, so moving it out leaves no gap.
+	contested := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Contested"), source)
+
+	// The competing move holds the source and competing group locks, uncommitted.
+	competingTx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = competingTx.Rollback(ctx) }()
+	if err := moveEntryToGroup(ctx, competingTx, contested.ID, competing); err != nil {
+		t.Fatalf("competing move: %v", err)
+	}
+
+	targetGroup := target
+	moved := make(chan error, 1)
+	go func() {
+		moved <- repo.Update(ctx, contested.ID, model.UpdateEntryInput{GroupNumber: &targetGroup})
+	}()
+
+	// Wait until the second move has read the (still committed) source group and
+	// is blocked on the source group's advisory lock.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		var waiting bool
+		if err := pool.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM pg_locks
+				WHERE locktype = 'advisory' AND NOT granted
+				  AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+				  AND classid = 1 AND objid = $1 AND objsubid = 2
+			)`, source).Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+		if waiting {
+			break
+		}
+		select {
+		case err := <-moved:
+			t.Fatalf("move finished before the competing move committed: %v", err)
+		default:
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("second move never blocked on the source group lock")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if err := competingTx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-moved; err != nil {
+		t.Fatalf("move after competing move: %v", err)
+	}
+
+	var groups int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM entries WHERE id = $1`, contested.ID).Scan(&groups); err != nil || groups != 1 {
+		t.Fatalf("contested entry appears %d times, err=%v", groups, err)
+	}
+	if group, position := entryGroupAndPosition(t, ctx, pool, contested.ID); group != target || position != 3 {
+		t.Fatalf("contested entry at group=%d position=%d, want group=%d position=3", group, position, target)
+	}
+	for group, want := range map[int]int{source: 2, competing: 2, target: 3} {
+		var count, distinct, minPosition, maxPosition int
+		if err := pool.QueryRow(ctx, `
+			SELECT COUNT(*), COUNT(DISTINCT position), MIN(position), MAX(position)
+			FROM entries WHERE group_number = $1`, group).Scan(&count, &distinct, &minPosition, &maxPosition); err != nil {
+			t.Fatal(err)
+		}
+		if count != want || distinct != count || minPosition != 1 || maxPosition != count {
+			t.Fatalf("group %d has count=%d distinct=%d positions %d..%d, want %d contiguous from 1",
+				group, count, distinct, minPosition, maxPosition, want)
+		}
+	}
+}
+
 func TestEntryCreateAssignsPositionsPostgres(t *testing.T) {
 	pool := ratingTestPool(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)

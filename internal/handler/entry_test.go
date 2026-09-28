@@ -75,6 +75,7 @@ func TestUpdateEntryMapsRepositoryErrors(t *testing.T) {
 	}{
 		{"moved", nil, http.StatusOK},
 		{"duplicate in target group", repository.ErrEntryExistsInGroup, http.StatusConflict},
+		{"moved concurrently", repository.ErrEntryGroupChanged, http.StatusConflict},
 		{"missing entry", repository.ErrEntryNotFound, http.StatusNotFound},
 		{"unexpected", errors.New("boom"), http.StatusInternalServerError},
 	}

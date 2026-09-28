@@ -370,8 +370,9 @@ var (
 	// ErrEntryExistsInGroup is returned when moving an entry into a group
 	// that already contains the same movie.
 	ErrEntryExistsInGroup = errors.New("movie already exists in target group")
-
-	errEntryGroupChanged = errors.New("entry group changed concurrently")
+	// ErrEntryGroupChanged is returned when concurrent moves kept changing the
+	// entry's group and the move gave up after maxMoveAttempts.
+	ErrEntryGroupChanged = errors.New("entry group changed concurrently")
 )
 
 // maxMoveAttempts bounds retries when a concurrent move changes the entry's
@@ -385,7 +386,7 @@ func (r *EntryRepository) Update(ctx context.Context, id uuid.UUID, input model.
 	var err error
 	for attempt := 0; attempt < maxMoveAttempts; attempt++ {
 		err = r.update(ctx, id, input)
-		if !errors.Is(err, errEntryGroupChanged) {
+		if !errors.Is(err, ErrEntryGroupChanged) {
 			return err
 		}
 	}
@@ -459,7 +460,7 @@ func moveEntryToGroup(ctx context.Context, tx pgx.Tx, id uuid.UUID, targetGroup 
 		return fmt.Errorf("move entry recheck group: %w", err)
 	}
 	if lockedGroup != sourceGroup {
-		return errEntryGroupChanged
+		return ErrEntryGroupChanged
 	}
 
 	var exists bool

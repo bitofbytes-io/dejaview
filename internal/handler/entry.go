@@ -91,6 +91,10 @@ func (h *EntryHandler) Update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Movie already exists in that group", http.StatusConflict)
 		return
 	}
+	if errors.Is(err, repository.ErrEntryGroupChanged) {
+		http.Error(w, "Entry was moved by another request; refresh and try again", http.StatusConflict)
+		return
+	}
 	if err != nil {
 		slog.Error("failed to update entry", "error", err)
 		http.Error(w, "Failed to update entry", http.StatusInternalServerError)
