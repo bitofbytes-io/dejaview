@@ -3,7 +3,9 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -15,6 +17,11 @@ type Config struct {
 	TMDBAPIKey    string
 	LogLevel      string
 	SecureCookies bool
+	// TrustedProxies are the peers whose X-Forwarded-For header is trusted.
+	TrustedProxies []netip.Prefix
+	// SessionEpoch must match the epoch in a session cookie; raising it signs
+	// out every browser.
+	SessionEpoch int64
 }
 
 // Load reads configuration from environment variables.
@@ -47,6 +54,22 @@ func Load() (*Config, error) {
 	}
 	cfg.SecureCookies = secureCookiesStr != "false"
 
+	trustedProxies, err := getEnv("TRUSTED_PROXY_CIDRS", "")
+	if err != nil {
+		return nil, err
+	}
+	if cfg.TrustedProxies, err = parseTrustedProxies(trustedProxies); err != nil {
+		return nil, err
+	}
+
+	sessionEpoch, err := getEnv("SESSION_EPOCH", "0")
+	if err != nil {
+		return nil, err
+	}
+	if cfg.SessionEpoch, err = strconv.ParseInt(strings.TrimSpace(sessionEpoch), 10, 64); err != nil || cfg.SessionEpoch < 0 {
+		return nil, fmt.Errorf("SESSION_EPOCH must be a non-negative integer, got %q", sessionEpoch)
+	}
+
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")
 	}
@@ -58,6 +81,36 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// parseTrustedProxies reads a comma-separated list of CIDRs or single IPs.
+func parseTrustedProxies(value string) ([]netip.Prefix, error) {
+	var prefixes []netip.Prefix
+	for _, entry := range strings.Split(value, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if prefix, err := netip.ParsePrefix(entry); err == nil {
+			// Client addresses are unmapped before matching, so rebase
+			// IPv4-mapped IPv6 prefixes onto IPv4.
+			if prefix.Addr().Is4In6() {
+				if prefix.Bits() < 96 {
+					return nil, fmt.Errorf("TRUSTED_PROXY_CIDRS IPv4-mapped prefix %q must be /96 or longer", entry)
+				}
+				prefix = netip.PrefixFrom(prefix.Addr().Unmap(), prefix.Bits()-96)
+			}
+			prefixes = append(prefixes, prefix.Masked())
+			continue
+		}
+		addr, err := netip.ParseAddr(entry)
+		if err != nil {
+			return nil, fmt.Errorf("TRUSTED_PROXY_CIDRS contains invalid CIDR or IP %q", entry)
+		}
+		addr = addr.Unmap()
+		prefixes = append(prefixes, netip.PrefixFrom(addr, addr.BitLen()))
+	}
+	return prefixes, nil
 }
 
 // getEnv checks for FOO_FILE env var first, reads from file if exists,

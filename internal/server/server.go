@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/drywaters/dejaview/internal/auth"
 	"github.com/drywaters/dejaview/internal/config"
 	"github.com/drywaters/dejaview/internal/handler"
 	"github.com/drywaters/dejaview/internal/middleware"
@@ -12,6 +13,14 @@ import (
 	"github.com/drywaters/dejaview/internal/tmdb"
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
+)
+
+// Failed logins allowed in each window, per client IP and from all clients.
+// Counters are in memory, per replica.
+const (
+	maxLoginFailuresPerIP = 10
+	maxLoginFailures      = 50
+	loginFailureWindow    = 15 * time.Minute
 )
 
 // Server represents the HTTP server
@@ -52,7 +61,7 @@ func (s *Server) Router() http.Handler {
 
 	// Middleware
 	r.Use(chimw.RequestID)
-	r.Use(chimw.RealIP)
+	r.Use(middleware.RealIP(s.cfg.TrustedProxies))
 	r.Use(middleware.Logger)
 	r.Use(chimw.Recoverer)
 	r.Use(middleware.SameOrigin)
@@ -83,8 +92,9 @@ func (s *Server) Router() http.Handler {
 	})
 
 	// Auth handlers
-	sessionManager := session.NewManager(s.cfg.APIToken, 90*24*time.Hour, s.cfg.SecureCookies)
-	authHandler := handler.NewAuthHandler(s.cfg.APIToken, sessionManager)
+	sessionManager := session.NewManager(s.cfg.APIToken, 90*24*time.Hour, s.cfg.SecureCookies, s.cfg.SessionEpoch)
+	loginLimiter := auth.NewLoginLimiter(maxLoginFailuresPerIP, maxLoginFailures, loginFailureWindow)
+	authHandler := handler.NewAuthHandler(s.cfg.APIToken, sessionManager, loginLimiter)
 	r.Get("/login", authHandler.LoginPage)
 	r.Post("/login", authHandler.Login)
 	r.Post("/logout", authHandler.Logout)

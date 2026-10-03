@@ -11,7 +11,7 @@ import (
 
 func testSessionManager(t *testing.T) *session.Manager {
 	t.Helper()
-	return session.NewManager("secret", time.Hour, false)
+	return session.NewManager("secret", time.Hour, false, 0)
 }
 
 func testSessionCookie(t *testing.T, manager *session.Manager) *http.Cookie {
