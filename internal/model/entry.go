@@ -52,28 +52,3 @@ func (e *Entry) AverageRating() *float64 {
 func (e *Entry) RatingCount() int {
 	return len(e.Ratings)
 }
-
-// IsFullyRated returns true if all family members have rated
-func (e *Entry) IsFullyRated() bool {
-	return len(e.Ratings) == len(FamilyInitials)
-}
-
-// GetRatingByPersonID returns the rating for a specific person, or nil if not rated
-func (e *Entry) GetRatingByPersonID(personID uuid.UUID) *Rating {
-	for _, r := range e.Ratings {
-		if r.PersonID == personID {
-			return r
-		}
-	}
-	return nil
-}
-
-// GetRatingByInitial returns the rating for a specific person by their initial
-func (e *Entry) GetRatingByInitial(initial string) *Rating {
-	for _, r := range e.Ratings {
-		if r.Person != nil && r.Person.Initial == initial {
-			return r
-		}
-	}
-	return nil
-}

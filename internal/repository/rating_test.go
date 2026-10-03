@@ -67,6 +67,20 @@ func ratingTestPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
+type storedRating struct {
+	PersonID uuid.UUID
+	Score    float64
+}
+
+// entryRatings reads an entry's stored ratings straight from the table.
+func entryRatings(ctx context.Context, pool *pgxpool.Pool, entryID uuid.UUID) ([]storedRating, error) {
+	rows, err := pool.Query(ctx, `SELECT person_id, score FROM ratings WHERE entry_id = $1`, entryID)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToStructByPos[storedRating])
+}
+
 func TestSaveBatchPostgres(t *testing.T) {
 	pool := ratingTestPool(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -96,7 +110,7 @@ func TestSaveBatchPostgres(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected foreign-key failure")
 	}
-	ratings, err := repo.GetByEntryID(ctx, entryID)
+	ratings, err := entryRatings(ctx, pool, entryID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +125,7 @@ func TestSaveBatchPostgres(t *testing.T) {
 	if err := repo.SaveBatch(ctx, entryID, []model.RatingChange{{PersonID: people[0], Score: score(0)}, {PersonID: people[1]}, {PersonID: people[3], Score: score(10)}}); err != nil {
 		t.Fatal(err)
 	}
-	ratings, err = repo.GetByEntryID(ctx, entryID)
+	ratings, err = entryRatings(ctx, pool, entryID)
 	if err != nil {
 		t.Fatal(err)
 	}

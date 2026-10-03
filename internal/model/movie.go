@@ -35,17 +35,6 @@ type CreateMovieInput struct {
 	MetadataJSON   json.RawMessage `json:"metadata_json,omitempty"`
 }
 
-// UpdateMovieInput represents the input for updating a movie
-type UpdateMovieInput struct {
-	Title          *string         `json:"title,omitempty"`
-	ReleaseYear    *int            `json:"release_year,omitempty"`
-	PosterURL      *string         `json:"poster_url,omitempty"`
-	Synopsis       *string         `json:"synopsis,omitempty"`
-	RuntimeMinutes *int            `json:"runtime_minutes,omitempty"`
-	IMDBId         *string         `json:"imdb_id,omitempty"`
-	MetadataJSON   json.RawMessage `json:"metadata_json,omitempty"`
-}
-
 // FormattedRuntime returns a human-readable runtime string
 func (m *Movie) FormattedRuntime() string {
 	if m.RuntimeMinutes == nil {
@@ -69,4 +58,3 @@ func formatDuration(hours, minutes int) string {
 func formatMinutes(minutes int) string {
 	return strconv.Itoa(minutes) + "m"
 }
-

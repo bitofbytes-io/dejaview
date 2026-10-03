@@ -19,13 +19,6 @@ type Rating struct {
 	Person *Person `json:"person,omitempty"`
 }
 
-// UpsertRatingInput represents the input for creating or updating a rating
-type UpsertRatingInput struct {
-	PersonID uuid.UUID `json:"person_id"`
-	EntryID  uuid.UUID `json:"entry_id"`
-	Score    float64   `json:"score"`
-}
-
 // RatingColor returns the color class based on the score
 func (r *Rating) RatingColor() string {
 	if r.Score < 4.0 {
