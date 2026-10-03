@@ -10,7 +10,6 @@ import (
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -30,6 +29,16 @@ func createTestEntry(t *testing.T, ctx context.Context, repo *EntryRepository, m
 		t.Fatal(err)
 	}
 	return entry
+}
+
+// insertTestEntry stores an entry at the end of a group with plain SQL, for
+// tests that need a group number Create rejects because it skips ahead.
+func insertTestEntry(t *testing.T, ctx context.Context, pool *pgxpool.Pool, movieID uuid.UUID, group int) {
+	t.Helper()
+	if _, err := pool.Exec(ctx, `INSERT INTO entries (movie_id, group_number, position)
+		VALUES ($1, $2, COALESCE((SELECT MAX(position) FROM entries WHERE group_number = $2), 0) + 1)`, movieID, group); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func entryGroupAndPosition(t *testing.T, ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (int, int) {
@@ -110,7 +119,7 @@ func TestEntryUpdateConcurrentMovesPostgres(t *testing.T) {
 	defer cancel()
 	repo := NewEntryRepository(pool)
 
-	createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Target resident"), 10)
+	insertTestEntry(t, ctx, pool, insertTestMovie(t, ctx, pool, "Target resident"), 10)
 	const movers = 8
 	ids := make([]uuid.UUID, movers)
 	for i := range ids {
@@ -220,8 +229,8 @@ func TestEntryUpdateRetriesAfterCompetingMovePostgres(t *testing.T) {
 	// Advisory locks are database-wide, so use groups no other test touches.
 	const source, competing, target = 101, 102, 103
 	for _, group := range []int{source, competing, target} {
-		createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Resident"), group)
-		createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Resident"), group)
+		insertTestEntry(t, ctx, pool, insertTestMovie(t, ctx, pool, "Resident"), group)
+		insertTestEntry(t, ctx, pool, insertTestMovie(t, ctx, pool, "Resident"), group)
 	}
 	// The contested entry is last in its group, so moving it out leaves no gap.
 	contested := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Contested"), source)
@@ -269,8 +278,8 @@ func TestEntryUpdateSameGroupRechecksUnderLockPostgres(t *testing.T) {
 	// Advisory locks are database-wide, so use groups no other test touches.
 	const home, competing = 111, 112
 	for _, group := range []int{home, competing} {
-		createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Resident"), group)
-		createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Resident"), group)
+		insertTestEntry(t, ctx, pool, insertTestMovie(t, ctx, pool, "Resident"), group)
+		insertTestEntry(t, ctx, pool, insertTestMovie(t, ctx, pool, "Resident"), group)
 	}
 	contested := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Contested"), home)
 	var picker uuid.UUID
@@ -325,11 +334,101 @@ func TestEntryCreateAssignsPositionsPostgres(t *testing.T) {
 		}
 	}
 
-	// The handler relies on a unique violation to detect duplicates within a group.
-	_, err := repo.Create(ctx, model.CreateEntryInput{MovieID: movie, GroupNumber: 1})
-	var pgErr *pgconn.PgError
-	if !errors.As(err, &pgErr) || pgErr.Code != "23505" || pgErr.ConstraintName != "entries_movie_group_unique" {
-		t.Fatalf("expected entries_movie_group_unique violation, got %v", err)
+	// Adding a movie that is already in the group changes nothing.
+	if _, err := repo.Create(ctx, model.CreateEntryInput{MovieID: movie, GroupNumber: 1}); !errors.Is(err, ErrEntryExistsInGroup) {
+		t.Fatalf("expected ErrEntryExistsInGroup, got %v", err)
+	}
+
+	// Only existing groups (1, 2) and the next new one (3) accept entries.
+	for _, group := range []int{0, -1, 4, 1000} {
+		if err := repo.CheckGroup(ctx, group); !errors.Is(err, ErrInvalidGroup) {
+			t.Fatalf("CheckGroup(%d): expected ErrInvalidGroup, got %v", group, err)
+		}
+		if _, err := repo.Create(ctx, model.CreateEntryInput{MovieID: movie, GroupNumber: group}); !errors.Is(err, ErrInvalidGroup) {
+			t.Fatalf("group %d: expected ErrInvalidGroup, got %v", group, err)
+		}
+	}
+	for _, group := range []int{1, 2, 3} {
+		if err := repo.CheckGroup(ctx, group); err != nil {
+			t.Fatalf("CheckGroup(%d): %v", group, err)
+		}
+	}
+	if entry := createTestEntry(t, ctx, repo, movie, 3); entry.GroupNumber != 3 || entry.Position != 1 {
+		t.Fatalf("new group entry at group=%d position=%d, want 3/1", entry.GroupNumber, entry.Position)
+	}
+	var count int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM entries`).Scan(&count); err != nil || count != 5 {
+		t.Fatalf("got %d entries (err %v), want 5", count, err)
+	}
+}
+
+func TestEntryCreateInEmptyDatabasePostgres(t *testing.T) {
+	pool := ratingTestPool(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	repo := NewEntryRepository(pool)
+
+	movie := insertTestMovie(t, ctx, pool, "First")
+	if _, err := repo.Create(ctx, model.CreateEntryInput{MovieID: movie, GroupNumber: 2}); !errors.Is(err, ErrInvalidGroup) {
+		t.Fatalf("group 2 in an empty database: expected ErrInvalidGroup, got %v", err)
+	}
+	if entry := createTestEntry(t, ctx, repo, movie, 1); entry.GroupNumber != 1 || entry.Position != 1 {
+		t.Fatalf("first entry at group=%d position=%d, want 1/1", entry.GroupNumber, entry.Position)
+	}
+}
+
+// TestMovieCreateReturnsExistingTMDBMoviePostgres covers two requests adding
+// the same TMDB movie at once: both get the one stored movie.
+func TestMovieCreateReturnsExistingTMDBMoviePostgres(t *testing.T) {
+	pool := ratingTestPool(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	movies := NewMovieRepository(pool)
+
+	tmdbID := 348
+	first, err := movies.Create(ctx, model.CreateMovieInput{Title: "Alien", TMDBId: &tmdbID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := movies.Create(ctx, model.CreateMovieInput{Title: "Alien (again)", TMDBId: &tmdbID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.ID != first.ID || second.Title != "Alien" {
+		t.Fatalf("second create returned %+v, want the existing movie %s", second, first.ID)
+	}
+
+	// Concurrent creates all land on one row.
+	otherID := 949
+	const creators = 6
+	ids := make(chan uuid.UUID, creators)
+	errs := make(chan error, creators)
+	var wg sync.WaitGroup
+	for i := 0; i < creators; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			movie, err := movies.Create(ctx, model.CreateMovieInput{Title: "Heat", TMDBId: &otherID})
+			if err != nil {
+				errs <- err
+				return
+			}
+			ids <- movie.ID
+		}()
+	}
+	wg.Wait()
+	close(ids)
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	var want uuid.UUID
+	for id := range ids {
+		if want == uuid.Nil {
+			want = id
+		} else if id != want {
+			t.Fatalf("concurrent creates returned %s and %s", want, id)
+		}
 	}
 }
 
@@ -344,6 +443,8 @@ func TestEntryCreateConcurrentPostgres(t *testing.T) {
 	for i := range movies {
 		movies[i] = insertTestMovie(t, ctx, pool, "Concurrent")
 	}
+	// Group 5 is the next new group.
+	insertTestEntry(t, ctx, pool, insertTestMovie(t, ctx, pool, "Group 4"), 4)
 
 	var wg sync.WaitGroup
 	positions := make(chan int, creators)
@@ -391,13 +492,15 @@ func TestEntryReorderPostgres(t *testing.T) {
 
 	listOrder := func() []uuid.UUID {
 		t.Helper()
-		entries, err := repo.ListByGroup(ctx, 1)
+		entries, err := repo.ListAll(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
-		ids := make([]uuid.UUID, len(entries))
-		for i, entry := range entries {
-			ids[i] = entry.ID
+		var ids []uuid.UUID
+		for _, entry := range entries {
+			if entry.GroupNumber == 1 {
+				ids = append(ids, entry.ID)
+			}
 		}
 		return ids
 	}
@@ -425,22 +528,110 @@ func TestEntryReorderPostgres(t *testing.T) {
 		t.Fatalf("first visual entry has position %d, want 3", position)
 	}
 
-	// An entry from another group rejects the whole reorder and changes nothing.
-	if err := repo.ReorderEntries(ctx, 1, []uuid.UUID{second.ID, other.ID, first.ID}); err == nil {
-		t.Fatal("expected reorder with foreign entry to fail")
+	// A request that does not list exactly the group's entries changes nothing.
+	for name, ids := range map[string][]uuid.UUID{
+		"foreign entry": {second.ID, other.ID, first.ID},
+		"missing entry": {second.ID, first.ID},
+		"duplicate":     {second.ID, first.ID, first.ID},
+		"extra entry":   {second.ID, third.ID, first.ID, other.ID},
+		"empty":         {},
+	} {
+		if err := repo.ReorderEntries(ctx, 1, ids); !errors.Is(err, ErrReorderMismatch) {
+			t.Fatalf("%s: expected ErrReorderMismatch, got %v", name, err)
+		}
 	}
 	assertOrder(first.ID, third.ID, second.ID)
 	if group, position := entryGroupAndPosition(t, ctx, pool, other.ID); group != 2 || position != 1 {
 		t.Fatalf("foreign entry changed to group=%d position=%d", group, position)
 	}
 
-	if err := repo.ReorderEntries(ctx, 1, nil); err != nil {
-		t.Fatalf("empty reorder: %v", err)
+	if err := repo.ReorderEntries(ctx, 1, nil); !errors.Is(err, ErrReorderMismatch) {
+		t.Fatalf("empty reorder of a non-empty group: expected ErrReorderMismatch, got %v", err)
+	}
+	if err := repo.ReorderEntries(ctx, 7, nil); err != nil {
+		t.Fatalf("empty reorder of an empty group: %v", err)
 	}
 
 	// New entries still land after reordered ones.
 	fourth := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Fourth"), 1)
 	if fourth.Position != 4 {
 		t.Fatalf("new entry position %d, want 4", fourth.Position)
+	}
+}
+
+// TestEntryListAllPostgres covers the single dashboard query: newest group
+// first, display order within each group, and each entry's movie, picker and
+// ratings.
+func TestEntryListAllPostgres(t *testing.T) {
+	pool := ratingTestPool(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	repo := NewEntryRepository(pool)
+
+	people := map[string]uuid.UUID{}
+	for _, initial := range []string{"A", "C", "D"} {
+		var id uuid.UUID
+		if err := pool.QueryRow(ctx, `INSERT INTO persons (initial, name) VALUES ($1, $2)
+			ON CONFLICT (initial) DO UPDATE SET name = EXCLUDED.name RETURNING id`, initial, "Person "+initial).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		people[initial] = id
+	}
+
+	g1a := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "One A"), 1)
+	g1b := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "One B"), 1)
+	g2a := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Two A"), 2)
+	g3 := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Three"), 3)
+	g2b := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Two B"), 2)
+	g2c := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Two C"), 2)
+	if err := repo.ReorderEntries(ctx, 2, []uuid.UUID{g2b.ID, g2c.ID, g2a.ID}); err != nil {
+		t.Fatal(err)
+	}
+	picker := people["C"]
+	if err := repo.Update(ctx, g3.ID, model.UpdateEntryInput{PickedByPersonID: &picker}); err != nil {
+		t.Fatal(err)
+	}
+	for initial, score := range map[string]float64{"D": 8, "A": 6, "C": 7} {
+		if _, err := pool.Exec(ctx, `INSERT INTO ratings (person_id, entry_id, score) VALUES ($1, $2, $3)`, people[initial], g2c.ID, score); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	entries, err := repo.ListAll(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []uuid.UUID{g3.ID, g2b.ID, g2c.ID, g2a.ID, g1b.ID, g1a.ID}
+	if len(entries) != len(want) {
+		t.Fatalf("got %d entries, want %d", len(entries), len(want))
+	}
+	for i, entry := range entries {
+		if entry.ID != want[i] {
+			t.Fatalf("entry %d is %s (%s), want %s", i, entry.ID, entry.Movie.Title, want[i])
+		}
+	}
+	if picked := entries[0].PickedByPerson; picked == nil || picked.ID != picker || entries[0].Movie.Title != "Three" {
+		t.Fatalf("group 3 entry movie=%q picker=%+v", entries[0].Movie.Title, picked)
+	}
+	if entries[3].PickedByPerson != nil || entries[3].Ratings != nil {
+		t.Fatalf("unpicked, unrated entry has picker=%+v ratings=%v", entries[3].PickedByPerson, entries[3].Ratings)
+	}
+
+	initials := func(entry *model.Entry) string {
+		var got string
+		for _, rating := range entry.Ratings {
+			got += rating.Person.Initial
+		}
+		return got
+	}
+	if got := initials(entries[2]); got != "ACD" {
+		t.Fatalf("listed ratings by %q, want ACD", got)
+	}
+	single, err := repo.GetByID(ctx, g2c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := initials(single); got != "ACD" || single.Movie.Title != "Two C" {
+		t.Fatalf("GetByID ratings by %q for %q, want ACD for Two C", got, single.Movie.Title)
 	}
 }

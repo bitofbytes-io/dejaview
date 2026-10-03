@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -9,10 +10,23 @@ import (
 	"github.com/drywaters/dejaview/internal/session"
 )
 
+type authenticatedKey struct{}
+
+// IsAuthenticated reports whether Auth found a valid session cookie on the
+// request. Public read routes use it to choose between the read-only and the
+// editable view.
+func IsAuthenticated(ctx context.Context) bool {
+	authenticated, _ := ctx.Value(authenticatedKey{}).(bool)
+	return authenticated
+}
+
 // Auth middleware validates browser requests using signed session cookies.
 func Auth(sessionManager *session.Manager) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			authenticated := sessionManager.ValidRequest(r)
+			r = r.WithContext(context.WithValue(r.Context(), authenticatedKey{}, authenticated))
+
 			if isPublicMovieReadRequest(r) {
 				next.ServeHTTP(w, r)
 				return
@@ -24,7 +38,7 @@ func Auth(sessionManager *session.Manager) func(http.Handler) http.Handler {
 				return
 			}
 
-			if !sessionManager.ValidRequest(r) {
+			if !authenticated {
 				http.SetCookie(w, sessionManager.ClearCookie())
 				slog.Info("browser authentication required", "path", r.URL.Path)
 				if shouldReturnUnauthorized(r) {
@@ -55,8 +69,6 @@ func isPublicReadEndpoint(path string) bool {
 		return true
 	case path == "/dashboard-content":
 		// Explicitly allow HTMX dashboard partial updates for read-only browsing.
-		return true
-	case path == "/movies":
 		return true
 	case strings.HasPrefix(path, "/movies/"):
 		return true

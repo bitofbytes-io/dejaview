@@ -10,16 +10,14 @@ import (
 
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/drywaters/dejaview/internal/repository"
-	"github.com/drywaters/dejaview/internal/session"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
 // EntryHandler handles entry-related requests
 type EntryHandler struct {
-	entryRepo      entryStore
-	personRepo     *repository.PersonRepository
-	sessionManager *session.Manager
+	entryRepo  entryStore
+	personRepo *repository.PersonRepository
 }
 
 type entryStore interface {
@@ -29,11 +27,10 @@ type entryStore interface {
 }
 
 // NewEntryHandler creates a new EntryHandler
-func NewEntryHandler(entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository, sessionManager *session.Manager) *EntryHandler {
+func NewEntryHandler(entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository) *EntryHandler {
 	return &EntryHandler{
-		entryRepo:      entryRepo,
-		personRepo:     personRepo,
-		sessionManager: sessionManager,
+		entryRepo:  entryRepo,
+		personRepo: personRepo,
 	}
 }
 
@@ -160,7 +157,13 @@ func (h *EntryHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 		entryIDs = append(entryIDs, id)
 	}
 
-	if err := h.entryRepo.ReorderEntries(ctx, groupNum, entryIDs); err != nil {
+	err = h.entryRepo.ReorderEntries(ctx, groupNum, entryIDs)
+	if errors.Is(err, repository.ErrReorderMismatch) {
+		slog.Info("reorder rejected", "group_number", groupNum, "error", err)
+		http.Error(w, "The group changed; refresh and try again", http.StatusConflict)
+		return
+	}
+	if err != nil {
 		slog.Error("failed to reorder entries", "error", err)
 		http.Error(w, "Failed to reorder entries", http.StatusInternalServerError)
 		return

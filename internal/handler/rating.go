@@ -11,9 +11,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/drywaters/dejaview/internal/middleware"
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/drywaters/dejaview/internal/repository"
-	"github.com/drywaters/dejaview/internal/session"
 	"github.com/drywaters/dejaview/internal/ui/pages"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -21,10 +21,9 @@ import (
 
 // RatingHandler handles rating-related requests
 type RatingHandler struct {
-	ratingRepo     ratingRepository
-	entryRepo      entryRepository
-	personRepo     personRepository
-	sessionManager *session.Manager
+	ratingRepo ratingRepository
+	entryRepo  entryRepository
+	personRepo personRepository
 }
 
 type ratingRepository interface {
@@ -40,12 +39,11 @@ type personRepository interface {
 }
 
 // NewRatingHandler creates a new RatingHandler
-func NewRatingHandler(ratingRepo *repository.RatingRepository, entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository, sessionManager *session.Manager) *RatingHandler {
+func NewRatingHandler(ratingRepo *repository.RatingRepository, entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository) *RatingHandler {
 	return &RatingHandler{
-		ratingRepo:     ratingRepo,
-		entryRepo:      entryRepo,
-		personRepo:     personRepo,
-		sessionManager: sessionManager,
+		ratingRepo: ratingRepo,
+		entryRepo:  entryRepo,
+		personRepo: personRepo,
 	}
 }
 
@@ -113,7 +111,7 @@ func (h *RatingHandler) SaveRatings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isAuthenticated := isAuthenticatedRequest(r, h.sessionManager)
+	isAuthenticated := middleware.IsAuthenticated(r.Context())
 	slog.Info("ratings saved", "entry_id", entryID, "changes", len(changes))
 	w.Header().Set("HX-Trigger", `{"showToast": {"message": "Saved!", "type": "success"}}`)
 	pages.RatingsCard(entry, persons, isAuthenticated).Render(ctx, w)

@@ -8,17 +8,15 @@ import (
 	"net/url"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/drywaters/dejaview/internal/model"
-	"github.com/drywaters/dejaview/internal/session"
+	"github.com/drywaters/dejaview/internal/repository"
 	"github.com/drywaters/dejaview/internal/tmdb"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func TestSearchTMDBRejectsOverlongQuery(t *testing.T) {
-	handler := NewMovieHandler(nil, nil, nil, nil, session.NewManager("secret", time.Hour, false))
+	handler := NewMovieHandler(nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/tmdb/search?q="+strings.Repeat("a", 121), nil)
 	recorder := httptest.NewRecorder()
@@ -47,19 +45,23 @@ func (s *stubMovieRepo) Create(ctx context.Context, input model.CreateMovieInput
 }
 
 type stubMovieEntryRepo struct {
-	createErr    error
-	existing     *model.Entry
-	created      []model.CreateEntryInput
-	lookupGroups []int
+	checkErr  error
+	createErr error
+	created   []model.CreateEntryInput
+}
+
+func (s *stubMovieEntryRepo) CheckGroup(ctx context.Context, group int) error {
+	if s.checkErr != nil {
+		return s.checkErr
+	}
+	if group < 1 {
+		return repository.ErrInvalidGroup
+	}
+	return nil
 }
 
 func (s *stubMovieEntryRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.Entry, error) {
 	return nil, nil
-}
-
-func (s *stubMovieEntryRepo) GetByMovieAndGroup(ctx context.Context, movieID uuid.UUID, groupNumber int) (*model.Entry, error) {
-	s.lookupGroups = append(s.lookupGroups, groupNumber)
-	return s.existing, nil
 }
 
 func (s *stubMovieEntryRepo) Create(ctx context.Context, input model.CreateEntryInput) (*model.Entry, error) {
@@ -133,8 +135,7 @@ func TestAddFromTMDBReusesExistingMovie(t *testing.T) {
 	client := &stubTMDBClient{}
 	handler := &MovieHandler{movieRepo: movies, entryRepo: entries, tmdbClient: client}
 
-	// A missing or invalid group falls back to group 1.
-	recorder := postAddFromTMDB(handler, url.Values{"tmdb_id": {"348"}, "group_number": {"nope"}})
+	recorder := postAddFromTMDB(handler, url.Values{"tmdb_id": {"348"}, "group_number": {"2"}})
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
@@ -142,26 +143,63 @@ func TestAddFromTMDBReusesExistingMovie(t *testing.T) {
 	if client.getCalls != 0 || len(movies.created) != 0 {
 		t.Fatalf("expected no TMDB fetch or movie create, got fetches=%d creates=%d", client.getCalls, len(movies.created))
 	}
-	if len(entries.created) != 1 || entries.created[0].MovieID != existing.ID || entries.created[0].GroupNumber != 1 {
+	if len(entries.created) != 1 || entries.created[0].MovieID != existing.ID || entries.created[0].GroupNumber != 2 {
 		t.Fatalf("unexpected entry input: %+v", entries.created)
 	}
 }
 
-func TestAddFromTMDBDuplicateEntryReturnsExisting(t *testing.T) {
+func TestAddFromTMDBDuplicateEntryShowsAlreadyInGroup(t *testing.T) {
 	existing := &model.Movie{ID: uuid.New()}
-	entries := &stubMovieEntryRepo{
-		createErr: &pgconn.PgError{Code: "23505"},
-		existing:  &model.Entry{ID: uuid.New(), MovieID: existing.ID, GroupNumber: 2},
-	}
+	entries := &stubMovieEntryRepo{createErr: repository.ErrEntryExistsInGroup}
 	handler := &MovieHandler{movieRepo: &stubMovieRepo{existing: existing}, entryRepo: entries, tmdbClient: &stubTMDBClient{}}
 
 	recorder := postAddFromTMDB(handler, url.Values{"tmdb_id": {"348"}, "group_number": {"2"}})
 
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("expected status %d, got %d", http.StatusConflict, recorder.Code)
 	}
-	if len(entries.lookupGroups) != 1 || entries.lookupGroups[0] != 2 {
-		t.Fatalf("expected existing entry lookup in group 2, got %v", entries.lookupGroups)
+	trigger := recorder.Header().Get("HX-Trigger")
+	if !strings.Contains(trigger, "Already in Group 2") || strings.Contains(trigger, "Movie added!") || strings.Contains(trigger, "refreshGroups") {
+		t.Fatalf("unexpected trigger: %q", trigger)
+	}
+}
+
+func TestAddFromTMDBRejectsInvalidGroup(t *testing.T) {
+	for _, group := range []string{"", "nope", "1.5", "0", "-1"} {
+		t.Run(group, func(t *testing.T) {
+			movies := &stubMovieRepo{}
+			entries := &stubMovieEntryRepo{}
+			client := &stubTMDBClient{details: &tmdb.MovieDetails{Title: "X"}}
+			handler := &MovieHandler{movieRepo: movies, entryRepo: entries, tmdbClient: client}
+			recorder := postAddFromTMDB(handler, url.Values{"tmdb_id": {"348"}, "group_number": {group}})
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("expected status %d, got %d", http.StatusBadRequest, recorder.Code)
+			}
+			if client.getCalls != 0 || len(movies.created) != 0 || len(entries.created) != 0 {
+				t.Fatalf("invalid group reached TMDB or the database: fetches=%d movies=%d entries=%d", client.getCalls, len(movies.created), len(entries.created))
+			}
+			if !strings.Contains(recorder.Header().Get("HX-Trigger"), "refreshGroups") {
+				t.Fatalf("expected a refresh, got trigger %q", recorder.Header().Get("HX-Trigger"))
+			}
+		})
+	}
+
+	// A stale group past the next new one stores nothing, not even a new movie.
+	movies := &stubMovieRepo{}
+	client := &stubTMDBClient{details: &tmdb.MovieDetails{Title: "X"}}
+	stale := &stubMovieEntryRepo{checkErr: repository.ErrInvalidGroup}
+	recorder := postAddFromTMDB(&MovieHandler{movieRepo: movies, entryRepo: stale, tmdbClient: client}, url.Values{"tmdb_id": {"348"}, "group_number": {"99"}})
+	if recorder.Code != http.StatusBadRequest || client.getCalls != 0 || len(movies.created) != 0 || len(stale.created) != 0 {
+		t.Fatalf("stale group 99: status %d, fetches=%d movies=%d entries=%d; want 400 and no writes",
+			recorder.Code, client.getCalls, len(movies.created), len(stale.created))
+	}
+
+	// A group that became invalid after the check is still rejected by Create.
+	entries := &stubMovieEntryRepo{createErr: repository.ErrInvalidGroup}
+	handler := &MovieHandler{movieRepo: &stubMovieRepo{existing: &model.Movie{ID: uuid.New()}}, entryRepo: entries, tmdbClient: &stubTMDBClient{}}
+	recorder = postAddFromTMDB(handler, url.Values{"tmdb_id": {"348"}, "group_number": {"99"}})
+	if recorder.Code != http.StatusBadRequest || strings.Contains(recorder.Header().Get("HX-Trigger"), "Movie added!") {
+		t.Fatalf("group 99: status %d trigger %q, want 400 without success", recorder.Code, recorder.Header().Get("HX-Trigger"))
 	}
 }
 
@@ -173,11 +211,11 @@ func TestAddFromTMDBErrors(t *testing.T) {
 		entries *stubMovieEntryRepo
 		want    int
 	}{
-		{"invalid tmdb id", url.Values{"tmdb_id": {"abc"}}, &stubTMDBClient{}, &stubMovieEntryRepo{}, http.StatusBadRequest},
-		{"tmdb failure", url.Values{"tmdb_id": {"1"}}, &stubTMDBClient{err: errors.New("down")}, &stubMovieEntryRepo{}, http.StatusInternalServerError},
-		{"tmdb not found", url.Values{"tmdb_id": {"1"}}, &stubTMDBClient{}, &stubMovieEntryRepo{}, http.StatusNotFound},
-		{"entry create failure", url.Values{"tmdb_id": {"1"}}, &stubTMDBClient{details: &tmdb.MovieDetails{Title: "X"}}, &stubMovieEntryRepo{createErr: errors.New("db down")}, http.StatusInternalServerError},
-		{"duplicate vanished", url.Values{"tmdb_id": {"1"}}, &stubTMDBClient{details: &tmdb.MovieDetails{Title: "X"}}, &stubMovieEntryRepo{createErr: &pgconn.PgError{Code: "23505"}}, http.StatusInternalServerError},
+		{"invalid tmdb id", url.Values{"tmdb_id": {"abc"}, "group_number": {"1"}}, &stubTMDBClient{}, &stubMovieEntryRepo{}, http.StatusBadRequest},
+		{"tmdb failure", url.Values{"tmdb_id": {"1"}, "group_number": {"1"}}, &stubTMDBClient{err: errors.New("down")}, &stubMovieEntryRepo{}, http.StatusInternalServerError},
+		{"tmdb not found", url.Values{"tmdb_id": {"1"}, "group_number": {"1"}}, &stubTMDBClient{}, &stubMovieEntryRepo{}, http.StatusNotFound},
+		{"group check failure", url.Values{"tmdb_id": {"1"}, "group_number": {"1"}}, &stubTMDBClient{details: &tmdb.MovieDetails{Title: "X"}}, &stubMovieEntryRepo{checkErr: errors.New("db down")}, http.StatusInternalServerError},
+		{"entry create failure", url.Values{"tmdb_id": {"1"}, "group_number": {"1"}}, &stubTMDBClient{details: &tmdb.MovieDetails{Title: "X"}}, &stubMovieEntryRepo{createErr: errors.New("db down")}, http.StatusInternalServerError},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

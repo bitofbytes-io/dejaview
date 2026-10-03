@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"sort"
 
+	"github.com/drywaters/dejaview/internal/middleware"
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/drywaters/dejaview/internal/repository"
-	"github.com/drywaters/dejaview/internal/session"
 	"github.com/drywaters/dejaview/internal/ui"
 	"github.com/drywaters/dejaview/internal/ui/pages"
 )
@@ -19,13 +19,12 @@ const topMovieLimit = 5
 
 // StatsHandler handles the Trophy Room.
 type StatsHandler struct {
-	statsRepo      *repository.StatsRepository
-	sessionManager *session.Manager
+	statsRepo *repository.StatsRepository
 }
 
 // NewStatsHandler creates a new StatsHandler.
-func NewStatsHandler(statsRepo *repository.StatsRepository, sessionManager *session.Manager) *StatsHandler {
-	return &StatsHandler{statsRepo: statsRepo, sessionManager: sessionManager}
+func NewStatsHandler(statsRepo *repository.StatsRepository) *StatsHandler {
+	return &StatsHandler{statsRepo: statsRepo}
 }
 
 // StatsPage renders the Trophy Room.
@@ -37,36 +36,29 @@ func (h *StatsHandler) StatsPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isAuthenticated := isAuthenticatedRequest(r, h.sessionManager)
+	isAuthenticated := middleware.IsAuthenticated(r.Context())
 	if err := pages.StatsPage(statsData, isAuthenticated).Render(r.Context(), w); err != nil {
 		slog.Error("failed to render trophy room", "error", err)
 	}
 }
 
 func (h *StatsHandler) buildStatsData(ctx context.Context) (*model.StatsData, error) {
-	requiredRatings := len(model.FamilyInitials)
-
-	currentGroup, err := h.statsRepo.GetCurrentGroup(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get current group: %w", err)
-	}
-
-	advantageHolder, advantageGroup, err := h.statsRepo.GetAdvantageHolder(ctx, currentGroup)
+	advantageHolder, advantageGroup, err := h.statsRepo.GetAdvantageHolder(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get advantage holder: %w", err)
 	}
 
-	trophyStats, err := h.statsRepo.GetTrophyStats(ctx, requiredRatings)
+	trophyStats, err := h.statsRepo.GetTrophyStats(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get trophy stats: %w", err)
 	}
 
-	topMovies, err := h.statsRepo.GetTopRatedMovies(ctx, requiredRatings, topMovieLimit)
+	topMovies, err := h.statsRepo.GetTopRatedMovies(ctx, topMovieLimit)
 	if err != nil {
 		return nil, fmt.Errorf("get top rated movies: %w", err)
 	}
 
-	totalWatched, totalRuntime, fullyRated, err := h.statsRepo.GetSummaryStats(ctx, requiredRatings)
+	totalWatched, totalRuntime, fullyRated, err := h.statsRepo.GetSummaryStats(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get summary stats: %w", err)
 	}

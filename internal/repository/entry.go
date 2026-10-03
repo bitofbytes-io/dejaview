@@ -21,79 +21,25 @@ func NewEntryRepository(pool *pgxpool.Pool) *EntryRepository {
 	return &EntryRepository{pool: pool}
 }
 
-func applyPickedByPerson(entry *model.Entry, pickedByPersonDBID *uuid.UUID, pickedByInitial, pickedByName *string) {
-	if pickedByPersonDBID != nil && pickedByInitial != nil && pickedByName != nil {
-		entry.PickedByPerson = &model.Person{
-			ID:      *pickedByPersonDBID,
-			Initial: *pickedByInitial,
-			Name:    *pickedByName,
-		}
-	}
-}
+// entrySelect reads an entry with its movie and picker. Callers append the
+// WHERE and ORDER BY clauses and read rows with scanEntry.
+const entrySelect = `
+	SELECT e.id, e.movie_id, e.group_number, e.position, e.added_at, e.picked_by_person_id,
+	       m.id, m.created_at, m.updated_at, m.title, m.release_year, m.poster_url, m.synopsis, m.runtime_minutes, m.tmdb_id, m.imdb_id, m.metadata_json,
+	       p.id, p.initial, p.name
+	FROM entries e
+	JOIN movies m ON e.movie_id = m.id
+	LEFT JOIN persons p ON e.picked_by_person_id = p.id`
 
-// Create inserts a new entry into the database
-func (r *EntryRepository) Create(ctx context.Context, input model.CreateEntryInput) (*model.Entry, error) {
-	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("create entry begin tx: %w", err)
-	}
-	defer func() {
-		_ = tx.Rollback(ctx)
-	}()
-
-	// Serialize position assignment per group to avoid duplicate positions under concurrency.
-	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(1, $1)", input.GroupNumber); err != nil {
-		return nil, fmt.Errorf("create entry lock group: %w", err)
-	}
-
-	// Insert with position = max position in group + 1 (or 1 if no entries in group)
-	query := `
-		INSERT INTO entries (movie_id, group_number, picked_by_person_id, position)
-		VALUES ($1, $2, $3, COALESCE((SELECT MAX(position) FROM entries WHERE group_number = $2), 0) + 1)
-		RETURNING id, movie_id, group_number, position, added_at, picked_by_person_id`
-
-	entry := &model.Entry{}
-	err = tx.QueryRow(ctx, query,
-		input.MovieID,
-		input.GroupNumber,
-		input.PickedByPersonID,
-	).Scan(
-		&entry.ID,
-		&entry.MovieID,
-		&entry.GroupNumber,
-		&entry.Position,
-		&entry.AddedAt,
-		&entry.PickedByPersonID,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create entry: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("create entry commit: %w", err)
-	}
-
-	return entry, nil
-}
-
-// GetByID retrieves an entry by its ID with movie and ratings
-func (r *EntryRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Entry, error) {
-	query := `
-		SELECT e.id, e.movie_id, e.group_number, e.position, e.added_at, e.picked_by_person_id,
-		       m.id, m.created_at, m.updated_at, m.title, m.release_year, m.poster_url, m.synopsis, m.runtime_minutes, m.tmdb_id, m.imdb_id, m.metadata_json,
-		       p.id, p.initial, p.name
-		FROM entries e
-		JOIN movies m ON e.movie_id = m.id
-		LEFT JOIN persons p ON e.picked_by_person_id = p.id
-		WHERE e.id = $1`
-
+// scanEntry reads one entrySelect row.
+func scanEntry(row pgx.Row) (*model.Entry, error) {
 	entry := &model.Entry{}
 	movie := &model.Movie{}
 	var pickedByPersonDBID *uuid.UUID
 	var pickedByInitial *string
 	var pickedByName *string
 
-	err := r.pool.QueryRow(ctx, query, id).Scan(
+	if err := row.Scan(
 		&entry.ID,
 		&entry.MovieID,
 		&entry.GroupNumber,
@@ -114,36 +60,56 @@ func (r *EntryRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Ent
 		&pickedByPersonDBID,
 		&pickedByInitial,
 		&pickedByName,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("get entry by id: %w", err)
+	); err != nil {
+		return nil, err
 	}
 
 	entry.Movie = movie
-	applyPickedByPerson(entry, pickedByPersonDBID, pickedByInitial, pickedByName)
-
-	// Fetch ratings with person info
-	ratings, err := r.getRatingsForEntry(ctx, id)
-	if err != nil {
-		return nil, err
+	if pickedByPersonDBID != nil && pickedByInitial != nil && pickedByName != nil {
+		entry.PickedByPerson = &model.Person{
+			ID:      *pickedByPersonDBID,
+			Initial: *pickedByInitial,
+			Name:    *pickedByName,
+		}
 	}
-	entry.Ratings = ratings
-
 	return entry, nil
 }
 
-// GetByMovieAndGroup retrieves an entry by movie ID and group number
-func (r *EntryRepository) GetByMovieAndGroup(ctx context.Context, movieID uuid.UUID, groupNumber int) (*model.Entry, error) {
+// Create adds a movie to the end of a group. The group must be an existing
+// group or the next new one (1 through the highest group + 1); otherwise
+// Create returns ErrInvalidGroup. It returns ErrEntryExistsInGroup when the
+// movie is already in the group.
+func (r *EntryRepository) Create(ctx context.Context, input model.CreateEntryInput) (*model.Entry, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("create entry begin tx: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	// Serialize position assignment per group to avoid duplicate positions under concurrency.
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(1, $1)", input.GroupNumber); err != nil {
+		return nil, fmt.Errorf("create entry lock group: %w", err)
+	}
+
+	if err := checkGroup(ctx, tx, input.GroupNumber); err != nil {
+		return nil, err
+	}
+
+	// Insert with position = max position in group + 1 (or 1 if no entries in group)
 	query := `
-		SELECT id, movie_id, group_number, position, added_at, picked_by_person_id
-		FROM entries
-		WHERE movie_id = $1 AND group_number = $2`
+		INSERT INTO entries (movie_id, group_number, picked_by_person_id, position)
+		VALUES ($1, $2, $3, COALESCE((SELECT MAX(position) FROM entries WHERE group_number = $2), 0) + 1)
+		ON CONFLICT (movie_id, group_number) DO NOTHING
+		RETURNING id, movie_id, group_number, position, added_at, picked_by_person_id`
 
 	entry := &model.Entry{}
-	err := r.pool.QueryRow(ctx, query, movieID, groupNumber).Scan(
+	err = tx.QueryRow(ctx, query,
+		input.MovieID,
+		input.GroupNumber,
+		input.PickedByPersonID,
+	).Scan(
 		&entry.ID,
 		&entry.MovieID,
 		&entry.GroupNumber,
@@ -151,64 +117,67 @@ func (r *EntryRepository) GetByMovieAndGroup(ctx context.Context, movieID uuid.U
 		&entry.AddedAt,
 		&entry.PickedByPersonID,
 	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrEntryExistsInGroup
+	}
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("get entry by movie and group: %w", err)
+		return nil, fmt.Errorf("create entry: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("create entry commit: %w", err)
 	}
 
 	return entry, nil
 }
 
-// getRatingsForEntry fetches all ratings for an entry with person information
-func (r *EntryRepository) getRatingsForEntry(ctx context.Context, entryID uuid.UUID) ([]*model.Rating, error) {
-	query := `
-		SELECT r.id, r.person_id, r.entry_id, r.score, r.created_at, r.updated_at,
-		       p.id, p.initial, p.name
-		FROM ratings r
-		JOIN persons p ON r.person_id = p.id
-		WHERE r.entry_id = $1
-		ORDER BY p.initial`
-
-	rows, err := r.pool.Query(ctx, query, entryID)
-	if err != nil {
-		return nil, fmt.Errorf("get ratings for entry: %w", err)
-	}
-	defer rows.Close()
-
-	var ratings []*model.Rating
-	for rows.Next() {
-		rating := &model.Rating{}
-		person := &model.Person{}
-		if err := rows.Scan(
-			&rating.ID,
-			&rating.PersonID,
-			&rating.EntryID,
-			&rating.Score,
-			&rating.CreatedAt,
-			&rating.UpdatedAt,
-			&person.ID,
-			&person.Initial,
-			&person.Name,
-		); err != nil {
-			return nil, fmt.Errorf("scan rating: %w", err)
-		}
-		rating.Person = person
-		ratings = append(ratings, rating)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate ratings rows: %w", err)
-	}
-
-	return ratings, nil
+// CheckGroup returns ErrInvalidGroup unless group is an existing group or
+// the next new one. Create checks again under the group's lock; this lets a
+// caller reject a stale group before writing anything else.
+func (r *EntryRepository) CheckGroup(ctx context.Context, group int) error {
+	return checkGroup(ctx, r.pool, group)
 }
 
-// getRatingsForEntries fetches all ratings for multiple entries with person information
-func (r *EntryRepository) getRatingsForEntries(ctx context.Context, entryIDs []uuid.UUID) (map[uuid.UUID][]*model.Rating, error) {
-	ratingsByEntry := make(map[uuid.UUID][]*model.Rating, len(entryIDs))
-	if len(entryIDs) == 0 {
-		return ratingsByEntry, nil
+func checkGroup(ctx context.Context, db interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}, group int) error {
+	var maxGroup int
+	if err := db.QueryRow(ctx, "SELECT COALESCE(MAX(group_number), 0) FROM entries").Scan(&maxGroup); err != nil {
+		return fmt.Errorf("read groups: %w", err)
+	}
+	if group < 1 || group > maxGroup+1 {
+		return ErrInvalidGroup
+	}
+	return nil
+}
+
+// GetByID retrieves an entry by its ID with movie and ratings
+func (r *EntryRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Entry, error) {
+	entry, err := scanEntry(r.pool.QueryRow(ctx, entrySelect+` WHERE e.id = $1`, id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get entry by id: %w", err)
+	}
+
+	if err := r.loadRatings(ctx, []*model.Entry{entry}); err != nil {
+		return nil, err
+	}
+	return entry, nil
+}
+
+// loadRatings sets each entry's ratings, with person information, ordered by
+// the person's initial.
+func (r *EntryRepository) loadRatings(ctx context.Context, entries []*model.Entry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	byID := make(map[uuid.UUID]*model.Entry, len(entries))
+	entryIDs := make([]uuid.UUID, 0, len(entries))
+	for _, entry := range entries {
+		byID[entry.ID] = entry
+		entryIDs = append(entryIDs, entry.ID)
 	}
 
 	query := `
@@ -221,7 +190,7 @@ func (r *EntryRepository) getRatingsForEntries(ctx context.Context, entryIDs []u
 
 	rows, err := r.pool.Query(ctx, query, entryIDs)
 	if err != nil {
-		return nil, fmt.Errorf("get ratings for entries: %w", err)
+		return fmt.Errorf("get ratings for entries: %w", err)
 	}
 	defer rows.Close()
 
@@ -239,137 +208,58 @@ func (r *EntryRepository) getRatingsForEntries(ctx context.Context, entryIDs []u
 			&person.Initial,
 			&person.Name,
 		); err != nil {
-			return nil, fmt.Errorf("scan rating: %w", err)
+			return fmt.Errorf("scan rating: %w", err)
 		}
 		rating.Person = person
-		ratingsByEntry[rating.EntryID] = append(ratingsByEntry[rating.EntryID], rating)
+		entry := byID[rating.EntryID]
+		entry.Ratings = append(entry.Ratings, rating)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate ratings rows: %w", err)
+		return fmt.Errorf("iterate ratings rows: %w", err)
 	}
-
-	return ratingsByEntry, nil
+	return nil
 }
 
-// ListByGroup retrieves all entries for a specific group with movie and ratings
-func (r *EntryRepository) ListByGroup(ctx context.Context, groupNumber int) ([]*model.Entry, error) {
-	query := `
-		SELECT e.id, e.movie_id, e.group_number, e.position, e.added_at, e.picked_by_person_id,
-		       m.id, m.created_at, m.updated_at, m.title, m.release_year, m.poster_url, m.synopsis, m.runtime_minutes, m.tmdb_id, m.imdb_id, m.metadata_json,
-		       p.id, p.initial, p.name
-		FROM entries e
-		JOIN movies m ON e.movie_id = m.id
-		LEFT JOIN persons p ON e.picked_by_person_id = p.id
-		WHERE e.group_number = $1
-		ORDER BY e.position DESC`
-
-	rows, err := r.pool.Query(ctx, query, groupNumber)
+// ListAll retrieves every entry with movie and ratings, newest group first
+// and, within a group, in display order (highest position first).
+func (r *EntryRepository) ListAll(ctx context.Context) ([]*model.Entry, error) {
+	rows, err := r.pool.Query(ctx, entrySelect+`
+		ORDER BY e.group_number DESC, e.position DESC`)
 	if err != nil {
-		return nil, fmt.Errorf("list entries by group: %w", err)
+		return nil, fmt.Errorf("list entries: %w", err)
 	}
 	defer rows.Close()
 
 	var entries []*model.Entry
 	for rows.Next() {
-		entry := &model.Entry{}
-		movie := &model.Movie{}
-		var pickedByPersonDBID *uuid.UUID
-		var pickedByInitial *string
-		var pickedByName *string
-
-		if err := rows.Scan(
-			&entry.ID,
-			&entry.MovieID,
-			&entry.GroupNumber,
-			&entry.Position,
-			&entry.AddedAt,
-			&entry.PickedByPersonID,
-
-			&movie.ID,
-			&movie.CreatedAt,
-			&movie.UpdatedAt,
-			&movie.Title,
-			&movie.ReleaseYear,
-			&movie.PosterURL,
-			&movie.Synopsis,
-			&movie.RuntimeMinutes,
-			&movie.TMDBId,
-			&movie.IMDBId,
-			&movie.MetadataJSON,
-			&pickedByPersonDBID,
-			&pickedByInitial,
-			&pickedByName,
-		); err != nil {
+		entry, err := scanEntry(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scan entry: %w", err)
 		}
-		entry.Movie = movie
-		applyPickedByPerson(entry, pickedByPersonDBID, pickedByInitial, pickedByName)
 		entries = append(entries, entry)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list entries by group rows: %w", err)
+		return nil, fmt.Errorf("list entries rows: %w", err)
 	}
 
-	entryIDs := make([]uuid.UUID, 0, len(entries))
-	for _, entry := range entries {
-		entryIDs = append(entryIDs, entry.ID)
-	}
-
-	ratingsByEntry, err := r.getRatingsForEntries(ctx, entryIDs)
-	if err != nil {
+	if err := r.loadRatings(ctx, entries); err != nil {
 		return nil, err
 	}
-	for _, entry := range entries {
-		entry.Ratings = ratingsByEntry[entry.ID]
-	}
-
 	return entries, nil
-}
-
-// ListGroups returns all unique group numbers in ascending order
-func (r *EntryRepository) ListGroups(ctx context.Context) ([]int, error) {
-	query := `SELECT DISTINCT group_number FROM entries ORDER BY group_number`
-
-	rows, err := r.pool.Query(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("list groups: %w", err)
-	}
-	defer rows.Close()
-
-	var groups []int
-	for rows.Next() {
-		var group int
-		if err := rows.Scan(&group); err != nil {
-			return nil, fmt.Errorf("scan group: %w", err)
-		}
-		groups = append(groups, group)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate groups rows: %w", err)
-	}
-
-	return groups, nil
-}
-
-// GetCurrentGroup returns the highest group number, or 1 if no entries exist
-func (r *EntryRepository) GetCurrentGroup(ctx context.Context) (int, error) {
-	query := `SELECT COALESCE(MAX(group_number), 1) FROM entries`
-
-	var group int
-	err := r.pool.QueryRow(ctx, query).Scan(&group)
-	if err != nil {
-		return 1, fmt.Errorf("get current group: %w", err)
-	}
-
-	return group, nil
 }
 
 var (
 	// ErrEntryNotFound is returned when the entry to update does not exist.
 	ErrEntryNotFound = errors.New("entry not found")
-	// ErrEntryExistsInGroup is returned when moving an entry into a group
-	// that already contains the same movie.
+	// ErrEntryExistsInGroup is returned when adding or moving an entry into a
+	// group that already contains the same movie.
 	ErrEntryExistsInGroup = errors.New("movie already exists in target group")
+	// ErrReorderMismatch is returned when a reorder does not list exactly
+	// the group's current entries, for example after another change.
+	ErrReorderMismatch = errors.New("reorder does not match the group's entries")
+	// ErrInvalidGroup is returned when adding to a group that is neither an
+	// existing group nor the next new one.
+	ErrInvalidGroup = errors.New("group must be an existing group or the next new one")
 	// ErrEntryGroupChanged is returned when concurrent moves kept changing the
 	// entry's group and the move gave up after maxMoveAttempts.
 	ErrEntryGroupChanged = errors.New("entry group changed concurrently")
@@ -506,11 +396,8 @@ func (r *EntryRepository) Delete(ctx context.Context, id uuid.UUID) error {
 
 // ReorderEntries updates the positions of entries within a group
 // entryIDs should be in the desired visual order (first = highest position, displayed first)
+// and list every entry in the group once; otherwise it returns ErrReorderMismatch.
 func (r *EntryRepository) ReorderEntries(ctx context.Context, groupNumber int, entryIDs []uuid.UUID) error {
-	if len(entryIDs) == 0 {
-		return nil
-	}
-
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return fmt.Errorf("reorder entries begin tx: %w", err)
@@ -524,12 +411,17 @@ func (r *EntryRepository) ReorderEntries(ctx context.Context, groupNumber int, e
 		return fmt.Errorf("reorder entries lock group: %w", err)
 	}
 
-	var groupCount int
-	if err := tx.QueryRow(ctx, "SELECT COUNT(*) FROM entries WHERE group_number = $1 AND id = ANY($2::uuid[])", groupNumber, entryIDs).Scan(&groupCount); err != nil {
+	// The request must list each of the group's entries exactly once.
+	var matching, groupSize int
+	if err := tx.QueryRow(ctx,
+		"SELECT COUNT(*) FILTER (WHERE id = ANY($2::uuid[])), COUNT(*) FROM entries WHERE group_number = $1",
+		groupNumber, entryIDs,
+	).Scan(&matching, &groupSize); err != nil {
 		return fmt.Errorf("reorder entries count group: %w", err)
 	}
-	if groupCount != len(entryIDs) {
-		return fmt.Errorf("reorder entries count mismatch: group has %d matching entries, request has %d", groupCount, len(entryIDs))
+	if matching != len(entryIDs) || groupSize != len(entryIDs) {
+		return fmt.Errorf("%w: group %d has %d entries, %d of them listed, request has %d",
+			ErrReorderMismatch, groupNumber, groupSize, matching, len(entryIDs))
 	}
 
 	// Assign positions in reverse order: first visual item gets highest position

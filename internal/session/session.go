@@ -23,20 +23,25 @@ type Manager struct {
 	signingKey    []byte
 	ttl           time.Duration
 	secureCookies bool
+	epoch         int64
 	now           func() time.Time
 }
 
 // NewManager returns a session manager backed by the API token as an HMAC key.
-func NewManager(apiToken string, ttl time.Duration, secureCookies bool) *Manager {
+// A cookie is valid only while its epoch equals epoch, so raising epoch
+// signs out every browser without changing the token.
+func NewManager(apiToken string, ttl time.Duration, secureCookies bool, epoch int64) *Manager {
 	return &Manager{
 		signingKey:    []byte(apiToken),
 		ttl:           ttl,
 		secureCookies: secureCookies,
+		epoch:         epoch,
 		now:           time.Now,
 	}
 }
 
-// NewCookie creates a signed session cookie containing an expiry timestamp and random nonce.
+// NewCookie creates a signed session cookie containing an expiry timestamp,
+// a random nonce and, unless it is 0, the manager's epoch.
 func (m *Manager) NewCookie() (*http.Cookie, error) {
 	nonce := make([]byte, NonceSize)
 	if _, err := rand.Read(nonce); err != nil {
@@ -45,6 +50,11 @@ func (m *Manager) NewCookie() (*http.Cookie, error) {
 
 	expiresAt := m.now().Add(m.ttl)
 	payload := strconv.FormatInt(expiresAt.Unix(), 10) + "." + base64.RawURLEncoding.EncodeToString(nonce)
+	// Epoch 0 keeps the cookie format from before epochs existed, so the
+	// previous release still accepts it during a rolling deploy.
+	if m.epoch != 0 {
+		payload += "." + strconv.FormatInt(m.epoch, 10)
+	}
 	signature := m.sign(payload)
 
 	return &http.Cookie{
@@ -81,11 +91,19 @@ func (m *Manager) ValidRequest(r *http.Request) bool {
 	return m.Valid(cookie.Value)
 }
 
-// Valid reports whether a signed session value is authentic and unexpired.
+// Valid reports whether a signed session value is authentic, unexpired and
+// from the current epoch. The value is expires.nonce.signature for epoch 0,
+// which includes every cookie issued before epochs existed, and
+// expires.nonce.epoch.signature otherwise.
 func (m *Manager) Valid(value string) bool {
 	parts := strings.Split(value, ".")
-	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
+	if len(parts) != 3 && len(parts) != 4 {
 		return false
+	}
+	for _, part := range parts {
+		if part == "" {
+			return false
+		}
 	}
 
 	expiresAt, err := strconv.ParseInt(parts[0], 10, 64)
@@ -96,9 +114,21 @@ func (m *Manager) Valid(value string) bool {
 		return false
 	}
 
-	payload := parts[0] + "." + parts[1]
+	var epoch int64
+	if len(parts) == 4 {
+		epoch, err = strconv.ParseInt(parts[2], 10, 64)
+		// Epoch 0 has only the short form, so each epoch has one encoding.
+		if err != nil || epoch <= 0 || strconv.FormatInt(epoch, 10) != parts[2] {
+			return false
+		}
+	}
+	if epoch != m.epoch {
+		return false
+	}
+
+	payload := strings.Join(parts[:len(parts)-1], ".")
 	wantSignature := m.sign(payload)
-	return subtle.ConstantTimeCompare([]byte(parts[2]), []byte(wantSignature)) == 1
+	return subtle.ConstantTimeCompare([]byte(parts[len(parts)-1]), []byte(wantSignature)) == 1
 }
 
 func (m *Manager) sign(payload string) string {

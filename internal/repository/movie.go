@@ -20,7 +20,9 @@ func NewMovieRepository(pool *pgxpool.Pool) *MovieRepository {
 	return &MovieRepository{pool: pool}
 }
 
-// Create inserts a new movie into the database
+// Create inserts a new movie. When a movie with the same TMDB ID already
+// exists, for example because a concurrent request just added it, Create
+// returns that movie instead.
 func (r *MovieRepository) Create(ctx context.Context, input model.CreateMovieInput) (*model.Movie, error) {
 	var metadataBytes []byte
 	if input.MetadataJSON != nil {
@@ -30,6 +32,7 @@ func (r *MovieRepository) Create(ctx context.Context, input model.CreateMovieInp
 	query := `
 		INSERT INTO movies (title, release_year, poster_url, synopsis, runtime_minutes, tmdb_id, imdb_id, metadata_json)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (tmdb_id) DO NOTHING
 		RETURNING id, created_at, updated_at, title, release_year, poster_url, synopsis, runtime_minutes, tmdb_id, imdb_id, metadata_json`
 
 	movie := &model.Movie{}
@@ -55,6 +58,18 @@ func (r *MovieRepository) Create(ctx context.Context, input model.CreateMovieInp
 		&movie.IMDBId,
 		&movie.MetadataJSON,
 	)
+	if errors.Is(err, pgx.ErrNoRows) && input.TMDBId != nil {
+		// The insert waited for the conflicting row to commit, so this new
+		// statement sees it.
+		existing, err := r.GetByTMDBId(ctx, *input.TMDBId)
+		if err != nil {
+			return nil, err
+		}
+		if existing == nil {
+			return nil, fmt.Errorf("create movie: tmdb_id %d conflicted but was not found", *input.TMDBId)
+		}
+		return existing, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("create movie: %w", err)
 	}
