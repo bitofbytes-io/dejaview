@@ -43,24 +43,22 @@ func (h *StatsHandler) StatsPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *StatsHandler) buildStatsData(ctx context.Context) (*model.StatsData, error) {
-	requiredRatings := len(model.FamilyInitials)
-
 	advantageHolder, advantageGroup, err := h.statsRepo.GetAdvantageHolder(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get advantage holder: %w", err)
 	}
 
-	trophyStats, err := h.statsRepo.GetTrophyStats(ctx, requiredRatings)
+	trophyStats, err := h.statsRepo.GetTrophyStats(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get trophy stats: %w", err)
 	}
 
-	topMovies, err := h.statsRepo.GetTopRatedMovies(ctx, requiredRatings, topMovieLimit)
+	topMovies, err := h.statsRepo.GetTopRatedMovies(ctx, topMovieLimit)
 	if err != nil {
 		return nil, fmt.Errorf("get top rated movies: %w", err)
 	}
 
-	totalWatched, totalRuntime, fullyRated, err := h.statsRepo.GetSummaryStats(ctx, requiredRatings)
+	totalWatched, totalRuntime, fullyRated, err := h.statsRepo.GetSummaryStats(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get summary stats: %w", err)
 	}

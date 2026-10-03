@@ -73,6 +73,16 @@ export DATABASE_URL='postgres://dejaview:change-me@localhost:5432/dejaview?sslmo
 goose -dir migrations postgres "$DATABASE_URL" up
 ```
 
+### People
+
+A new database starts with no people. Add everyone who picks and rates movies, each with a unique one-letter initial:
+
+```bash
+psql "$DATABASE_URL" -c "INSERT INTO persons (initial, name) VALUES ('A', 'Alex'), ('B', 'Blake')"
+```
+
+A movie counts as fully rated in the Trophy Room once every person has rated it. Databases created before migration 013 keep the four people that migration 003 seeded.
+
 ## Run with Docker
 
 ```bash

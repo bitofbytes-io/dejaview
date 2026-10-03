@@ -55,14 +55,18 @@ func (r *StatsRepository) GetAdvantageHolder(ctx context.Context) (*model.Person
 	return &model.Person{ID: *personID, Initial: *initial, Name: *name}, *prevGroup, nil
 }
 
+// fullyRated is the HAVING clause, over ratings grouped by entry_id, that
+// keeps entries rated by every person.
+const fullyRated = `HAVING COUNT(DISTINCT person_id) = (SELECT COUNT(*) FROM persons)`
+
 // GetTrophyStats returns the three straightforward metrics used by the Trophy Room.
-func (r *StatsRepository) GetTrophyStats(ctx context.Context, requiredRatings int) ([]model.TrophyStats, error) {
+func (r *StatsRepository) GetTrophyStats(ctx context.Context) ([]model.TrophyStats, error) {
 	query := `
 		WITH fully_rated_entries AS (
 			SELECT entry_id
 			FROM ratings
 			GROUP BY entry_id
-			HAVING COUNT(DISTINCT person_id) = $1
+			` + fullyRated + `
 		),
 		ratings_given AS (
 			SELECT r.person_id, AVG(r.score) AS average, COUNT(*) AS rating_count
@@ -99,7 +103,7 @@ func (r *StatsRepository) GetTrophyStats(ctx context.Context, requiredRatings in
 		LEFT JOIN picked_runtime pr ON pr.person_id = p.id
 		ORDER BY p.name`
 
-	rows, err := r.pool.Query(ctx, query, requiredRatings)
+	rows, err := r.pool.Query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("get trophy stats: %w", err)
 	}
@@ -130,13 +134,13 @@ func (r *StatsRepository) GetTrophyStats(ctx context.Context, requiredRatings in
 }
 
 // GetTopRatedMovies returns up to limit fully rated entries ranked by family average.
-func (r *StatsRepository) GetTopRatedMovies(ctx context.Context, requiredRatings, limit int) ([]model.RankedMovie, error) {
+func (r *StatsRepository) GetTopRatedMovies(ctx context.Context, limit int) ([]model.RankedMovie, error) {
 	query := `
 		WITH entry_scores AS (
 			SELECT entry_id, AVG(score) AS average_rating
 			FROM ratings
 			GROUP BY entry_id
-			HAVING COUNT(DISTINCT person_id) = $1
+			` + fullyRated + `
 		)
 		SELECT e.id, e.movie_id, e.group_number, e.position, e.added_at, e.picked_by_person_id,
 			m.id, m.title, m.release_year, m.poster_url, m.runtime_minutes,
@@ -147,9 +151,9 @@ func (r *StatsRepository) GetTopRatedMovies(ctx context.Context, requiredRatings
 		JOIN movies m ON m.id = e.movie_id
 		LEFT JOIN persons p ON p.id = e.picked_by_person_id
 		ORDER BY es.average_rating DESC, LOWER(m.title), e.id
-		LIMIT $2`
+		LIMIT $1`
 
-	rows, err := r.pool.Query(ctx, query, requiredRatings, limit)
+	rows, err := r.pool.Query(ctx, query, limit)
 	if err != nil {
 		return nil, fmt.Errorf("get top rated movies: %w", err)
 	}
@@ -195,7 +199,7 @@ func (r *StatsRepository) GetTopRatedMovies(ctx context.Context, requiredRatings
 }
 
 // GetSummaryStats returns the compact family totals displayed at the bottom of the page.
-func (r *StatsRepository) GetSummaryStats(ctx context.Context, requiredRatings int) (totalWatched, totalRuntime, fullyRated int, err error) {
+func (r *StatsRepository) GetSummaryStats(ctx context.Context) (totalWatched, totalRuntime, fullyRatedCount int, err error) {
 	query := `
 		SELECT
 			(SELECT COUNT(*) FROM entries),
@@ -205,12 +209,12 @@ func (r *StatsRepository) GetSummaryStats(ctx context.Context, requiredRatings i
 				SELECT entry_id
 				FROM ratings
 				GROUP BY entry_id
-				HAVING COUNT(DISTINCT person_id) = $1
+				` + fullyRated + `
 			) fully_rated)`
 
-	err = r.pool.QueryRow(ctx, query, requiredRatings).Scan(&totalWatched, &totalRuntime, &fullyRated)
+	err = r.pool.QueryRow(ctx, query).Scan(&totalWatched, &totalRuntime, &fullyRatedCount)
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("get summary stats: %w", err)
 	}
-	return totalWatched, totalRuntime, fullyRated, nil
+	return totalWatched, totalRuntime, fullyRatedCount, nil
 }

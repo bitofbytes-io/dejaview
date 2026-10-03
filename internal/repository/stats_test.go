@@ -19,7 +19,6 @@ func TestStatsRepositoryPostgres(t *testing.T) {
 	defer cancel()
 	entries := NewEntryRepository(pool)
 	stats := NewStatsRepository(pool)
-	required := len(model.FamilyInitials)
 
 	people := map[string]uuid.UUID{}
 	rows, err := pool.Query(ctx, `SELECT initial, id FROM persons`)
@@ -73,7 +72,7 @@ func TestStatsRepositoryPostgres(t *testing.T) {
 	rate(partial, map[string]float64{"D": 10, "J": 10}) // not fully rated
 	addEntry("Dune", minutes(90), 2, "")
 
-	trophies, err := stats.GetTrophyStats(ctx, required)
+	trophies, err := stats.GetTrophyStats(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +101,7 @@ func TestStatsRepositoryPostgres(t *testing.T) {
 		}
 	}
 
-	top, err := stats.GetTopRatedMovies(ctx, required, 5)
+	top, err := stats.GetTopRatedMovies(ctx, 5)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,11 +111,11 @@ func TestStatsRepositoryPostgres(t *testing.T) {
 	if top[0].AverageRating != 7.5 || top[0].Entry.Movie.Title != "Alien" || top[0].Entry.PickedByPerson == nil || top[0].Entry.PickedByPerson.Initial != "D" {
 		t.Fatalf("unexpected top movie: %+v", top[0])
 	}
-	if limited, err := stats.GetTopRatedMovies(ctx, required, 1); err != nil || len(limited) != 1 {
+	if limited, err := stats.GetTopRatedMovies(ctx, 1); err != nil || len(limited) != 1 {
 		t.Fatalf("limit not applied: %d rows, err=%v", len(limited), err)
 	}
 
-	watched, runtime, fullyRated, err := stats.GetSummaryStats(ctx, required)
+	watched, runtime, fullyRated, err := stats.GetSummaryStats(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,6 +128,21 @@ func TestStatsRepositoryPostgres(t *testing.T) {
 	holder, group, err := stats.GetAdvantageHolder(ctx)
 	if err != nil || group != 1 || holder == nil || holder.Initial != "J" {
 		t.Fatalf("advantage holder=%+v group=%d err=%v, want J in group 1", holder, group, err)
+	}
+
+	// "Fully rated" follows the number of people: with a fifth person, no
+	// entry is fully rated until they rate it too.
+	var eve uuid.UUID
+	if err := pool.QueryRow(ctx, `INSERT INTO persons (initial, name) VALUES ('E', 'Eve') RETURNING id`).Scan(&eve); err != nil {
+		t.Fatal(err)
+	}
+	people["E"] = eve
+	if _, _, fullyRated, err := stats.GetSummaryStats(ctx); err != nil || fullyRated != 0 {
+		t.Fatalf("fully rated with five people = %d (err %v), want 0", fullyRated, err)
+	}
+	rate(alien, map[string]float64{"E": 9})
+	if top, err := stats.GetTopRatedMovies(ctx, 5); err != nil || len(top) != 1 || top[0].Entry.ID != alien {
+		t.Fatalf("top movies with five people = %+v (err %v), want only Alien", top, err)
 	}
 }
 
