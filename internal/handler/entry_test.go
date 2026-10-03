@@ -29,10 +29,6 @@ func (s *stubEntryStore) Update(ctx context.Context, id uuid.UUID, input model.U
 
 func (s *stubEntryStore) Delete(ctx context.Context, id uuid.UUID) error { return nil }
 
-func (s *stubEntryStore) ListByGroup(ctx context.Context, groupNumber int) ([]*model.Entry, error) {
-	return nil, nil
-}
-
 func (s *stubEntryStore) ReorderEntries(ctx context.Context, groupNumber int, entryIDs []uuid.UUID) error {
 	return nil
 }

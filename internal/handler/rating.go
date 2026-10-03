@@ -14,7 +14,7 @@ import (
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/drywaters/dejaview/internal/repository"
 	"github.com/drywaters/dejaview/internal/session"
-	"github.com/drywaters/dejaview/internal/ui/partials"
+	"github.com/drywaters/dejaview/internal/ui/pages"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -116,7 +116,7 @@ func (h *RatingHandler) SaveRatings(w http.ResponseWriter, r *http.Request) {
 	isAuthenticated := isAuthenticatedRequest(r, h.sessionManager)
 	slog.Info("ratings saved", "entry_id", entryID, "changes", len(changes))
 	w.Header().Set("HX-Trigger", `{"showToast": {"message": "Saved!", "type": "success"}}`)
-	partials.RatingsUpdate(entry, persons, isAuthenticated).Render(ctx, w)
+	pages.RatingsCard(entry, persons, isAuthenticated).Render(ctx, w)
 }
 
 // parseRatingChanges validates the entire submission before any rating is written.

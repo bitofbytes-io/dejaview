@@ -11,7 +11,6 @@ import (
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/drywaters/dejaview/internal/repository"
 	"github.com/drywaters/dejaview/internal/session"
-	"github.com/drywaters/dejaview/internal/ui/partials"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -26,7 +25,6 @@ type EntryHandler struct {
 type entryStore interface {
 	Update(ctx context.Context, id uuid.UUID, input model.UpdateEntryInput) error
 	Delete(ctx context.Context, id uuid.UUID) error
-	ListByGroup(ctx context.Context, groupNumber int) ([]*model.Entry, error)
 	ReorderEntries(ctx context.Context, groupNumber int, entryIDs []uuid.UUID) error
 }
 
@@ -126,28 +124,6 @@ func (h *EntryHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	slog.Info("entry deleted", "entry_id", entryID)
 	w.Header().Set("HX-Trigger", `{"showToast": {"message": "Entry deleted!", "type": "success"}, "refreshGroups": true}`)
 	w.WriteHeader(http.StatusOK)
-}
-
-// GroupPartial renders a single group section
-func (h *EntryHandler) GroupPartial(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	groupNumStr := chi.URLParam(r, "num")
-	groupNum, err := strconv.Atoi(groupNumStr)
-	if err != nil {
-		http.Error(w, "Invalid group number", http.StatusBadRequest)
-		return
-	}
-
-	entries, err := h.entryRepo.ListByGroup(ctx, groupNum)
-	if err != nil {
-		slog.Error("failed to list entries", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	isAuthenticated := isAuthenticatedRequest(r, h.sessionManager)
-	partials.GroupSection(groupNum, entries, nil, isAuthenticated).Render(ctx, w)
 }
 
 // ReorderRequest represents the JSON body for reordering entries

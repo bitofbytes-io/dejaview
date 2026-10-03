@@ -115,8 +115,7 @@ func (s *Server) Router() http.Handler {
 		r.Put("/api/entries/{id}", entryHandler.Update)
 		r.Delete("/api/entries/{id}", entryHandler.Delete)
 
-		// Group partial and reordering
-		r.Get("/partials/group/{num}", entryHandler.GroupPartial)
+		// Group reordering
 		r.Post("/api/groups/{num}/reorder", entryHandler.Reorder)
 
 		// Rating API endpoints

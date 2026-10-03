@@ -2,12 +2,9 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/drywaters/dejaview/internal/model"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -45,51 +42,3 @@ func (r *PersonRepository) GetAll(ctx context.Context) ([]*model.Person, error) 
 
 	return persons, nil
 }
-
-// GetByID retrieves a person by their ID
-func (r *PersonRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Person, error) {
-	query := `SELECT id, initial, name FROM persons WHERE id = $1`
-
-	person := &model.Person{}
-	err := r.pool.QueryRow(ctx, query, id).Scan(&person.ID, &person.Initial, &person.Name)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("get person by id: %w", err)
-	}
-
-	return person, nil
-}
-
-// GetByInitial retrieves a person by their initial
-func (r *PersonRepository) GetByInitial(ctx context.Context, initial string) (*model.Person, error) {
-	query := `SELECT id, initial, name FROM persons WHERE initial = $1`
-
-	person := &model.Person{}
-	err := r.pool.QueryRow(ctx, query, initial).Scan(&person.ID, &person.Initial, &person.Name)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("get person by initial: %w", err)
-	}
-
-	return person, nil
-}
-
-// GetAllAsMap returns all persons as a map keyed by initial
-func (r *PersonRepository) GetAllAsMap(ctx context.Context) (map[string]*model.Person, error) {
-	persons, err := r.GetAll(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	personMap := make(map[string]*model.Person, len(persons))
-	for _, p := range persons {
-		personMap[p.Initial] = p
-	}
-
-	return personMap, nil
-}
-

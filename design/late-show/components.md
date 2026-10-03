@@ -1,6 +1,6 @@
 # Components
 
-Guidelines for each component in `components.css`. Class names match the Templ markup in `internal/ui`. Rendered examples are in the design system artifact and the mockups.
+Guidelines for each component in `tailwind/styles.css`. Class names match the Templ markup in `internal/ui`. Rendered examples are in the design system artifact and the mockups.
 
 ## Header
 

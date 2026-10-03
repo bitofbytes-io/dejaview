@@ -6,18 +6,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// RatingBadge renders a rating badge with appropriate color
-templ RatingBadge(score float64) {
-	<span class={ "rating-badge", model.ScoreColorClass(score) }>
-		{ ui.FormatFloat(score) }
-	</span>
-}
-
-// EmptyRatingBadge renders an empty rating placeholder
-templ EmptyRatingBadge() {
-	<span class="rating-badge rating-empty">—</span>
-}
-
 // RatingInputSimple renders an editable rating input without form wrapper
 templ RatingInputSimple(entryID uuid.UUID, person *model.Person, currentScore *float64) {
 	<div class="rating-controls">
