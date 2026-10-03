@@ -215,13 +215,13 @@ func (r *EntryRepository) loadRatings(ctx context.Context, entries []*model.Entr
 	return nil
 }
 
-// ListByGroup retrieves all entries for a specific group with movie and ratings
-func (r *EntryRepository) ListByGroup(ctx context.Context, groupNumber int) ([]*model.Entry, error) {
+// ListAll retrieves every entry with movie and ratings, newest group first
+// and, within a group, in display order (highest position first).
+func (r *EntryRepository) ListAll(ctx context.Context) ([]*model.Entry, error) {
 	rows, err := r.pool.Query(ctx, entrySelect+`
-		WHERE e.group_number = $1
-		ORDER BY e.position DESC`, groupNumber)
+		ORDER BY e.group_number DESC, e.position DESC`)
 	if err != nil {
-		return nil, fmt.Errorf("list entries by group: %w", err)
+		return nil, fmt.Errorf("list entries: %w", err)
 	}
 	defer rows.Close()
 
@@ -234,51 +234,13 @@ func (r *EntryRepository) ListByGroup(ctx context.Context, groupNumber int) ([]*
 		entries = append(entries, entry)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list entries by group rows: %w", err)
+		return nil, fmt.Errorf("list entries rows: %w", err)
 	}
 
 	if err := r.loadRatings(ctx, entries); err != nil {
 		return nil, err
 	}
 	return entries, nil
-}
-
-// ListGroups returns all unique group numbers in ascending order
-func (r *EntryRepository) ListGroups(ctx context.Context) ([]int, error) {
-	query := `SELECT DISTINCT group_number FROM entries ORDER BY group_number`
-
-	rows, err := r.pool.Query(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("list groups: %w", err)
-	}
-	defer rows.Close()
-
-	var groups []int
-	for rows.Next() {
-		var group int
-		if err := rows.Scan(&group); err != nil {
-			return nil, fmt.Errorf("scan group: %w", err)
-		}
-		groups = append(groups, group)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate groups rows: %w", err)
-	}
-
-	return groups, nil
-}
-
-// GetCurrentGroup returns the highest group number, or 1 if no entries exist
-func (r *EntryRepository) GetCurrentGroup(ctx context.Context) (int, error) {
-	query := `SELECT COALESCE(MAX(group_number), 1) FROM entries`
-
-	var group int
-	err := r.pool.QueryRow(ctx, query).Scan(&group)
-	if err != nil {
-		return 1, fmt.Errorf("get current group: %w", err)
-	}
-
-	return group, nil
 }
 
 var (

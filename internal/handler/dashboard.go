@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"sort"
 
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/drywaters/dejaview/internal/repository"
@@ -14,9 +13,13 @@ import (
 
 // DashboardHandler handles the main dashboard
 type DashboardHandler struct {
-	entryRepo      *repository.EntryRepository
-	personRepo     *repository.PersonRepository
+	entryRepo      dashboardEntryRepository
+	personRepo     personRepository
 	sessionManager *session.Manager
+}
+
+type dashboardEntryRepository interface {
+	ListAll(ctx context.Context) ([]*model.Entry, error)
 }
 
 // NewDashboardHandler creates a new DashboardHandler
@@ -54,10 +57,11 @@ func (h *DashboardHandler) DashboardContent(w http.ResponseWriter, r *http.Reque
 	pages.DashboardContent(groupDataList, persons, currentGroup, isAuthenticated).Render(r.Context(), w)
 }
 
-// getDashboardData retrieves all data needed for the dashboard
+// getDashboardData loads every entry in one query and groups it for the
+// dashboard. The current group, where new movies go by default, is the
+// highest group number, or 1 when there are no entries.
 func (h *DashboardHandler) getDashboardData(ctx context.Context) ([]pages.GroupData, []*model.Person, int, error) {
-	// Get all group numbers
-	groups, err := h.entryRepo.ListGroups(ctx)
+	entries, err := h.entryRepo.ListAll(ctx)
 	if err != nil {
 		return nil, nil, 0, err
 	}
@@ -68,31 +72,24 @@ func (h *DashboardHandler) getDashboardData(ctx context.Context) ([]pages.GroupD
 		return nil, nil, 0, err
 	}
 
-	// Get current group for adding movies
-	currentGroup, err := h.entryRepo.GetCurrentGroup(ctx)
-	if err != nil {
-		slog.Error("failed to get current group", "error", err)
-		currentGroup = 1
+	groups := groupEntries(entries)
+	currentGroup := 1
+	if len(groups) > 0 {
+		currentGroup = groups[0].Number
 	}
+	return groups, persons, currentGroup, nil
+}
 
-	// Build group data with entries
-	groupDataList := make([]pages.GroupData, 0, len(groups))
-	for _, groupNum := range groups {
-		entries, err := h.entryRepo.ListByGroup(ctx, groupNum)
-		if err != nil {
-			slog.Error("failed to list entries for group", "group", groupNum, "error", err)
-			continue
+// groupEntries splits entries, which ListAll returns ordered by group
+// number descending, into one GroupData per group in that order.
+func groupEntries(entries []*model.Entry) []pages.GroupData {
+	var groups []pages.GroupData
+	for _, entry := range entries {
+		if len(groups) == 0 || groups[len(groups)-1].Number != entry.GroupNumber {
+			groups = append(groups, pages.GroupData{Number: entry.GroupNumber})
 		}
-		groupDataList = append(groupDataList, pages.GroupData{
-			Number:  groupNum,
-			Entries: entries,
-		})
+		last := &groups[len(groups)-1]
+		last.Entries = append(last.Entries, entry)
 	}
-
-	// Sort groups by group number (descending), so higher group numbers appear first
-	sort.Slice(groupDataList, func(i, j int) bool {
-		return groupDataList[i].Number > groupDataList[j].Number
-	})
-
-	return groupDataList, persons, currentGroup, nil
+	return groups
 }

@@ -124,13 +124,46 @@ func TestStatsRepositoryPostgres(t *testing.T) {
 		t.Fatalf("summary watched=%d runtime=%d fullyRated=%d, want 4/310/2", watched, runtime, fullyRated)
 	}
 
-	currentGroup, err := stats.GetCurrentGroup(ctx)
-	if err != nil || currentGroup != 2 {
-		t.Fatalf("current group=%d err=%v, want 2", currentGroup, err)
-	}
-	// The advantage goes to whoever picked the last entry of the previous group.
-	holder, group, err := stats.GetAdvantageHolder(ctx, currentGroup)
+	// The advantage goes to whoever picked the last entry of the group
+	// before the current (highest) one.
+	holder, group, err := stats.GetAdvantageHolder(ctx)
 	if err != nil || group != 1 || holder == nil || holder.Initial != "J" {
 		t.Fatalf("advantage holder=%+v group=%d err=%v, want J in group 1", holder, group, err)
 	}
+}
+
+// TestAdvantageHolderEdgesPostgres covers the advantage before a second group
+// exists and when the previous group's last entry has no picker.
+func TestAdvantageHolderEdgesPostgres(t *testing.T) {
+	pool := ratingTestPool(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	entries := NewEntryRepository(pool)
+	stats := NewStatsRepository(pool)
+
+	check := func(wantGroup int) {
+		t.Helper()
+		holder, group, err := stats.GetAdvantageHolder(ctx)
+		if err != nil || holder != nil || group != wantGroup {
+			t.Fatalf("advantage holder=%+v group=%d err=%v, want nil in group %d", holder, group, err, wantGroup)
+		}
+	}
+	add := func(title string, group int) {
+		t.Helper()
+		var movieID uuid.UUID
+		if err := pool.QueryRow(ctx, `INSERT INTO movies(title) VALUES ($1) RETURNING id`, title).Scan(&movieID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := entries.Create(ctx, model.CreateEntryInput{MovieID: movieID, GroupNumber: group}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	check(0) // no entries
+	add("Alien", 1)
+	check(0) // only group 1
+	add("Brazil", 3)
+	check(2) // group 2 is empty
+	add("Cube", 2)
+	check(2) // group 2's last entry has no picker
 }

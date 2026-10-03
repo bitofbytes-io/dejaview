@@ -2,12 +2,10 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -21,36 +19,40 @@ func NewStatsRepository(pool *pgxpool.Pool) *StatsRepository {
 	return &StatsRepository{pool: pool}
 }
 
-// GetAdvantageHolder returns the person who picked last in the previous group.
-func (r *StatsRepository) GetAdvantageHolder(ctx context.Context, currentGroup int) (*model.Person, int, error) {
-	if currentGroup <= 1 {
+// GetAdvantageHolder returns the person who picked last in the group before
+// the current (highest) one, and that group's number. Before a second group
+// exists it returns nil and 0; a previous group with no picker for its last
+// entry returns nil and the group number.
+func (r *StatsRepository) GetAdvantageHolder(ctx context.Context) (*model.Person, int, error) {
+	query := `
+		WITH previous AS (
+			SELECT MAX(group_number) - 1 AS group_number
+			FROM entries
+		)
+		SELECT previous.group_number, p.id, p.initial, p.name
+		FROM previous
+		LEFT JOIN LATERAL (
+			SELECT e.picked_by_person_id
+			FROM entries e
+			WHERE e.group_number = previous.group_number
+			ORDER BY e.position DESC
+			LIMIT 1
+		) last_pick ON true
+		LEFT JOIN persons p ON p.id = last_pick.picked_by_person_id`
+
+	var prevGroup *int
+	var personID *uuid.UUID
+	var initial, name *string
+	if err := r.pool.QueryRow(ctx, query).Scan(&prevGroup, &personID, &initial, &name); err != nil {
+		return nil, 0, fmt.Errorf("get advantage holder: %w", err)
+	}
+	if prevGroup == nil || *prevGroup < 1 {
 		return nil, 0, nil
 	}
-
-	prevGroup := currentGroup - 1
-	query := `
-		WITH group_max AS (
-			SELECT MAX(position) AS max_pos
-			FROM entries
-			WHERE group_number = $1
-		)
-		SELECT p.id, p.initial, p.name
-		FROM entries e
-		JOIN persons p ON e.picked_by_person_id = p.id
-		JOIN group_max gm ON e.position = gm.max_pos
-		WHERE e.group_number = $1
-		LIMIT 1`
-
-	person := &model.Person{}
-	err := r.pool.QueryRow(ctx, query, prevGroup).Scan(&person.ID, &person.Initial, &person.Name)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, prevGroup, nil
-		}
-		return nil, prevGroup, fmt.Errorf("get advantage holder: %w", err)
+	if personID == nil || initial == nil || name == nil {
+		return nil, *prevGroup, nil
 	}
-
-	return person, prevGroup, nil
+	return &model.Person{ID: *personID, Initial: *initial, Name: *name}, *prevGroup, nil
 }
 
 // GetTrophyStats returns the three straightforward metrics used by the Trophy Room.
@@ -211,15 +213,4 @@ func (r *StatsRepository) GetSummaryStats(ctx context.Context, requiredRatings i
 		return 0, 0, 0, fmt.Errorf("get summary stats: %w", err)
 	}
 	return totalWatched, totalRuntime, fullyRated, nil
-}
-
-// GetCurrentGroup returns the current (highest) group number.
-func (r *StatsRepository) GetCurrentGroup(ctx context.Context) (int, error) {
-	query := `SELECT COALESCE(MAX(group_number), 1) FROM entries`
-
-	var group int
-	if err := r.pool.QueryRow(ctx, query).Scan(&group); err != nil {
-		return 1, fmt.Errorf("get current group: %w", err)
-	}
-	return group, nil
 }

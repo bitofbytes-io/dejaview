@@ -46,12 +46,7 @@ func (h *StatsHandler) StatsPage(w http.ResponseWriter, r *http.Request) {
 func (h *StatsHandler) buildStatsData(ctx context.Context) (*model.StatsData, error) {
 	requiredRatings := len(model.FamilyInitials)
 
-	currentGroup, err := h.statsRepo.GetCurrentGroup(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get current group: %w", err)
-	}
-
-	advantageHolder, advantageGroup, err := h.statsRepo.GetAdvantageHolder(ctx, currentGroup)
+	advantageHolder, advantageGroup, err := h.statsRepo.GetAdvantageHolder(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get advantage holder: %w", err)
 	}
