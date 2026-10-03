@@ -162,22 +162,29 @@ func TestAdvantageHolderEdgesPostgres(t *testing.T) {
 			t.Fatalf("advantage holder=%+v group=%d err=%v, want nil in group %d", holder, group, err, wantGroup)
 		}
 	}
-	add := func(title string, group int) {
+	add := func(title string, group int) uuid.UUID {
 		t.Helper()
 		var movieID uuid.UUID
 		if err := pool.QueryRow(ctx, `INSERT INTO movies(title) VALUES ($1) RETURNING id`, title).Scan(&movieID); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := entries.Create(ctx, model.CreateEntryInput{MovieID: movieID, GroupNumber: group}); err != nil {
+		entry, err := entries.Create(ctx, model.CreateEntryInput{MovieID: movieID, GroupNumber: group})
+		if err != nil {
 			t.Fatal(err)
 		}
+		return entry.ID
 	}
 
 	check(0) // no entries
 	add("Alien", 1)
 	check(0) // only group 1
-	add("Brazil", 3)
+	brazil := add("Brazil", 2)
+	add("Cube", 3)
+	group1 := 1
+	if err := entries.Update(ctx, brazil, model.UpdateEntryInput{GroupNumber: &group1}); err != nil {
+		t.Fatal(err)
+	}
 	check(2) // group 2 is empty
-	add("Cube", 2)
+	add("Dune", 2)
 	check(2) // group 2's last entry has no picker
 }

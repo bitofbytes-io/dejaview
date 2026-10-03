@@ -75,7 +75,10 @@ func scanEntry(row pgx.Row) (*model.Entry, error) {
 	return entry, nil
 }
 
-// Create inserts a new entry into the database
+// Create adds a movie to the end of a group. The group must be an existing
+// group or the next new one (1 through the highest group + 1); otherwise
+// Create returns ErrInvalidGroup. It returns ErrEntryExistsInGroup when the
+// movie is already in the group.
 func (r *EntryRepository) Create(ctx context.Context, input model.CreateEntryInput) (*model.Entry, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
@@ -90,10 +93,19 @@ func (r *EntryRepository) Create(ctx context.Context, input model.CreateEntryInp
 		return nil, fmt.Errorf("create entry lock group: %w", err)
 	}
 
+	var maxGroup int
+	if err := tx.QueryRow(ctx, "SELECT COALESCE(MAX(group_number), 0) FROM entries").Scan(&maxGroup); err != nil {
+		return nil, fmt.Errorf("create entry read groups: %w", err)
+	}
+	if input.GroupNumber < 1 || input.GroupNumber > maxGroup+1 {
+		return nil, ErrInvalidGroup
+	}
+
 	// Insert with position = max position in group + 1 (or 1 if no entries in group)
 	query := `
 		INSERT INTO entries (movie_id, group_number, picked_by_person_id, position)
 		VALUES ($1, $2, $3, COALESCE((SELECT MAX(position) FROM entries WHERE group_number = $2), 0) + 1)
+		ON CONFLICT (movie_id, group_number) DO NOTHING
 		RETURNING id, movie_id, group_number, position, added_at, picked_by_person_id`
 
 	entry := &model.Entry{}
@@ -109,6 +121,9 @@ func (r *EntryRepository) Create(ctx context.Context, input model.CreateEntryInp
 		&entry.AddedAt,
 		&entry.PickedByPersonID,
 	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrEntryExistsInGroup
+	}
 	if err != nil {
 		return nil, fmt.Errorf("create entry: %w", err)
 	}
@@ -133,32 +148,6 @@ func (r *EntryRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Ent
 	if err := r.loadRatings(ctx, []*model.Entry{entry}); err != nil {
 		return nil, err
 	}
-	return entry, nil
-}
-
-// GetByMovieAndGroup retrieves an entry by movie ID and group number
-func (r *EntryRepository) GetByMovieAndGroup(ctx context.Context, movieID uuid.UUID, groupNumber int) (*model.Entry, error) {
-	query := `
-		SELECT id, movie_id, group_number, position, added_at, picked_by_person_id
-		FROM entries
-		WHERE movie_id = $1 AND group_number = $2`
-
-	entry := &model.Entry{}
-	err := r.pool.QueryRow(ctx, query, movieID, groupNumber).Scan(
-		&entry.ID,
-		&entry.MovieID,
-		&entry.GroupNumber,
-		&entry.Position,
-		&entry.AddedAt,
-		&entry.PickedByPersonID,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("get entry by movie and group: %w", err)
-	}
-
 	return entry, nil
 }
 
@@ -246,9 +235,12 @@ func (r *EntryRepository) ListAll(ctx context.Context) ([]*model.Entry, error) {
 var (
 	// ErrEntryNotFound is returned when the entry to update does not exist.
 	ErrEntryNotFound = errors.New("entry not found")
-	// ErrEntryExistsInGroup is returned when moving an entry into a group
-	// that already contains the same movie.
+	// ErrEntryExistsInGroup is returned when adding or moving an entry into a
+	// group that already contains the same movie.
 	ErrEntryExistsInGroup = errors.New("movie already exists in target group")
+	// ErrInvalidGroup is returned when adding to a group that is neither an
+	// existing group nor the next new one.
+	ErrInvalidGroup = errors.New("group must be an existing group or the next new one")
 	// ErrEntryGroupChanged is returned when concurrent moves kept changing the
 	// entry's group and the move gave up after maxMoveAttempts.
 	ErrEntryGroupChanged = errors.New("entry group changed concurrently")

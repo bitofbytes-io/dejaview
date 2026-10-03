@@ -10,7 +10,6 @@ import (
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -30,6 +29,16 @@ func createTestEntry(t *testing.T, ctx context.Context, repo *EntryRepository, m
 		t.Fatal(err)
 	}
 	return entry
+}
+
+// insertTestEntry stores an entry at the end of a group with plain SQL, for
+// tests that need a group number Create rejects because it skips ahead.
+func insertTestEntry(t *testing.T, ctx context.Context, pool *pgxpool.Pool, movieID uuid.UUID, group int) {
+	t.Helper()
+	if _, err := pool.Exec(ctx, `INSERT INTO entries (movie_id, group_number, position)
+		VALUES ($1, $2, COALESCE((SELECT MAX(position) FROM entries WHERE group_number = $2), 0) + 1)`, movieID, group); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func entryGroupAndPosition(t *testing.T, ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (int, int) {
@@ -110,7 +119,7 @@ func TestEntryUpdateConcurrentMovesPostgres(t *testing.T) {
 	defer cancel()
 	repo := NewEntryRepository(pool)
 
-	createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Target resident"), 10)
+	insertTestEntry(t, ctx, pool, insertTestMovie(t, ctx, pool, "Target resident"), 10)
 	const movers = 8
 	ids := make([]uuid.UUID, movers)
 	for i := range ids {
@@ -220,8 +229,8 @@ func TestEntryUpdateRetriesAfterCompetingMovePostgres(t *testing.T) {
 	// Advisory locks are database-wide, so use groups no other test touches.
 	const source, competing, target = 101, 102, 103
 	for _, group := range []int{source, competing, target} {
-		createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Resident"), group)
-		createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Resident"), group)
+		insertTestEntry(t, ctx, pool, insertTestMovie(t, ctx, pool, "Resident"), group)
+		insertTestEntry(t, ctx, pool, insertTestMovie(t, ctx, pool, "Resident"), group)
 	}
 	// The contested entry is last in its group, so moving it out leaves no gap.
 	contested := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Contested"), source)
@@ -269,8 +278,8 @@ func TestEntryUpdateSameGroupRechecksUnderLockPostgres(t *testing.T) {
 	// Advisory locks are database-wide, so use groups no other test touches.
 	const home, competing = 111, 112
 	for _, group := range []int{home, competing} {
-		createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Resident"), group)
-		createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Resident"), group)
+		insertTestEntry(t, ctx, pool, insertTestMovie(t, ctx, pool, "Resident"), group)
+		insertTestEntry(t, ctx, pool, insertTestMovie(t, ctx, pool, "Resident"), group)
 	}
 	contested := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Contested"), home)
 	var picker uuid.UUID
@@ -325,11 +334,93 @@ func TestEntryCreateAssignsPositionsPostgres(t *testing.T) {
 		}
 	}
 
-	// The handler relies on a unique violation to detect duplicates within a group.
-	_, err := repo.Create(ctx, model.CreateEntryInput{MovieID: movie, GroupNumber: 1})
-	var pgErr *pgconn.PgError
-	if !errors.As(err, &pgErr) || pgErr.Code != "23505" || pgErr.ConstraintName != "entries_movie_group_unique" {
-		t.Fatalf("expected entries_movie_group_unique violation, got %v", err)
+	// Adding a movie that is already in the group changes nothing.
+	if _, err := repo.Create(ctx, model.CreateEntryInput{MovieID: movie, GroupNumber: 1}); !errors.Is(err, ErrEntryExistsInGroup) {
+		t.Fatalf("expected ErrEntryExistsInGroup, got %v", err)
+	}
+
+	// Only existing groups (1, 2) and the next new one (3) accept entries.
+	for _, group := range []int{0, -1, 4, 1000} {
+		if _, err := repo.Create(ctx, model.CreateEntryInput{MovieID: movie, GroupNumber: group}); !errors.Is(err, ErrInvalidGroup) {
+			t.Fatalf("group %d: expected ErrInvalidGroup, got %v", group, err)
+		}
+	}
+	if entry := createTestEntry(t, ctx, repo, movie, 3); entry.GroupNumber != 3 || entry.Position != 1 {
+		t.Fatalf("new group entry at group=%d position=%d, want 3/1", entry.GroupNumber, entry.Position)
+	}
+	var count int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM entries`).Scan(&count); err != nil || count != 5 {
+		t.Fatalf("got %d entries (err %v), want 5", count, err)
+	}
+}
+
+func TestEntryCreateInEmptyDatabasePostgres(t *testing.T) {
+	pool := ratingTestPool(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	repo := NewEntryRepository(pool)
+
+	movie := insertTestMovie(t, ctx, pool, "First")
+	if _, err := repo.Create(ctx, model.CreateEntryInput{MovieID: movie, GroupNumber: 2}); !errors.Is(err, ErrInvalidGroup) {
+		t.Fatalf("group 2 in an empty database: expected ErrInvalidGroup, got %v", err)
+	}
+	if entry := createTestEntry(t, ctx, repo, movie, 1); entry.GroupNumber != 1 || entry.Position != 1 {
+		t.Fatalf("first entry at group=%d position=%d, want 1/1", entry.GroupNumber, entry.Position)
+	}
+}
+
+// TestMovieCreateReturnsExistingTMDBMoviePostgres covers two requests adding
+// the same TMDB movie at once: both get the one stored movie.
+func TestMovieCreateReturnsExistingTMDBMoviePostgres(t *testing.T) {
+	pool := ratingTestPool(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	movies := NewMovieRepository(pool)
+
+	tmdbID := 348
+	first, err := movies.Create(ctx, model.CreateMovieInput{Title: "Alien", TMDBId: &tmdbID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := movies.Create(ctx, model.CreateMovieInput{Title: "Alien (again)", TMDBId: &tmdbID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.ID != first.ID || second.Title != "Alien" {
+		t.Fatalf("second create returned %+v, want the existing movie %s", second, first.ID)
+	}
+
+	// Concurrent creates all land on one row.
+	otherID := 949
+	const creators = 6
+	ids := make(chan uuid.UUID, creators)
+	errs := make(chan error, creators)
+	var wg sync.WaitGroup
+	for i := 0; i < creators; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			movie, err := movies.Create(ctx, model.CreateMovieInput{Title: "Heat", TMDBId: &otherID})
+			if err != nil {
+				errs <- err
+				return
+			}
+			ids <- movie.ID
+		}()
+	}
+	wg.Wait()
+	close(ids)
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	var want uuid.UUID
+	for id := range ids {
+		if want == uuid.Nil {
+			want = id
+		} else if id != want {
+			t.Fatalf("concurrent creates returned %s and %s", want, id)
+		}
 	}
 }
 
@@ -344,6 +435,8 @@ func TestEntryCreateConcurrentPostgres(t *testing.T) {
 	for i := range movies {
 		movies[i] = insertTestMovie(t, ctx, pool, "Concurrent")
 	}
+	// Group 5 is the next new group.
+	insertTestEntry(t, ctx, pool, insertTestMovie(t, ctx, pool, "Group 4"), 4)
 
 	var wg sync.WaitGroup
 	positions := make(chan int, creators)
@@ -468,8 +561,8 @@ func TestEntryListAllPostgres(t *testing.T) {
 
 	g1a := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "One A"), 1)
 	g1b := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "One B"), 1)
-	g3 := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Three"), 3)
 	g2a := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Two A"), 2)
+	g3 := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Three"), 3)
 	g2b := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Two B"), 2)
 	g2c := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Two C"), 2)
 	if err := repo.ReorderEntries(ctx, 2, []uuid.UUID{g2b.ID, g2c.ID, g2a.ID}); err != nil {

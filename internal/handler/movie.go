@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -17,7 +18,6 @@ import (
 	"github.com/drywaters/dejaview/internal/ui/partials"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // MovieHandler handles movie-related requests
@@ -35,7 +35,6 @@ type movieRepository interface {
 
 type movieEntryRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*model.Entry, error)
-	GetByMovieAndGroup(ctx context.Context, movieID uuid.UUID, groupNumber int) (*model.Entry, error)
 	Create(ctx context.Context, input model.CreateEntryInput) (*model.Entry, error)
 }
 
@@ -130,9 +129,11 @@ func (h *MovieHandler) AddFromTMDB(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The repository also rejects groups past the next new one.
 	groupNumber, err := strconv.Atoi(groupNumberStr)
-	if err != nil {
-		groupNumber = 1
+	if err != nil || groupNumber < 1 {
+		rejectAddGroup(w)
+		return
 	}
 
 	// Check if movie already exists in library
@@ -198,29 +199,31 @@ func (h *MovieHandler) AddFromTMDB(w http.ResponseWriter, r *http.Request) {
 		MovieID:     movie.ID,
 		GroupNumber: groupNumber,
 	})
+	if errors.Is(err, repository.ErrInvalidGroup) {
+		rejectAddGroup(w)
+		return
+	}
+	if errors.Is(err, repository.ErrEntryExistsInGroup) {
+		slog.Info("movie already in group", "movie_id", movie.ID, "tmdb_id", tmdbID, "group_number", groupNumber)
+		w.Header().Set("HX-Trigger", fmt.Sprintf(`{"showToast": {"message": "Already in Group %d", "type": "error"}}`, groupNumber))
+		http.Error(w, "Movie is already in that group", http.StatusConflict)
+		return
+	}
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			entry, err = h.entryRepo.GetByMovieAndGroup(ctx, movie.ID, groupNumber)
-			if err != nil {
-				slog.Error("failed to get existing entry", "error", err)
-				http.Error(w, "Failed to retrieve entry", http.StatusInternalServerError)
-				return
-			}
-			if entry == nil {
-				slog.Error("duplicate entry reported but not found", "error", err)
-				http.Error(w, "Failed to create entry", http.StatusInternalServerError)
-				return
-			}
-		} else {
-			slog.Error("failed to create entry", "error", err)
-			http.Error(w, "Failed to create entry", http.StatusInternalServerError)
-			return
-		}
+		slog.Error("failed to create entry", "error", err)
+		http.Error(w, "Failed to create entry", http.StatusInternalServerError)
+		return
 	}
 
 	// Return success with HX-Trigger to refresh the group
 	slog.Info("movie entry added", "entry_id", entry.ID, "movie_id", movie.ID, "tmdb_id", tmdbID, "group_number", groupNumber, "reused_movie", reusedMovie)
 	w.Header().Set("HX-Trigger", `{"showToast": {"message": "Movie added!", "type": "success"}, "refreshGroups": true}`)
 	w.WriteHeader(http.StatusOK)
+}
+
+// rejectAddGroup answers an add whose group is not an existing group or the
+// next new one, which a stale dashboard can send, and refreshes the groups.
+func rejectAddGroup(w http.ResponseWriter) {
+	w.Header().Set("HX-Trigger", `{"showToast": {"message": "Pick a group from the list", "type": "error"}, "refreshGroups": true}`)
+	http.Error(w, "Invalid group number", http.StatusBadRequest)
 }
