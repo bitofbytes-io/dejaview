@@ -106,22 +106,31 @@
         })
         .then(response => {
             if (!response.ok) {
-                throw new Error('Failed to save order');
+                // 409: the group changed since the page loaded.
+                orderNotSaved(response.status === 409
+                    ? 'This group changed, so here is the latest order'
+                    : 'Failed to save order');
+                return;
             }
-            // Show success toast via HTMX trigger
-            const event = new CustomEvent('showToast', {
-                detail: { message: 'Order updated!', type: 'success' }
-            });
-            document.body.dispatchEvent(event);
+            showToast('Order updated!', 'success');
         })
         .catch(error => {
             console.error('Error saving order:', error);
-            // Show error toast
-            const event = new CustomEvent('showToast', {
-                detail: { message: 'Failed to save order', type: 'error' }
-            });
-            document.body.dispatchEvent(event);
+            orderNotSaved('Failed to save order');
         });
+    }
+
+    // orderNotSaved reports the failure and reloads the groups, so the page
+    // does not keep showing an order the server did not save.
+    function orderNotSaved(message) {
+        showToast(message, 'error');
+        document.body.dispatchEvent(new CustomEvent('refreshGroups'));
+    }
+
+    function showToast(message, type) {
+        document.body.dispatchEvent(new CustomEvent('showToast', {
+            detail: { message: message, type: type }
+        }));
     }
 
     // Initialize on page load

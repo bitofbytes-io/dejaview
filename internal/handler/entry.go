@@ -157,7 +157,13 @@ func (h *EntryHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 		entryIDs = append(entryIDs, id)
 	}
 
-	if err := h.entryRepo.ReorderEntries(ctx, groupNum, entryIDs); err != nil {
+	err = h.entryRepo.ReorderEntries(ctx, groupNum, entryIDs)
+	if errors.Is(err, repository.ErrReorderMismatch) {
+		slog.Info("reorder rejected", "group_number", groupNum, "error", err)
+		http.Error(w, "The group changed; refresh and try again", http.StatusConflict)
+		return
+	}
+	if err != nil {
 		slog.Error("failed to reorder entries", "error", err)
 		http.Error(w, "Failed to reorder entries", http.StatusInternalServerError)
 		return

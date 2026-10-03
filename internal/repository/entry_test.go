@@ -520,9 +520,16 @@ func TestEntryReorderPostgres(t *testing.T) {
 		t.Fatalf("first visual entry has position %d, want 3", position)
 	}
 
-	// An entry from another group rejects the whole reorder and changes nothing.
-	if err := repo.ReorderEntries(ctx, 1, []uuid.UUID{second.ID, other.ID, first.ID}); err == nil {
-		t.Fatal("expected reorder with foreign entry to fail")
+	// A request that does not list exactly the group's entries changes nothing.
+	for name, ids := range map[string][]uuid.UUID{
+		"foreign entry": {second.ID, other.ID, first.ID},
+		"missing entry": {second.ID, first.ID},
+		"duplicate":     {second.ID, first.ID, first.ID},
+		"extra entry":   {second.ID, third.ID, first.ID, other.ID},
+	} {
+		if err := repo.ReorderEntries(ctx, 1, ids); !errors.Is(err, ErrReorderMismatch) {
+			t.Fatalf("%s: expected ErrReorderMismatch, got %v", name, err)
+		}
 	}
 	assertOrder(first.ID, third.ID, second.ID)
 	if group, position := entryGroupAndPosition(t, ctx, pool, other.ID); group != 2 || position != 1 {

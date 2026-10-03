@@ -238,6 +238,9 @@ var (
 	// ErrEntryExistsInGroup is returned when adding or moving an entry into a
 	// group that already contains the same movie.
 	ErrEntryExistsInGroup = errors.New("movie already exists in target group")
+	// ErrReorderMismatch is returned when a reorder does not list exactly
+	// the group's current entries, for example after another change.
+	ErrReorderMismatch = errors.New("reorder does not match the group's entries")
 	// ErrInvalidGroup is returned when adding to a group that is neither an
 	// existing group nor the next new one.
 	ErrInvalidGroup = errors.New("group must be an existing group or the next new one")
@@ -377,6 +380,7 @@ func (r *EntryRepository) Delete(ctx context.Context, id uuid.UUID) error {
 
 // ReorderEntries updates the positions of entries within a group
 // entryIDs should be in the desired visual order (first = highest position, displayed first)
+// and list every entry in the group once; otherwise it returns ErrReorderMismatch.
 func (r *EntryRepository) ReorderEntries(ctx context.Context, groupNumber int, entryIDs []uuid.UUID) error {
 	if len(entryIDs) == 0 {
 		return nil
@@ -395,12 +399,17 @@ func (r *EntryRepository) ReorderEntries(ctx context.Context, groupNumber int, e
 		return fmt.Errorf("reorder entries lock group: %w", err)
 	}
 
-	var groupCount int
-	if err := tx.QueryRow(ctx, "SELECT COUNT(*) FROM entries WHERE group_number = $1 AND id = ANY($2::uuid[])", groupNumber, entryIDs).Scan(&groupCount); err != nil {
+	// The request must list each of the group's entries exactly once.
+	var matching, groupSize int
+	if err := tx.QueryRow(ctx,
+		"SELECT COUNT(*) FILTER (WHERE id = ANY($2::uuid[])), COUNT(*) FROM entries WHERE group_number = $1",
+		groupNumber, entryIDs,
+	).Scan(&matching, &groupSize); err != nil {
 		return fmt.Errorf("reorder entries count group: %w", err)
 	}
-	if groupCount != len(entryIDs) {
-		return fmt.Errorf("reorder entries count mismatch: group has %d matching entries, request has %d", groupCount, len(entryIDs))
+	if matching != len(entryIDs) || groupSize != len(entryIDs) {
+		return fmt.Errorf("%w: group %d has %d entries, %d of them listed, request has %d",
+			ErrReorderMismatch, groupNumber, groupSize, matching, len(entryIDs))
 	}
 
 	// Assign positions in reverse order: first visual item gets highest position
