@@ -45,8 +45,19 @@ func (s *stubMovieRepo) Create(ctx context.Context, input model.CreateMovieInput
 }
 
 type stubMovieEntryRepo struct {
+	checkErr  error
 	createErr error
 	created   []model.CreateEntryInput
+}
+
+func (s *stubMovieEntryRepo) CheckGroup(ctx context.Context, group int) error {
+	if s.checkErr != nil {
+		return s.checkErr
+	}
+	if group < 1 {
+		return repository.ErrInvalidGroup
+	}
+	return nil
 }
 
 func (s *stubMovieEntryRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.Entry, error) {
@@ -173,10 +184,20 @@ func TestAddFromTMDBRejectsInvalidGroup(t *testing.T) {
 		})
 	}
 
-	// Past the next new group, the repository decides.
+	// A stale group past the next new one stores nothing, not even a new movie.
+	movies := &stubMovieRepo{}
+	client := &stubTMDBClient{details: &tmdb.MovieDetails{Title: "X"}}
+	stale := &stubMovieEntryRepo{checkErr: repository.ErrInvalidGroup}
+	recorder := postAddFromTMDB(&MovieHandler{movieRepo: movies, entryRepo: stale, tmdbClient: client}, url.Values{"tmdb_id": {"348"}, "group_number": {"99"}})
+	if recorder.Code != http.StatusBadRequest || client.getCalls != 0 || len(movies.created) != 0 || len(stale.created) != 0 {
+		t.Fatalf("stale group 99: status %d, fetches=%d movies=%d entries=%d; want 400 and no writes",
+			recorder.Code, client.getCalls, len(movies.created), len(stale.created))
+	}
+
+	// A group that became invalid after the check is still rejected by Create.
 	entries := &stubMovieEntryRepo{createErr: repository.ErrInvalidGroup}
 	handler := &MovieHandler{movieRepo: &stubMovieRepo{existing: &model.Movie{ID: uuid.New()}}, entryRepo: entries, tmdbClient: &stubTMDBClient{}}
-	recorder := postAddFromTMDB(handler, url.Values{"tmdb_id": {"348"}, "group_number": {"99"}})
+	recorder = postAddFromTMDB(handler, url.Values{"tmdb_id": {"348"}, "group_number": {"99"}})
 	if recorder.Code != http.StatusBadRequest || strings.Contains(recorder.Header().Get("HX-Trigger"), "Movie added!") {
 		t.Fatalf("group 99: status %d trigger %q, want 400 without success", recorder.Code, recorder.Header().Get("HX-Trigger"))
 	}
@@ -193,6 +214,7 @@ func TestAddFromTMDBErrors(t *testing.T) {
 		{"invalid tmdb id", url.Values{"tmdb_id": {"abc"}, "group_number": {"1"}}, &stubTMDBClient{}, &stubMovieEntryRepo{}, http.StatusBadRequest},
 		{"tmdb failure", url.Values{"tmdb_id": {"1"}, "group_number": {"1"}}, &stubTMDBClient{err: errors.New("down")}, &stubMovieEntryRepo{}, http.StatusInternalServerError},
 		{"tmdb not found", url.Values{"tmdb_id": {"1"}, "group_number": {"1"}}, &stubTMDBClient{}, &stubMovieEntryRepo{}, http.StatusNotFound},
+		{"group check failure", url.Values{"tmdb_id": {"1"}, "group_number": {"1"}}, &stubTMDBClient{details: &tmdb.MovieDetails{Title: "X"}}, &stubMovieEntryRepo{checkErr: errors.New("db down")}, http.StatusInternalServerError},
 		{"entry create failure", url.Values{"tmdb_id": {"1"}, "group_number": {"1"}}, &stubTMDBClient{details: &tmdb.MovieDetails{Title: "X"}}, &stubMovieEntryRepo{createErr: errors.New("db down")}, http.StatusInternalServerError},
 	}
 	for _, tc := range cases {

@@ -81,13 +81,13 @@ goose -dir migrations postgres "$DATABASE_URL" up
 
 ### People
 
-A new database starts with no people. Add everyone who picks and rates movies, each with a unique one-letter initial:
+Migration 003 seeds four example people (D, J, C and A). On a new install, replace them with everyone who picks and rates movies, each with a unique one-letter initial, before anyone picks or rates a movie:
 
 ```bash
-psql "$DATABASE_URL" -c "INSERT INTO persons (initial, name) VALUES ('A', 'Alex'), ('B', 'Blake')"
+psql "$DATABASE_URL" -c "DELETE FROM persons" -c "INSERT INTO persons (initial, name) VALUES ('A', 'Alex'), ('B', 'Blake')"
 ```
 
-A movie counts as fully rated in the Trophy Room once every person has rated it. Migration 003 seeds four people; migration 013 removes them again from a database that has no movies on its list yet.
+The `DELETE` fails once someone has ratings, so it cannot remove anyone's scores; rename a person instead with `UPDATE persons SET name = 'Alex' WHERE initial = 'A'`. A movie counts as fully rated in the Trophy Room once every person has rated it.
 
 ## Run with Docker
 

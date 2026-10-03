@@ -35,6 +35,7 @@ type movieRepository interface {
 
 type movieEntryRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*model.Entry, error)
+	CheckGroup(ctx context.Context, group int) error
 	Create(ctx context.Context, input model.CreateEntryInput) (*model.Entry, error)
 }
 
@@ -129,10 +130,19 @@ func (h *MovieHandler) AddFromTMDB(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The repository also rejects groups past the next new one.
+	// Reject a stale group before storing a new movie for it; Create checks
+	// again under the group's lock.
 	groupNumber, err := strconv.Atoi(groupNumberStr)
-	if err != nil || groupNumber < 1 {
+	if err != nil {
 		rejectAddGroup(w)
+		return
+	}
+	if err := h.entryRepo.CheckGroup(ctx, groupNumber); errors.Is(err, repository.ErrInvalidGroup) {
+		rejectAddGroup(w)
+		return
+	} else if err != nil {
+		slog.Error("failed to check group", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 

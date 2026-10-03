@@ -2,10 +2,8 @@ package repository
 
 import (
 	"context"
-	"math"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -18,15 +16,6 @@ import (
 
 // Each run uses its own schema and applies the actual forward migrations.
 func ratingTestPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	pool := testSchemaPool(t)
-	applyMigrations(t, pool, 1, math.MaxInt)
-	return pool
-}
-
-// testSchemaPool returns a pool whose search_path is a new, empty schema that
-// is dropped when the test ends.
-func testSchemaPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	databaseURL := os.Getenv("DEJAVIEW_TEST_DATABASE_URL")
 	if databaseURL == "" {
@@ -61,27 +50,11 @@ func testSchemaPool(t *testing.T) *pgxpool.Pool {
 		t.Fatal(err)
 	}
 	t.Cleanup(pool.Close)
-	return pool
-}
-
-// applyMigrations runs the Up section of each migration numbered from..to,
-// without recording it in goose_db_version.
-func applyMigrations(t *testing.T, pool *pgxpool.Pool, from, to int) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
 	files, err := filepath.Glob("../../migrations/*.sql")
 	if err != nil || len(files) == 0 {
 		t.Fatalf("migrations: %v", err)
 	}
 	for _, file := range files {
-		version, err := strconv.Atoi(strings.SplitN(filepath.Base(file), "_", 2)[0])
-		if err != nil {
-			t.Fatalf("migration %s: %v", file, err)
-		}
-		if version < from || version > to {
-			continue
-		}
 		content, err := os.ReadFile(file)
 		if err != nil {
 			t.Fatal(err)
@@ -91,6 +64,7 @@ func applyMigrations(t *testing.T, pool *pgxpool.Pool, from, to int) {
 			t.Fatalf("apply %s: %v", file, err)
 		}
 	}
+	return pool
 }
 
 type storedRating struct {

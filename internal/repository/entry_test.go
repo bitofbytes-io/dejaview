@@ -341,8 +341,16 @@ func TestEntryCreateAssignsPositionsPostgres(t *testing.T) {
 
 	// Only existing groups (1, 2) and the next new one (3) accept entries.
 	for _, group := range []int{0, -1, 4, 1000} {
+		if err := repo.CheckGroup(ctx, group); !errors.Is(err, ErrInvalidGroup) {
+			t.Fatalf("CheckGroup(%d): expected ErrInvalidGroup, got %v", group, err)
+		}
 		if _, err := repo.Create(ctx, model.CreateEntryInput{MovieID: movie, GroupNumber: group}); !errors.Is(err, ErrInvalidGroup) {
 			t.Fatalf("group %d: expected ErrInvalidGroup, got %v", group, err)
+		}
+	}
+	for _, group := range []int{1, 2, 3} {
+		if err := repo.CheckGroup(ctx, group); err != nil {
+			t.Fatalf("CheckGroup(%d): %v", group, err)
 		}
 	}
 	if entry := createTestEntry(t, ctx, repo, movie, 3); entry.GroupNumber != 3 || entry.Position != 1 {

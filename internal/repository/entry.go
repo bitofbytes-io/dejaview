@@ -93,12 +93,8 @@ func (r *EntryRepository) Create(ctx context.Context, input model.CreateEntryInp
 		return nil, fmt.Errorf("create entry lock group: %w", err)
 	}
 
-	var maxGroup int
-	if err := tx.QueryRow(ctx, "SELECT COALESCE(MAX(group_number), 0) FROM entries").Scan(&maxGroup); err != nil {
-		return nil, fmt.Errorf("create entry read groups: %w", err)
-	}
-	if input.GroupNumber < 1 || input.GroupNumber > maxGroup+1 {
-		return nil, ErrInvalidGroup
+	if err := checkGroup(ctx, tx, input.GroupNumber); err != nil {
+		return nil, err
 	}
 
 	// Insert with position = max position in group + 1 (or 1 if no entries in group)
@@ -133,6 +129,26 @@ func (r *EntryRepository) Create(ctx context.Context, input model.CreateEntryInp
 	}
 
 	return entry, nil
+}
+
+// CheckGroup returns ErrInvalidGroup unless group is an existing group or
+// the next new one. Create checks again under the group's lock; this lets a
+// caller reject a stale group before writing anything else.
+func (r *EntryRepository) CheckGroup(ctx context.Context, group int) error {
+	return checkGroup(ctx, r.pool, group)
+}
+
+func checkGroup(ctx context.Context, db interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}, group int) error {
+	var maxGroup int
+	if err := db.QueryRow(ctx, "SELECT COALESCE(MAX(group_number), 0) FROM entries").Scan(&maxGroup); err != nil {
+		return fmt.Errorf("read groups: %w", err)
+	}
+	if group < 1 || group > maxGroup+1 {
+		return ErrInvalidGroup
+	}
+	return nil
 }
 
 // GetByID retrieves an entry by its ID with movie and ratings
