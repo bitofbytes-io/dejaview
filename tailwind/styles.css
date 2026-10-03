@@ -7,7 +7,6 @@
    A rented tape playing on a CRT at midnight: scanlines, vignette, grain,
    RGB-split display type and the VCR's on-screen display around a clean,
    readable app. Spec: design/late-show/ (brand book, tokens, components).
-   Tokens mirror design/late-show/tokens.css; change both together.
    ============================================================================= */
 
 @layer base {
@@ -99,9 +98,7 @@
 }
 
 @layer components {
-/* Component layer (from design/late-show/components.css).
-   Class names match the Templ markup in internal/ui so this can replace the
-   @layer components block in tailwind/styles.css. Values come from tokens.css. */
+/* Component layer. Class names match the Templ markup in internal/ui. */
 
 /* ---------- Base ---------- */
 .dv-page {
