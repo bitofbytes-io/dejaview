@@ -214,6 +214,10 @@ func TestSaveRatings_UpsertAndDelete(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
 	}
+	// The response replaces #ratings-section via outerHTML, so it must keep that id.
+	if !strings.HasPrefix(strings.TrimSpace(recorder.Body.String()), `<div class="card" id="ratings-section">`) {
+		t.Fatalf("expected ratings card fragment root, got %q", recorder.Body.String())
+	}
 	if entryRepo.calls != 2 {
 		t.Fatalf("expected entry repo to be called twice, got %d", entryRepo.calls)
 	}
