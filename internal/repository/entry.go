@@ -21,7 +21,50 @@ func NewEntryRepository(pool *pgxpool.Pool) *EntryRepository {
 	return &EntryRepository{pool: pool}
 }
 
-func applyPickedByPerson(entry *model.Entry, pickedByPersonDBID *uuid.UUID, pickedByInitial, pickedByName *string) {
+// entrySelect reads an entry with its movie and picker. Callers append the
+// WHERE and ORDER BY clauses and read rows with scanEntry.
+const entrySelect = `
+	SELECT e.id, e.movie_id, e.group_number, e.position, e.added_at, e.picked_by_person_id,
+	       m.id, m.created_at, m.updated_at, m.title, m.release_year, m.poster_url, m.synopsis, m.runtime_minutes, m.tmdb_id, m.imdb_id, m.metadata_json,
+	       p.id, p.initial, p.name
+	FROM entries e
+	JOIN movies m ON e.movie_id = m.id
+	LEFT JOIN persons p ON e.picked_by_person_id = p.id`
+
+// scanEntry reads one entrySelect row.
+func scanEntry(row pgx.Row) (*model.Entry, error) {
+	entry := &model.Entry{}
+	movie := &model.Movie{}
+	var pickedByPersonDBID *uuid.UUID
+	var pickedByInitial *string
+	var pickedByName *string
+
+	if err := row.Scan(
+		&entry.ID,
+		&entry.MovieID,
+		&entry.GroupNumber,
+		&entry.Position,
+		&entry.AddedAt,
+		&entry.PickedByPersonID,
+		&movie.ID,
+		&movie.CreatedAt,
+		&movie.UpdatedAt,
+		&movie.Title,
+		&movie.ReleaseYear,
+		&movie.PosterURL,
+		&movie.Synopsis,
+		&movie.RuntimeMinutes,
+		&movie.TMDBId,
+		&movie.IMDBId,
+		&movie.MetadataJSON,
+		&pickedByPersonDBID,
+		&pickedByInitial,
+		&pickedByName,
+	); err != nil {
+		return nil, err
+	}
+
+	entry.Movie = movie
 	if pickedByPersonDBID != nil && pickedByInitial != nil && pickedByName != nil {
 		entry.PickedByPerson = &model.Person{
 			ID:      *pickedByPersonDBID,
@@ -29,6 +72,7 @@ func applyPickedByPerson(entry *model.Entry, pickedByPersonDBID *uuid.UUID, pick
 			Name:    *pickedByName,
 		}
 	}
+	return entry, nil
 }
 
 // Create inserts a new entry into the database
@@ -78,43 +122,7 @@ func (r *EntryRepository) Create(ctx context.Context, input model.CreateEntryInp
 
 // GetByID retrieves an entry by its ID with movie and ratings
 func (r *EntryRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Entry, error) {
-	query := `
-		SELECT e.id, e.movie_id, e.group_number, e.position, e.added_at, e.picked_by_person_id,
-		       m.id, m.created_at, m.updated_at, m.title, m.release_year, m.poster_url, m.synopsis, m.runtime_minutes, m.tmdb_id, m.imdb_id, m.metadata_json,
-		       p.id, p.initial, p.name
-		FROM entries e
-		JOIN movies m ON e.movie_id = m.id
-		LEFT JOIN persons p ON e.picked_by_person_id = p.id
-		WHERE e.id = $1`
-
-	entry := &model.Entry{}
-	movie := &model.Movie{}
-	var pickedByPersonDBID *uuid.UUID
-	var pickedByInitial *string
-	var pickedByName *string
-
-	err := r.pool.QueryRow(ctx, query, id).Scan(
-		&entry.ID,
-		&entry.MovieID,
-		&entry.GroupNumber,
-		&entry.Position,
-		&entry.AddedAt,
-		&entry.PickedByPersonID,
-		&movie.ID,
-		&movie.CreatedAt,
-		&movie.UpdatedAt,
-		&movie.Title,
-		&movie.ReleaseYear,
-		&movie.PosterURL,
-		&movie.Synopsis,
-		&movie.RuntimeMinutes,
-		&movie.TMDBId,
-		&movie.IMDBId,
-		&movie.MetadataJSON,
-		&pickedByPersonDBID,
-		&pickedByInitial,
-		&pickedByName,
-	)
+	entry, err := scanEntry(r.pool.QueryRow(ctx, entrySelect+` WHERE e.id = $1`, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -122,16 +130,9 @@ func (r *EntryRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Ent
 		return nil, fmt.Errorf("get entry by id: %w", err)
 	}
 
-	entry.Movie = movie
-	applyPickedByPerson(entry, pickedByPersonDBID, pickedByInitial, pickedByName)
-
-	// Fetch ratings with person info
-	ratings, err := r.getRatingsForEntry(ctx, id)
-	if err != nil {
+	if err := r.loadRatings(ctx, []*model.Entry{entry}); err != nil {
 		return nil, err
 	}
-	entry.Ratings = ratings
-
 	return entry, nil
 }
 
@@ -161,54 +162,17 @@ func (r *EntryRepository) GetByMovieAndGroup(ctx context.Context, movieID uuid.U
 	return entry, nil
 }
 
-// getRatingsForEntry fetches all ratings for an entry with person information
-func (r *EntryRepository) getRatingsForEntry(ctx context.Context, entryID uuid.UUID) ([]*model.Rating, error) {
-	query := `
-		SELECT r.id, r.person_id, r.entry_id, r.score, r.created_at, r.updated_at,
-		       p.id, p.initial, p.name
-		FROM ratings r
-		JOIN persons p ON r.person_id = p.id
-		WHERE r.entry_id = $1
-		ORDER BY p.initial`
-
-	rows, err := r.pool.Query(ctx, query, entryID)
-	if err != nil {
-		return nil, fmt.Errorf("get ratings for entry: %w", err)
+// loadRatings sets each entry's ratings, with person information, ordered by
+// the person's initial.
+func (r *EntryRepository) loadRatings(ctx context.Context, entries []*model.Entry) error {
+	if len(entries) == 0 {
+		return nil
 	}
-	defer rows.Close()
-
-	var ratings []*model.Rating
-	for rows.Next() {
-		rating := &model.Rating{}
-		person := &model.Person{}
-		if err := rows.Scan(
-			&rating.ID,
-			&rating.PersonID,
-			&rating.EntryID,
-			&rating.Score,
-			&rating.CreatedAt,
-			&rating.UpdatedAt,
-			&person.ID,
-			&person.Initial,
-			&person.Name,
-		); err != nil {
-			return nil, fmt.Errorf("scan rating: %w", err)
-		}
-		rating.Person = person
-		ratings = append(ratings, rating)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate ratings rows: %w", err)
-	}
-
-	return ratings, nil
-}
-
-// getRatingsForEntries fetches all ratings for multiple entries with person information
-func (r *EntryRepository) getRatingsForEntries(ctx context.Context, entryIDs []uuid.UUID) (map[uuid.UUID][]*model.Rating, error) {
-	ratingsByEntry := make(map[uuid.UUID][]*model.Rating, len(entryIDs))
-	if len(entryIDs) == 0 {
-		return ratingsByEntry, nil
+	byID := make(map[uuid.UUID]*model.Entry, len(entries))
+	entryIDs := make([]uuid.UUID, 0, len(entries))
+	for _, entry := range entries {
+		byID[entry.ID] = entry
+		entryIDs = append(entryIDs, entry.ID)
 	}
 
 	query := `
@@ -221,7 +185,7 @@ func (r *EntryRepository) getRatingsForEntries(ctx context.Context, entryIDs []u
 
 	rows, err := r.pool.Query(ctx, query, entryIDs)
 	if err != nil {
-		return nil, fmt.Errorf("get ratings for entries: %w", err)
+		return fmt.Errorf("get ratings for entries: %w", err)
 	}
 	defer rows.Close()
 
@@ -239,31 +203,23 @@ func (r *EntryRepository) getRatingsForEntries(ctx context.Context, entryIDs []u
 			&person.Initial,
 			&person.Name,
 		); err != nil {
-			return nil, fmt.Errorf("scan rating: %w", err)
+			return fmt.Errorf("scan rating: %w", err)
 		}
 		rating.Person = person
-		ratingsByEntry[rating.EntryID] = append(ratingsByEntry[rating.EntryID], rating)
+		entry := byID[rating.EntryID]
+		entry.Ratings = append(entry.Ratings, rating)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate ratings rows: %w", err)
+		return fmt.Errorf("iterate ratings rows: %w", err)
 	}
-
-	return ratingsByEntry, nil
+	return nil
 }
 
 // ListByGroup retrieves all entries for a specific group with movie and ratings
 func (r *EntryRepository) ListByGroup(ctx context.Context, groupNumber int) ([]*model.Entry, error) {
-	query := `
-		SELECT e.id, e.movie_id, e.group_number, e.position, e.added_at, e.picked_by_person_id,
-		       m.id, m.created_at, m.updated_at, m.title, m.release_year, m.poster_url, m.synopsis, m.runtime_minutes, m.tmdb_id, m.imdb_id, m.metadata_json,
-		       p.id, p.initial, p.name
-		FROM entries e
-		JOIN movies m ON e.movie_id = m.id
-		LEFT JOIN persons p ON e.picked_by_person_id = p.id
+	rows, err := r.pool.Query(ctx, entrySelect+`
 		WHERE e.group_number = $1
-		ORDER BY e.position DESC`
-
-	rows, err := r.pool.Query(ctx, query, groupNumber)
+		ORDER BY e.position DESC`, groupNumber)
 	if err != nil {
 		return nil, fmt.Errorf("list entries by group: %w", err)
 	}
@@ -271,58 +227,19 @@ func (r *EntryRepository) ListByGroup(ctx context.Context, groupNumber int) ([]*
 
 	var entries []*model.Entry
 	for rows.Next() {
-		entry := &model.Entry{}
-		movie := &model.Movie{}
-		var pickedByPersonDBID *uuid.UUID
-		var pickedByInitial *string
-		var pickedByName *string
-
-		if err := rows.Scan(
-			&entry.ID,
-			&entry.MovieID,
-			&entry.GroupNumber,
-			&entry.Position,
-			&entry.AddedAt,
-			&entry.PickedByPersonID,
-
-			&movie.ID,
-			&movie.CreatedAt,
-			&movie.UpdatedAt,
-			&movie.Title,
-			&movie.ReleaseYear,
-			&movie.PosterURL,
-			&movie.Synopsis,
-			&movie.RuntimeMinutes,
-			&movie.TMDBId,
-			&movie.IMDBId,
-			&movie.MetadataJSON,
-			&pickedByPersonDBID,
-			&pickedByInitial,
-			&pickedByName,
-		); err != nil {
+		entry, err := scanEntry(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scan entry: %w", err)
 		}
-		entry.Movie = movie
-		applyPickedByPerson(entry, pickedByPersonDBID, pickedByInitial, pickedByName)
 		entries = append(entries, entry)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("list entries by group rows: %w", err)
 	}
 
-	entryIDs := make([]uuid.UUID, 0, len(entries))
-	for _, entry := range entries {
-		entryIDs = append(entryIDs, entry.ID)
-	}
-
-	ratingsByEntry, err := r.getRatingsForEntries(ctx, entryIDs)
-	if err != nil {
+	if err := r.loadRatings(ctx, entries); err != nil {
 		return nil, err
 	}
-	for _, entry := range entries {
-		entry.Ratings = ratingsByEntry[entry.ID]
-	}
-
 	return entries, nil
 }
 
