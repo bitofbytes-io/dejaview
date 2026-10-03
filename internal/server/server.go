@@ -94,16 +94,16 @@ func (s *Server) Router() http.Handler {
 		r.Use(middleware.Auth(sessionManager))
 
 		// Dashboard
-		dashboardHandler := handler.NewDashboardHandler(s.entryRepo, s.personRepo, sessionManager)
+		dashboardHandler := handler.NewDashboardHandler(s.entryRepo, s.personRepo)
 		r.Get("/", dashboardHandler.DashboardPage)
 		r.Get("/dashboard-content", dashboardHandler.DashboardContent)
 
 		// Stats
-		statsHandler := handler.NewStatsHandler(s.statsRepo, sessionManager)
+		statsHandler := handler.NewStatsHandler(s.statsRepo)
 		r.Get("/stats", statsHandler.StatsPage)
 
 		// Movie detail page
-		movieHandler := handler.NewMovieHandler(s.movieRepo, s.entryRepo, s.personRepo, s.tmdbClient, sessionManager)
+		movieHandler := handler.NewMovieHandler(s.movieRepo, s.entryRepo, s.personRepo, s.tmdbClient)
 		r.Get("/movies/{id}", movieHandler.MovieDetailPage)
 
 		// TMDB API endpoints
@@ -111,7 +111,7 @@ func (s *Server) Router() http.Handler {
 		r.Post("/api/tmdb/add", movieHandler.AddFromTMDB)
 
 		// Entry API endpoints
-		entryHandler := handler.NewEntryHandler(s.entryRepo, s.personRepo, sessionManager)
+		entryHandler := handler.NewEntryHandler(s.entryRepo, s.personRepo)
 		r.Put("/api/entries/{id}", entryHandler.Update)
 		r.Delete("/api/entries/{id}", entryHandler.Delete)
 
@@ -119,7 +119,7 @@ func (s *Server) Router() http.Handler {
 		r.Post("/api/groups/{num}/reorder", entryHandler.Reorder)
 
 		// Rating API endpoints
-		ratingHandler := handler.NewRatingHandler(s.ratingRepo, s.entryRepo, s.personRepo, sessionManager)
+		ratingHandler := handler.NewRatingHandler(s.ratingRepo, s.entryRepo, s.personRepo)
 		r.Put("/api/entries/{id}/ratings", ratingHandler.SaveRatings)
 	})
 

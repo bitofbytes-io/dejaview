@@ -8,17 +8,15 @@ import (
 	"net/url"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/drywaters/dejaview/internal/model"
-	"github.com/drywaters/dejaview/internal/session"
 	"github.com/drywaters/dejaview/internal/tmdb"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func TestSearchTMDBRejectsOverlongQuery(t *testing.T) {
-	handler := NewMovieHandler(nil, nil, nil, nil, session.NewManager("secret", time.Hour, false))
+	handler := NewMovieHandler(nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/tmdb/search?q="+strings.Repeat("a", 121), nil)
 	recorder := httptest.NewRecorder()

@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"sort"
 
+	"github.com/drywaters/dejaview/internal/middleware"
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/drywaters/dejaview/internal/repository"
-	"github.com/drywaters/dejaview/internal/session"
 	"github.com/drywaters/dejaview/internal/ui"
 	"github.com/drywaters/dejaview/internal/ui/pages"
 )
@@ -19,13 +19,12 @@ const topMovieLimit = 5
 
 // StatsHandler handles the Trophy Room.
 type StatsHandler struct {
-	statsRepo      *repository.StatsRepository
-	sessionManager *session.Manager
+	statsRepo *repository.StatsRepository
 }
 
 // NewStatsHandler creates a new StatsHandler.
-func NewStatsHandler(statsRepo *repository.StatsRepository, sessionManager *session.Manager) *StatsHandler {
-	return &StatsHandler{statsRepo: statsRepo, sessionManager: sessionManager}
+func NewStatsHandler(statsRepo *repository.StatsRepository) *StatsHandler {
+	return &StatsHandler{statsRepo: statsRepo}
 }
 
 // StatsPage renders the Trophy Room.
@@ -37,7 +36,7 @@ func (h *StatsHandler) StatsPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isAuthenticated := isAuthenticatedRequest(r, h.sessionManager)
+	isAuthenticated := middleware.IsAuthenticated(r.Context())
 	if err := pages.StatsPage(statsData, isAuthenticated).Render(r.Context(), w); err != nil {
 		slog.Error("failed to render trophy room", "error", err)
 	}

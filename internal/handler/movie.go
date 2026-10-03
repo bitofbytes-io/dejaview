@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/drywaters/dejaview/internal/middleware"
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/drywaters/dejaview/internal/repository"
-	"github.com/drywaters/dejaview/internal/session"
 	"github.com/drywaters/dejaview/internal/tmdb"
 	"github.com/drywaters/dejaview/internal/ui/pages"
 	"github.com/drywaters/dejaview/internal/ui/partials"
@@ -22,11 +22,10 @@ import (
 
 // MovieHandler handles movie-related requests
 type MovieHandler struct {
-	movieRepo      movieRepository
-	entryRepo      movieEntryRepository
-	personRepo     personRepository
-	tmdbClient     tmdbClient
-	sessionManager *session.Manager
+	movieRepo  movieRepository
+	entryRepo  movieEntryRepository
+	personRepo personRepository
+	tmdbClient tmdbClient
 }
 
 type movieRepository interface {
@@ -47,13 +46,12 @@ type tmdbClient interface {
 }
 
 // NewMovieHandler creates a new MovieHandler
-func NewMovieHandler(movieRepo *repository.MovieRepository, entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository, tmdbClient *tmdb.Client, sessionManager *session.Manager) *MovieHandler {
+func NewMovieHandler(movieRepo *repository.MovieRepository, entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository, tmdbClient *tmdb.Client) *MovieHandler {
 	return &MovieHandler{
-		movieRepo:      movieRepo,
-		entryRepo:      entryRepo,
-		personRepo:     personRepo,
-		tmdbClient:     tmdbClient,
-		sessionManager: sessionManager,
+		movieRepo:  movieRepo,
+		entryRepo:  entryRepo,
+		personRepo: personRepo,
+		tmdbClient: tmdbClient,
 	}
 }
 
@@ -86,7 +84,7 @@ func (h *MovieHandler) MovieDetailPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isAuthenticated := isAuthenticatedRequest(r, h.sessionManager)
+	isAuthenticated := middleware.IsAuthenticated(r.Context())
 	pages.MovieDetailPage(entry, persons, isAuthenticated).Render(ctx, w)
 }
 

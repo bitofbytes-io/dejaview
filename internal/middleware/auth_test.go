@@ -266,3 +266,49 @@ func TestSameOriginRejectsCrossSiteOrigin(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusForbidden, recorder.Code)
 	}
 }
+
+func TestAuth_SetsAuthenticatedFlag(t *testing.T) {
+	manager := testSessionManager(t)
+	cases := []struct {
+		name       string
+		method     string
+		path       string
+		withCookie bool
+		want       bool
+	}{
+		{"public read without cookie", http.MethodGet, "/movies/123", false, false},
+		{"public read with cookie", http.MethodGet, "/", true, true},
+		{"protected write with cookie", http.MethodPost, "/api/tmdb/add", true, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var got, called bool
+			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				called = true
+				got = IsAuthenticated(r.Context())
+			})
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			if tc.withCookie {
+				req.AddCookie(testSessionCookie(t, manager))
+			}
+			Auth(manager)(next).ServeHTTP(httptest.NewRecorder(), req)
+			if !called || got != tc.want {
+				t.Fatalf("handler called=%v, IsAuthenticated=%v, want %v", called, got, tc.want)
+			}
+		})
+	}
+	if IsAuthenticated(httptest.NewRequest(http.MethodGet, "/", nil).Context()) {
+		t.Fatal("request that never passed Auth reported as authenticated")
+	}
+}
+
+func TestAuth_MoviesIndexIsNotPublic(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("unauthenticated /movies reached the handler")
+	})
+	recorder := httptest.NewRecorder()
+	Auth(testSessionManager(t))(next).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/movies", nil))
+	if recorder.Code != http.StatusSeeOther || recorder.Header().Get("Location") != "/login?redirect=%2Fmovies" {
+		t.Fatalf("status %d location %q, want redirect to login", recorder.Code, recorder.Header().Get("Location"))
+	}
+}

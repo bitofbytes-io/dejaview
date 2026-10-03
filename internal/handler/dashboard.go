@@ -5,17 +5,16 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/drywaters/dejaview/internal/middleware"
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/drywaters/dejaview/internal/repository"
-	"github.com/drywaters/dejaview/internal/session"
 	"github.com/drywaters/dejaview/internal/ui/pages"
 )
 
 // DashboardHandler handles the main dashboard
 type DashboardHandler struct {
-	entryRepo      dashboardEntryRepository
-	personRepo     personRepository
-	sessionManager *session.Manager
+	entryRepo  dashboardEntryRepository
+	personRepo personRepository
 }
 
 type dashboardEntryRepository interface {
@@ -23,11 +22,10 @@ type dashboardEntryRepository interface {
 }
 
 // NewDashboardHandler creates a new DashboardHandler
-func NewDashboardHandler(entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository, sessionManager *session.Manager) *DashboardHandler {
+func NewDashboardHandler(entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository) *DashboardHandler {
 	return &DashboardHandler{
-		entryRepo:      entryRepo,
-		personRepo:     personRepo,
-		sessionManager: sessionManager,
+		entryRepo:  entryRepo,
+		personRepo: personRepo,
 	}
 }
 
@@ -40,7 +38,7 @@ func (h *DashboardHandler) DashboardPage(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	isAuthenticated := isAuthenticatedRequest(r, h.sessionManager)
+	isAuthenticated := middleware.IsAuthenticated(r.Context())
 	pages.DashboardPage(groupDataList, persons, currentGroup, isAuthenticated).Render(r.Context(), w)
 }
 
@@ -53,7 +51,7 @@ func (h *DashboardHandler) DashboardContent(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	isAuthenticated := isAuthenticatedRequest(r, h.sessionManager)
+	isAuthenticated := middleware.IsAuthenticated(r.Context())
 	pages.DashboardContent(groupDataList, persons, currentGroup, isAuthenticated).Render(r.Context(), w)
 }
 
