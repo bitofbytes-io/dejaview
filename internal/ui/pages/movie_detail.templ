@@ -64,7 +64,7 @@ templ MovieDetailPage(entry *model.Entry, persons []*model.Person, isAuthenticat
 						hx-target="#ratings-section"
 						hx-swap="outerHTML"
 					>
-						@ratingsCard(entry, persons, isAuthenticated)
+						@RatingsCard(entry, persons, isAuthenticated)
 					</form>
 
 					<!-- Synopsis -->
@@ -120,8 +120,8 @@ templ movieGroupCard(entry *model.Entry, persons []*model.Person, isAuthenticate
 	</button>
 }
 
-// ratingsCard is the ratings card body shared by the page and the save response.
-templ ratingsCard(entry *model.Entry, persons []*model.Person, isAuthenticated bool) {
+// RatingsCard is the ratings card body shared by the page and the save response.
+templ RatingsCard(entry *model.Entry, persons []*model.Person, isAuthenticated bool) {
 	<div class="card" id="ratings-section">
 		if !isAuthenticated {
 			<p class="muted-note mt-0 mb-4">Log in to save ratings or edit this movie.</p>
