@@ -87,7 +87,7 @@ A new database starts with no people. Add everyone who picks and rates movies, e
 psql "$DATABASE_URL" -c "INSERT INTO persons (initial, name) VALUES ('A', 'Alex'), ('B', 'Blake')"
 ```
 
-A movie counts as fully rated in the Trophy Room once every person has rated it. Migration 003 seeds four people; migration 013 removes them again unless the database already has ratings or picks.
+A movie counts as fully rated in the Trophy Room once every person has rated it. Migration 003 seeds four people; migration 013 removes them again from a database that has no movies on its list yet.
 
 ## Run with Docker
 

@@ -18,8 +18,8 @@ func countPersons(t *testing.T, ctx context.Context, pool *pgxpool.Pool) int {
 }
 
 // TestFamilySeedRemovedOnlyWhereUnused covers migration 013, which drops
-// migration 003's seeded people from goose-managed databases with no ratings
-// or picks.
+// migration 003's seeded people only from goose-managed databases with no
+// entries.
 func TestFamilySeedRemovedOnlyWhereUnused(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -57,8 +57,8 @@ func TestFamilySeedRemovedOnlyWhereUnused(t *testing.T) {
 		pool := install(t)
 		addEntry(t, pool, "")
 		applyMigrations(t, pool, 13, 13)
-		if n := countPersons(t, ctx, pool); n != 0 {
-			t.Fatalf("unused seed kept %d people", n)
+		if n := countPersons(t, ctx, pool); n != 4 {
+			t.Fatalf("install with entries has %d people, want 4", n)
 		}
 	})
 
