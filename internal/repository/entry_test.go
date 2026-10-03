@@ -526,6 +526,7 @@ func TestEntryReorderPostgres(t *testing.T) {
 		"missing entry": {second.ID, first.ID},
 		"duplicate":     {second.ID, first.ID, first.ID},
 		"extra entry":   {second.ID, third.ID, first.ID, other.ID},
+		"empty":         {},
 	} {
 		if err := repo.ReorderEntries(ctx, 1, ids); !errors.Is(err, ErrReorderMismatch) {
 			t.Fatalf("%s: expected ErrReorderMismatch, got %v", name, err)
@@ -536,8 +537,11 @@ func TestEntryReorderPostgres(t *testing.T) {
 		t.Fatalf("foreign entry changed to group=%d position=%d", group, position)
 	}
 
-	if err := repo.ReorderEntries(ctx, 1, nil); err != nil {
-		t.Fatalf("empty reorder: %v", err)
+	if err := repo.ReorderEntries(ctx, 1, nil); !errors.Is(err, ErrReorderMismatch) {
+		t.Fatalf("empty reorder of a non-empty group: expected ErrReorderMismatch, got %v", err)
+	}
+	if err := repo.ReorderEntries(ctx, 7, nil); err != nil {
+		t.Fatalf("empty reorder of an empty group: %v", err)
 	}
 
 	// New entries still land after reordered ones.

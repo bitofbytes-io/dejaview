@@ -382,10 +382,6 @@ func (r *EntryRepository) Delete(ctx context.Context, id uuid.UUID) error {
 // entryIDs should be in the desired visual order (first = highest position, displayed first)
 // and list every entry in the group once; otherwise it returns ErrReorderMismatch.
 func (r *EntryRepository) ReorderEntries(ctx context.Context, groupNumber int, entryIDs []uuid.UUID) error {
-	if len(entryIDs) == 0 {
-		return nil
-	}
-
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return fmt.Errorf("reorder entries begin tx: %w", err)
