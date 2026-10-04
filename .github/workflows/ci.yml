@@ -123,6 +123,7 @@ jobs:
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
       - name: Build and push dejaview image
+        id: build
         env:
           REGISTRY: ${{ env.IMAGE_REG }}
           IMAGE_REPO: ${{ env.IMAGE_REPO }}
@@ -131,11 +132,19 @@ jobs:
           VERSION: ${{ steps.meta.outputs.TAG }}
           REVISION: ${{ github.sha }}
           SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}
+          METADATA_FILE: ${{ runner.temp }}/dejaview-build-metadata.json
         run: |
           set -euo pipefail
           : "${REGISTRY:?Missing vars.IMAGE_REG}"
           : "${IMAGE_REPO:?Missing vars.IMAGE_REPO}"
           make docker-buildx
+          digest="$(jq -r '."containerimage.digest" // empty' "${METADATA_FILE}")"
+          if [[ ! "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "buildx metadata has no valid containerimage.digest: '${digest}'" >&2
+            exit 1
+          fi
+          echo "Pushed ${REGISTRY}/${IMAGE_REPO}@${digest}"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
 
       - name: Install SSH key & known_hosts
         env:
@@ -149,9 +158,35 @@ jobs:
           chmod 644 ~/.ssh/known_hosts
 
       - name: Push main to local bare repo (trigger hook)
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           set -euo pipefail
           : "${MANAGER_HOST:?Missing vars.MANAGER_HOST}"
           : "${MANAGER_REPO_PATH:=/srv/git/dejaview-ci.git}"
+          : "${IMAGE_DIGEST:?Missing image digest from the build step}"
           git remote add local "ssh://git@${MANAGER_HOST}/${MANAGER_REPO_PATH}"
-          git push --force local HEAD:refs/heads/main
+          git push --force \
+            -o "image-digest=${IMAGE_REG}/${IMAGE_REPO}@${IMAGE_DIGEST}" \
+            local HEAD:refs/heads/main
+
+      # Git ignores the post-receive hook's exit status, so read the result it
+      # records. A rerun of the same commit moves no ref and re-checks the
+      # earlier run's status.
+      - name: Verify crystal1 deployed this revision
+        env:
+          EXPECTED_REVISION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --force local \
+            refs/deploy/status:refs/remotes/local/deploy-status
+          git show refs/remotes/local/deploy-status:status.json > "${RUNNER_TEMP}/dejaview-deploy-status.json"
+          jq -e --arg revision "${EXPECTED_REVISION}" '
+            . as $status |
+            $status.schema == 1 and
+            $status.state == "succeeded" and
+            $status.revision == $revision and
+            $status.services["proxy_dejaview"].revision == $revision and
+            $status.services["proxy_dejaview"].desired > 0 and
+            $status.services["proxy_dejaview"].running == $status.services["proxy_dejaview"].desired
+          ' "${RUNNER_TEMP}/dejaview-deploy-status.json"

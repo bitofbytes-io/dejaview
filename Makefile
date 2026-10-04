@@ -55,6 +55,7 @@ test: templ tail-prod ## Generate assets and run Go tests
 	go test -v ./...
 
 # Docker (production)
+# CI sets METADATA_FILE to read the pushed image digest from buildx's metadata.
 docker-buildx: ensure-image-tag templ tail-prod ## Build and push multi-arch Docker image using buildx
 	docker buildx build \
 		--platform $(PLATFORMS) \
@@ -63,6 +64,7 @@ docker-buildx: ensure-image-tag templ tail-prod ## Build and push multi-arch Doc
 		--build-arg SOURCE_URL=$(SOURCE_URL) \
 		--tag $(REGISTRY)/$(IMAGE_REPO):$(TAG) \
 		--tag $(REGISTRY)/$(IMAGE_REPO):latest \
+		$(if $(METADATA_FILE),--metadata-file $(METADATA_FILE)) \
 		--push \
 		.
 
