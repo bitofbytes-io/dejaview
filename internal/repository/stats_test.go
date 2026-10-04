@@ -19,7 +19,6 @@ func TestStatsRepositoryPostgres(t *testing.T) {
 	defer cancel()
 	entries := NewEntryRepository(pool)
 	stats := NewStatsRepository(pool)
-	required := len(model.FamilyInitials)
 
 	people := map[string]uuid.UUID{}
 	rows, err := pool.Query(ctx, `SELECT initial, id FROM persons`)
@@ -73,7 +72,7 @@ func TestStatsRepositoryPostgres(t *testing.T) {
 	rate(partial, map[string]float64{"D": 10, "J": 10}) // not fully rated
 	addEntry("Dune", minutes(90), 2, "")
 
-	trophies, err := stats.GetTrophyStats(ctx, required)
+	trophies, err := stats.GetTrophyStats(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +101,7 @@ func TestStatsRepositoryPostgres(t *testing.T) {
 		}
 	}
 
-	top, err := stats.GetTopRatedMovies(ctx, required, 5)
+	top, err := stats.GetTopRatedMovies(ctx, 5)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,11 +111,11 @@ func TestStatsRepositoryPostgres(t *testing.T) {
 	if top[0].AverageRating != 7.5 || top[0].Entry.Movie.Title != "Alien" || top[0].Entry.PickedByPerson == nil || top[0].Entry.PickedByPerson.Initial != "D" {
 		t.Fatalf("unexpected top movie: %+v", top[0])
 	}
-	if limited, err := stats.GetTopRatedMovies(ctx, required, 1); err != nil || len(limited) != 1 {
+	if limited, err := stats.GetTopRatedMovies(ctx, 1); err != nil || len(limited) != 1 {
 		t.Fatalf("limit not applied: %d rows, err=%v", len(limited), err)
 	}
 
-	watched, runtime, fullyRated, err := stats.GetSummaryStats(ctx, required)
+	watched, runtime, fullyRated, err := stats.GetSummaryStats(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,13 +123,68 @@ func TestStatsRepositoryPostgres(t *testing.T) {
 		t.Fatalf("summary watched=%d runtime=%d fullyRated=%d, want 4/310/2", watched, runtime, fullyRated)
 	}
 
-	currentGroup, err := stats.GetCurrentGroup(ctx)
-	if err != nil || currentGroup != 2 {
-		t.Fatalf("current group=%d err=%v, want 2", currentGroup, err)
-	}
-	// The advantage goes to whoever picked the last entry of the previous group.
-	holder, group, err := stats.GetAdvantageHolder(ctx, currentGroup)
+	// The advantage goes to whoever picked the last entry of the group
+	// before the current (highest) one.
+	holder, group, err := stats.GetAdvantageHolder(ctx)
 	if err != nil || group != 1 || holder == nil || holder.Initial != "J" {
 		t.Fatalf("advantage holder=%+v group=%d err=%v, want J in group 1", holder, group, err)
 	}
+
+	// "Fully rated" follows the number of people: with a fifth person, no
+	// entry is fully rated until they rate it too.
+	var eve uuid.UUID
+	if err := pool.QueryRow(ctx, `INSERT INTO persons (initial, name) VALUES ('E', 'Eve') RETURNING id`).Scan(&eve); err != nil {
+		t.Fatal(err)
+	}
+	people["E"] = eve
+	if _, _, fullyRated, err := stats.GetSummaryStats(ctx); err != nil || fullyRated != 0 {
+		t.Fatalf("fully rated with five people = %d (err %v), want 0", fullyRated, err)
+	}
+	rate(alien, map[string]float64{"E": 9})
+	if top, err := stats.GetTopRatedMovies(ctx, 5); err != nil || len(top) != 1 || top[0].Entry.ID != alien {
+		t.Fatalf("top movies with five people = %+v (err %v), want only Alien", top, err)
+	}
+}
+
+// TestAdvantageHolderEdgesPostgres covers the advantage before a second group
+// exists and when the previous group's last entry has no picker.
+func TestAdvantageHolderEdgesPostgres(t *testing.T) {
+	pool := ratingTestPool(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	entries := NewEntryRepository(pool)
+	stats := NewStatsRepository(pool)
+
+	check := func(wantGroup int) {
+		t.Helper()
+		holder, group, err := stats.GetAdvantageHolder(ctx)
+		if err != nil || holder != nil || group != wantGroup {
+			t.Fatalf("advantage holder=%+v group=%d err=%v, want nil in group %d", holder, group, err, wantGroup)
+		}
+	}
+	add := func(title string, group int) uuid.UUID {
+		t.Helper()
+		var movieID uuid.UUID
+		if err := pool.QueryRow(ctx, `INSERT INTO movies(title) VALUES ($1) RETURNING id`, title).Scan(&movieID); err != nil {
+			t.Fatal(err)
+		}
+		entry, err := entries.Create(ctx, model.CreateEntryInput{MovieID: movieID, GroupNumber: group})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return entry.ID
+	}
+
+	check(0) // no entries
+	add("Alien", 1)
+	check(0) // only group 1
+	brazil := add("Brazil", 2)
+	add("Cube", 3)
+	group1 := 1
+	if err := entries.Update(ctx, brazil, model.UpdateEntryInput{GroupNumber: &group1}); err != nil {
+		t.Fatal(err)
+	}
+	check(2) // group 2 is empty
+	add("Dune", 2)
+	check(2) // group 2's last entry has no picker
 }

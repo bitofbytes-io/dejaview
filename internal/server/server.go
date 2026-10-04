@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/drywaters/dejaview/internal/auth"
 	"github.com/drywaters/dejaview/internal/config"
 	"github.com/drywaters/dejaview/internal/handler"
 	"github.com/drywaters/dejaview/internal/middleware"
@@ -12,6 +13,14 @@ import (
 	"github.com/drywaters/dejaview/internal/tmdb"
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
+)
+
+// Failed logins allowed in each window, per client IP and from all clients.
+// Counters are in memory, per replica.
+const (
+	maxLoginFailuresPerIP = 10
+	maxLoginFailures      = 50
+	loginFailureWindow    = 15 * time.Minute
 )
 
 // Server represents the HTTP server
@@ -52,7 +61,7 @@ func (s *Server) Router() http.Handler {
 
 	// Middleware
 	r.Use(chimw.RequestID)
-	r.Use(chimw.RealIP)
+	r.Use(middleware.RealIP(s.cfg.TrustedProxies))
 	r.Use(middleware.Logger)
 	r.Use(chimw.Recoverer)
 	r.Use(middleware.SameOrigin)
@@ -83,8 +92,9 @@ func (s *Server) Router() http.Handler {
 	})
 
 	// Auth handlers
-	sessionManager := session.NewManager(s.cfg.APIToken, 90*24*time.Hour, s.cfg.SecureCookies)
-	authHandler := handler.NewAuthHandler(s.cfg.APIToken, sessionManager)
+	sessionManager := session.NewManager(s.cfg.APIToken, 90*24*time.Hour, s.cfg.SecureCookies, s.cfg.SessionEpoch)
+	loginLimiter := auth.NewLoginLimiter(maxLoginFailuresPerIP, maxLoginFailures, loginFailureWindow)
+	authHandler := handler.NewAuthHandler(s.cfg.APIToken, sessionManager, loginLimiter)
 	r.Get("/login", authHandler.LoginPage)
 	r.Post("/login", authHandler.Login)
 	r.Post("/logout", authHandler.Logout)
@@ -94,16 +104,16 @@ func (s *Server) Router() http.Handler {
 		r.Use(middleware.Auth(sessionManager))
 
 		// Dashboard
-		dashboardHandler := handler.NewDashboardHandler(s.entryRepo, s.personRepo, sessionManager)
+		dashboardHandler := handler.NewDashboardHandler(s.entryRepo, s.personRepo)
 		r.Get("/", dashboardHandler.DashboardPage)
 		r.Get("/dashboard-content", dashboardHandler.DashboardContent)
 
 		// Stats
-		statsHandler := handler.NewStatsHandler(s.statsRepo, sessionManager)
+		statsHandler := handler.NewStatsHandler(s.statsRepo)
 		r.Get("/stats", statsHandler.StatsPage)
 
 		// Movie detail page
-		movieHandler := handler.NewMovieHandler(s.movieRepo, s.entryRepo, s.personRepo, s.tmdbClient, sessionManager)
+		movieHandler := handler.NewMovieHandler(s.movieRepo, s.entryRepo, s.personRepo, s.tmdbClient)
 		r.Get("/movies/{id}", movieHandler.MovieDetailPage)
 
 		// TMDB API endpoints
@@ -111,7 +121,7 @@ func (s *Server) Router() http.Handler {
 		r.Post("/api/tmdb/add", movieHandler.AddFromTMDB)
 
 		// Entry API endpoints
-		entryHandler := handler.NewEntryHandler(s.entryRepo, s.personRepo, sessionManager)
+		entryHandler := handler.NewEntryHandler(s.entryRepo, s.personRepo)
 		r.Put("/api/entries/{id}", entryHandler.Update)
 		r.Delete("/api/entries/{id}", entryHandler.Delete)
 
@@ -119,7 +129,7 @@ func (s *Server) Router() http.Handler {
 		r.Post("/api/groups/{num}/reorder", entryHandler.Reorder)
 
 		// Rating API endpoints
-		ratingHandler := handler.NewRatingHandler(s.ratingRepo, s.entryRepo, s.personRepo, sessionManager)
+		ratingHandler := handler.NewRatingHandler(s.ratingRepo, s.entryRepo, s.personRepo)
 		r.Put("/api/entries/{id}/ratings", ratingHandler.SaveRatings)
 	})
 

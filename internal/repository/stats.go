@@ -2,12 +2,10 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -21,46 +19,54 @@ func NewStatsRepository(pool *pgxpool.Pool) *StatsRepository {
 	return &StatsRepository{pool: pool}
 }
 
-// GetAdvantageHolder returns the person who picked last in the previous group.
-func (r *StatsRepository) GetAdvantageHolder(ctx context.Context, currentGroup int) (*model.Person, int, error) {
-	if currentGroup <= 1 {
+// GetAdvantageHolder returns the person who picked last in the group before
+// the current (highest) one, and that group's number. Before a second group
+// exists it returns nil and 0; a previous group with no picker for its last
+// entry returns nil and the group number.
+func (r *StatsRepository) GetAdvantageHolder(ctx context.Context) (*model.Person, int, error) {
+	query := `
+		WITH previous AS (
+			SELECT MAX(group_number) - 1 AS group_number
+			FROM entries
+		)
+		SELECT previous.group_number, p.id, p.initial, p.name
+		FROM previous
+		LEFT JOIN LATERAL (
+			SELECT e.picked_by_person_id
+			FROM entries e
+			WHERE e.group_number = previous.group_number
+			ORDER BY e.position DESC
+			LIMIT 1
+		) last_pick ON true
+		LEFT JOIN persons p ON p.id = last_pick.picked_by_person_id`
+
+	var prevGroup *int
+	var personID *uuid.UUID
+	var initial, name *string
+	if err := r.pool.QueryRow(ctx, query).Scan(&prevGroup, &personID, &initial, &name); err != nil {
+		return nil, 0, fmt.Errorf("get advantage holder: %w", err)
+	}
+	if prevGroup == nil || *prevGroup < 1 {
 		return nil, 0, nil
 	}
-
-	prevGroup := currentGroup - 1
-	query := `
-		WITH group_max AS (
-			SELECT MAX(position) AS max_pos
-			FROM entries
-			WHERE group_number = $1
-		)
-		SELECT p.id, p.initial, p.name
-		FROM entries e
-		JOIN persons p ON e.picked_by_person_id = p.id
-		JOIN group_max gm ON e.position = gm.max_pos
-		WHERE e.group_number = $1
-		LIMIT 1`
-
-	person := &model.Person{}
-	err := r.pool.QueryRow(ctx, query, prevGroup).Scan(&person.ID, &person.Initial, &person.Name)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, prevGroup, nil
-		}
-		return nil, prevGroup, fmt.Errorf("get advantage holder: %w", err)
+	if personID == nil || initial == nil || name == nil {
+		return nil, *prevGroup, nil
 	}
-
-	return person, prevGroup, nil
+	return &model.Person{ID: *personID, Initial: *initial, Name: *name}, *prevGroup, nil
 }
 
+// fullyRated is the HAVING clause, over ratings grouped by entry_id, that
+// keeps entries rated by every person.
+const fullyRated = `HAVING COUNT(DISTINCT person_id) = (SELECT COUNT(*) FROM persons)`
+
 // GetTrophyStats returns the three straightforward metrics used by the Trophy Room.
-func (r *StatsRepository) GetTrophyStats(ctx context.Context, requiredRatings int) ([]model.TrophyStats, error) {
+func (r *StatsRepository) GetTrophyStats(ctx context.Context) ([]model.TrophyStats, error) {
 	query := `
 		WITH fully_rated_entries AS (
 			SELECT entry_id
 			FROM ratings
 			GROUP BY entry_id
-			HAVING COUNT(DISTINCT person_id) = $1
+			` + fullyRated + `
 		),
 		ratings_given AS (
 			SELECT r.person_id, AVG(r.score) AS average, COUNT(*) AS rating_count
@@ -97,7 +103,7 @@ func (r *StatsRepository) GetTrophyStats(ctx context.Context, requiredRatings in
 		LEFT JOIN picked_runtime pr ON pr.person_id = p.id
 		ORDER BY p.name`
 
-	rows, err := r.pool.Query(ctx, query, requiredRatings)
+	rows, err := r.pool.Query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("get trophy stats: %w", err)
 	}
@@ -128,13 +134,13 @@ func (r *StatsRepository) GetTrophyStats(ctx context.Context, requiredRatings in
 }
 
 // GetTopRatedMovies returns up to limit fully rated entries ranked by family average.
-func (r *StatsRepository) GetTopRatedMovies(ctx context.Context, requiredRatings, limit int) ([]model.RankedMovie, error) {
+func (r *StatsRepository) GetTopRatedMovies(ctx context.Context, limit int) ([]model.RankedMovie, error) {
 	query := `
 		WITH entry_scores AS (
 			SELECT entry_id, AVG(score) AS average_rating
 			FROM ratings
 			GROUP BY entry_id
-			HAVING COUNT(DISTINCT person_id) = $1
+			` + fullyRated + `
 		)
 		SELECT e.id, e.movie_id, e.group_number, e.position, e.added_at, e.picked_by_person_id,
 			m.id, m.title, m.release_year, m.poster_url, m.runtime_minutes,
@@ -145,9 +151,9 @@ func (r *StatsRepository) GetTopRatedMovies(ctx context.Context, requiredRatings
 		JOIN movies m ON m.id = e.movie_id
 		LEFT JOIN persons p ON p.id = e.picked_by_person_id
 		ORDER BY es.average_rating DESC, LOWER(m.title), e.id
-		LIMIT $2`
+		LIMIT $1`
 
-	rows, err := r.pool.Query(ctx, query, requiredRatings, limit)
+	rows, err := r.pool.Query(ctx, query, limit)
 	if err != nil {
 		return nil, fmt.Errorf("get top rated movies: %w", err)
 	}
@@ -193,7 +199,7 @@ func (r *StatsRepository) GetTopRatedMovies(ctx context.Context, requiredRatings
 }
 
 // GetSummaryStats returns the compact family totals displayed at the bottom of the page.
-func (r *StatsRepository) GetSummaryStats(ctx context.Context, requiredRatings int) (totalWatched, totalRuntime, fullyRated int, err error) {
+func (r *StatsRepository) GetSummaryStats(ctx context.Context) (totalWatched, totalRuntime, fullyRatedCount int, err error) {
 	query := `
 		SELECT
 			(SELECT COUNT(*) FROM entries),
@@ -203,23 +209,12 @@ func (r *StatsRepository) GetSummaryStats(ctx context.Context, requiredRatings i
 				SELECT entry_id
 				FROM ratings
 				GROUP BY entry_id
-				HAVING COUNT(DISTINCT person_id) = $1
+				` + fullyRated + `
 			) fully_rated)`
 
-	err = r.pool.QueryRow(ctx, query, requiredRatings).Scan(&totalWatched, &totalRuntime, &fullyRated)
+	err = r.pool.QueryRow(ctx, query).Scan(&totalWatched, &totalRuntime, &fullyRatedCount)
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("get summary stats: %w", err)
 	}
-	return totalWatched, totalRuntime, fullyRated, nil
-}
-
-// GetCurrentGroup returns the current (highest) group number.
-func (r *StatsRepository) GetCurrentGroup(ctx context.Context) (int, error) {
-	query := `SELECT COALESCE(MAX(group_number), 1) FROM entries`
-
-	var group int
-	if err := r.pool.QueryRow(ctx, query).Scan(&group); err != nil {
-		return 1, fmt.Errorf("get current group: %w", err)
-	}
-	return group, nil
+	return totalWatched, totalRuntime, fullyRatedCount, nil
 }

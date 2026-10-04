@@ -23,6 +23,8 @@ templ LoginPage(errorType string, redirectURL string) {
 							Enter your access token.
 						} else if errorType == "invalid_key" {
 							That token didn't work. Try again.
+						} else if errorType == "rate_limited" {
+							Too many failed attempts. Try again in a few minutes.
 						} else {
 							Something went wrong. Try again.
 						}

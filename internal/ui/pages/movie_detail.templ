@@ -131,7 +131,7 @@ templ RatingsCard(entry *model.Entry, persons []*model.Person, isAuthenticated b
 				<h2 class="card-title mb-0">Family ratings</h2>
 				<div class="flex flex-wrap items-center gap-3">
 					<div id="average-rating">
-						@components.AverageRating(entry.AverageRating(), entry.RatingCount())
+						@components.AverageRating(entry.AverageRating(), entry.RatingCount(), len(persons))
 					</div>
 					<button type="submit" class="btn-primary">Save ratings</button>
 				</div>

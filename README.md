@@ -46,8 +46,14 @@ Do not commit this file.
 | `PORT` | No | HTTP port; defaults to `4600` |
 | `SECURE_COOKIES` | No | Set `false` for local HTTP; defaults to `true` |
 | `LOG_LEVEL` | No | Application log level; defaults to `info` |
+| `TRUSTED_PROXY_CIDRS` | Behind a reverse proxy | Comma-separated CIDRs or IPs whose `X-Forwarded-For` header is trusted; defaults to empty, which ignores forwarded headers and disables the per-IP login limit |
+| `SESSION_EPOCH` | No | Non-negative integer; raise it and redeploy to sign out every browser without changing `API_TOKEN`; defaults to `0` |
 
 Required secrets support corresponding `*_FILE` variables and default Docker secret paths under `/run/secrets/dejaview_*`.
+
+Failed logins are limited to 10 per client IP and 50 from all clients together in a 15-minute window. Further attempts get HTTP 429 with `Retry-After` until the window ends, and a successful login clears the all-clients count. Counters are in memory per replica and reset on restart. The per-IP limit applies only when `TRUSTED_PROXY_CIDRS` is set: a peer outside those CIDRs is a direct client keyed by its TCP address, and a peer inside them is keyed by the rightmost `X-Forwarded-For` address that is not a trusted proxy. Otherwise only the all-clients limit applies, which anyone can use up to block new logins for 15 minutes; browsers that are already signed in are unaffected. Behind Traefik on a Docker Swarm overlay network, set `TRUSTED_PROXY_CIDRS` to that network's subnet, for example the output of `docker network inspect proxy --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'`.
+
+Sessions last 90 days. Cookies issued before `SESSION_EPOCH` existed count as epoch 0, so they stay valid until the epoch is raised.
 
 ## Database and migrations
 
@@ -72,6 +78,16 @@ go install github.com/pressly/goose/v3/cmd/goose@latest
 export DATABASE_URL='postgres://dejaview:change-me@localhost:5432/dejaview?sslmode=disable'
 goose -dir migrations postgres "$DATABASE_URL" up
 ```
+
+### People
+
+Migration 003 seeds four example people (D, J, C and A). On a new install, replace them with everyone who picks and rates movies, each with a unique one-letter initial, before anyone picks or rates a movie:
+
+```bash
+psql "$DATABASE_URL" -c "DELETE FROM persons" -c "INSERT INTO persons (initial, name) VALUES ('A', 'Alex'), ('B', 'Blake')"
+```
+
+The `DELETE` fails once someone has ratings, so it cannot remove anyone's scores; rename a person instead with `UPDATE persons SET name = 'Alex' WHERE initial = 'A'`. A movie counts as fully rated in the Trophy Room once every person has rated it.
 
 ## Run with Docker
 

@@ -9,17 +9,6 @@ type Person struct {
 	Name    string    `json:"name"`    // Daniel, Jennifer, Caleb, Aiden
 }
 
-// FamilyInitials is the ordered list of family member initials
-var FamilyInitials = []string{"D", "J", "C", "A"}
-
-// FamilyNames maps initials to full names
-var FamilyNames = map[string]string{
-	"D": "Daniel",
-	"J": "Jennifer",
-	"C": "Caleb",
-	"A": "Aiden",
-}
-
 // personColorClasses maps initials to person-specific CSS color classes
 var personColorClasses = map[string]string{
 	"D": "person-daniel",

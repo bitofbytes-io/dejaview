@@ -3,11 +3,15 @@ package handler
 import (
 	"crypto/subtle"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"unicode"
 
+	"github.com/drywaters/dejaview/internal/auth"
+	"github.com/drywaters/dejaview/internal/middleware"
 	"github.com/drywaters/dejaview/internal/session"
 	"github.com/drywaters/dejaview/internal/ui/pages"
 )
@@ -16,13 +20,15 @@ import (
 type AuthHandler struct {
 	apiToken       string
 	sessionManager *session.Manager
+	limiter        *auth.LoginLimiter
 }
 
 // NewAuthHandler creates a new AuthHandler
-func NewAuthHandler(apiToken string, sessionManager *session.Manager) *AuthHandler {
+func NewAuthHandler(apiToken string, sessionManager *session.Manager, limiter *auth.LoginLimiter) *AuthHandler {
 	return &AuthHandler{
 		apiToken:       apiToken,
 		sessionManager: sessionManager,
+		limiter:        limiter,
 	}
 }
 
@@ -54,12 +60,31 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Limit by client IP only when it is known; see middleware.RealIP.
+	clientIP, ipVerified := middleware.VerifiedClientIP(r)
+	limitIP := ""
+	if ipVerified {
+		limitIP = clientIP
+	}
+	if wait, ok := h.limiter.Allow(limitIP); !ok {
+		slog.Warn("login failed", "reason", "rate_limited", "client_ip", clientIP, "client_ip_verified", ipVerified)
+		redirectURL := r.FormValue("redirect")
+		if !isValidRedirect(redirectURL) {
+			redirectURL = ""
+		}
+		w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(wait.Seconds()))))
+		w.WriteHeader(http.StatusTooManyRequests)
+		pages.LoginPage("rate_limited", redirectURL).Render(r.Context(), w)
+		return
+	}
+
 	// Validate the API token with constant-time comparison
 	if !constantTimeEqual(apiKey, h.apiToken) {
-		slog.Info("login failed", "reason", "invalid_key")
+		slog.Info("login failed", "reason", "invalid_key", "client_ip", clientIP, "client_ip_verified", ipVerified)
 		http.Redirect(w, r, "/login?error=invalid_key", http.StatusSeeOther)
 		return
 	}
+	h.limiter.Succeed(limitIP)
 
 	cookie, err := h.sessionManager.NewCookie()
 	if err != nil {
