@@ -46,6 +46,9 @@ jobs:
       contents: read
       id-token: write
     runs-on: ubuntu-24.04-arm
+    concurrency:
+      group: dejaview-crystal-deploy
+      cancel-in-progress: false
     environment:
       name: crystal1
     env:
@@ -171,22 +174,25 @@ jobs:
             local HEAD:refs/heads/main
 
       # Git ignores the post-receive hook's exit status, so read the result it
-      # records. A rerun of the same commit moves no ref and re-checks the
-      # earlier run's status.
+      # records. A rerun of the same commit moves no ref, so the hook does not
+      # run; checking the image fails a rerun whose build produced a new digest
+      # instead of passing on the earlier deploy.
       - name: Verify crystal1 deployed this revision
         env:
           EXPECTED_REVISION: ${{ github.sha }}
+          EXPECTED_IMAGE: ${{ env.IMAGE_REG }}/${{ env.IMAGE_REPO }}@${{ steps.build.outputs.digest }}
         run: |
           set -euo pipefail
           git fetch --no-tags --force local \
             refs/deploy/status:refs/remotes/local/deploy-status
           git show refs/remotes/local/deploy-status:status.json > "${RUNNER_TEMP}/dejaview-deploy-status.json"
-          jq -e --arg revision "${EXPECTED_REVISION}" '
+          jq -e --arg revision "${EXPECTED_REVISION}" --arg image "${EXPECTED_IMAGE}" '
             . as $status |
             $status.schema == 1 and
             $status.state == "succeeded" and
             $status.revision == $revision and
             $status.services["proxy_dejaview"].revision == $revision and
+            $status.services["proxy_dejaview"].image == $image and
             $status.services["proxy_dejaview"].desired > 0 and
             $status.services["proxy_dejaview"].running == $status.services["proxy_dejaview"].desired
           ' "${RUNNER_TEMP}/dejaview-deploy-status.json"

@@ -64,7 +64,7 @@ docker-buildx: ensure-image-tag templ tail-prod ## Build and push multi-arch Doc
 		--build-arg SOURCE_URL=$(SOURCE_URL) \
 		--tag $(REGISTRY)/$(IMAGE_REPO):$(TAG) \
 		--tag $(REGISTRY)/$(IMAGE_REPO):latest \
-		$(if $(METADATA_FILE),--metadata-file $(METADATA_FILE)) \
+		$(if $(METADATA_FILE),--metadata-file "$(METADATA_FILE)") \
 		--push \
 		.
 
