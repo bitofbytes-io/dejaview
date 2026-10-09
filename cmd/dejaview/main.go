@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -104,17 +105,30 @@ func run() error {
 	}
 
 	// Graceful shutdown
-	shutdownChan := make(chan os.Signal, 1)
-	signal.Notify(shutdownChan, os.Interrupt, syscall.SIGTERM)
+	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
+	return serve(sigCtx, httpServer)
+}
+
+// serve runs httpServer until ctx is done, then shuts it down gracefully.
+// It returns promptly with an error if the server fails to start or stops
+// unexpectedly (e.g. the port is already in use).
+func serve(ctx context.Context, httpServer *http.Server) error {
+	serverErr := make(chan error, 1)
 	go func() {
 		slog.Info("server listening", "addr", httpServer.Addr)
-		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("server error", "error", err)
-		}
+		serverErr <- httpServer.ListenAndServe()
 	}()
 
-	<-shutdownChan
+	select {
+	case err := <-serverErr:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return fmt.Errorf("server error: %w", err)
+	case <-ctx.Done():
+	}
 	slog.Info("shutting down...")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
