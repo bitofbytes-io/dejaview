@@ -154,30 +154,42 @@ templ Header(isAuthenticated bool, current string) {
 				<span class="osd"><span class="osd-blink">&#9654;</span> Play</span>
 				<span class="osd osd-dim">SP 0:00:00</span>
 			</div>
-			<nav class="nav" aria-label="Main">
-				if current == "movies" {
-					<a href="/" class="nav-link hidden sm:inline-flex" aria-current="page">Movies</a>
-				} else {
-					<a href="/" class="nav-link">Movies</a>
-				}
-				if current == "stats" {
-					<a href="/stats" class="nav-link hidden sm:inline-flex" aria-current="page">Trophy room</a>
-				} else {
-					<a href="/stats" class="nav-link"><span class="sm:hidden">Trophies</span><span class="hidden sm:inline">Trophy room</span></a>
-				}
-				if isAuthenticated {
-					if current == "people" {
-						<a href="/people" class="nav-link hidden sm:inline-flex" aria-current="page">People</a>
-					} else {
-						<a href="/people" class="nav-link">People</a>
-					}
-					<form action="/logout" method="POST" class="inline">
-						<button type="submit" class="nav-link">Log out</button>
-					</form>
-				} else {
-					<a href="/login" class="nav-link">Log in</a>
-				}
+			<nav class="nav nav-inline" aria-label="Main">
+				@navLinks(isAuthenticated, current)
 			</nav>
+			<!-- Phones: the same links in a menu that drops below the header. -->
+			<details class="nav-menu">
+				<summary class="nav-link nav-menu-toggle">
+					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+					</svg>
+					<span>Menu</span>
+				</summary>
+				<nav class="nav-menu-panel" aria-label="Main">
+					@navLinks(isAuthenticated, current)
+				</nav>
+			</details>
 		</div>
 	</header>
+}
+
+templ navLinks(isAuthenticated bool, current string) {
+	@navLink("/", "Movies", current == "movies")
+	@navLink("/stats", "Trophy room", current == "stats")
+	if isAuthenticated {
+		@navLink("/people", "People", current == "people")
+		<form action="/logout" method="POST" class="nav-form">
+			<button type="submit" class="nav-link">Log out</button>
+		</form>
+	} else {
+		@navLink("/login", "Log in", false)
+	}
+}
+
+templ navLink(href templ.SafeURL, label string, isCurrent bool) {
+	if isCurrent {
+		<a href={ href } class="nav-link" aria-current="page">{ label }</a>
+	} else {
+		<a href={ href } class="nav-link">{ label }</a>
+	}
 }

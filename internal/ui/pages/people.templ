@@ -18,7 +18,7 @@ templ PeoplePage(people []*model.Person, form PeopleFormData, errorMessage strin
 
 		<main class="page page-narrow">
 			<h1 class="detail-title">People</h1>
-			<p class="muted-note">Everyone who picks and rates movies. A movie counts as fully rated once every person has rated it.</p>
+			<p class="muted-note page-intro">Everyone who picks and rates movies. A movie counts as fully rated once every person has rated it.</p>
 
 			if errorMessage != "" {
 				<div class="login-error" role="alert">{ errorMessage }</div>
@@ -45,18 +45,18 @@ templ PeoplePage(people []*model.Person, form PeopleFormData, errorMessage strin
 								/>
 							</div>
 							@colorPicker(person.Color, person.ID.String())
-							<div class="people-actions">
+							<div class="people-actions people-card-actions">
 								<button type="submit" class="btn-primary">Save</button>
+								<button type="submit" form={ "remove-" + person.ID.String() } class="btn-danger">Remove</button>
 							</div>
 						</form>
+						<!-- Forms can't nest, so Remove submits this one through its form attribute. -->
 						<form
+							id={ "remove-" + person.ID.String() }
 							action={ templ.SafeURL("/people/" + person.ID.String() + "/delete") }
 							method="POST"
-							class="people-actions people-remove"
 							hx-confirm="Remove this person? This only works for someone with no ratings or picks."
-						>
-							<button type="submit" class="btn-danger btn-sm">Remove</button>
-						</form>
+						></form>
 					</div>
 				}
 			</section>
