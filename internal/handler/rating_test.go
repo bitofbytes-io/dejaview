@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/drywaters/dejaview/internal/model"
+	"github.com/drywaters/dejaview/internal/repository"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -16,9 +18,13 @@ import (
 type stubRatingRepo struct {
 	deleteCalls int
 	upsertCalls int
+	err         error
 }
 
 func (s *stubRatingRepo) SaveBatch(ctx context.Context, entryID uuid.UUID, changes []model.RatingChange) error {
+	if s.err != nil {
+		return s.err
+	}
 	for _, change := range changes {
 		if change.Score == nil {
 			s.deleteCalls++
@@ -255,6 +261,42 @@ func TestSaveRatings_InvalidBatchDoesNotWrite(t *testing.T) {
 			handler.SaveRatings(result, req)
 			if result.Code != http.StatusBadRequest || ratings.upsertCalls != 0 || ratings.deleteCalls != 0 {
 				t.Fatalf("status=%d upserts=%d deletes=%d", result.Code, ratings.upsertCalls, ratings.deleteCalls)
+			}
+		})
+	}
+}
+
+func TestSaveRatings_MapsRepositoryErrors(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want int
+	}{
+		{"unknown person", repository.ErrPersonNotFound, http.StatusBadRequest},
+		{"entry deleted", repository.ErrEntryNotFound, http.StatusNotFound},
+		{"unexpected", errors.New("boom"), http.StatusInternalServerError},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			entryID := uuid.New()
+			handler := &RatingHandler{
+				ratingRepo: &stubRatingRepo{err: tc.err},
+				entryRepo:  &stubEntryRepo{entries: []*model.Entry{{ID: entryID}}},
+				personRepo: &stubPersonRepo{},
+			}
+			body := "rating[" + uuid.NewString() + "]=8"
+			req := httptest.NewRequest(http.MethodPost, "/entries/"+entryID.String()+"/ratings", strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			route := chi.NewRouteContext()
+			route.URLParams.Add("id", entryID.String())
+			req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, route))
+			result := httptest.NewRecorder()
+			handler.SaveRatings(result, req)
+			if result.Code != tc.want {
+				t.Fatalf("expected status %d, got %d", tc.want, result.Code)
+			}
+			if result.Header().Get("HX-Trigger") != "" {
+				t.Fatal("expected no success toast")
 			}
 		})
 	}

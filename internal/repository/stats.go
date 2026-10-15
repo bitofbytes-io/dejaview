@@ -20,14 +20,17 @@ func NewStatsRepository(pool *pgxpool.Pool) *StatsRepository {
 }
 
 // GetAdvantageHolder returns the person who picked last in the group before
-// the current (highest) one, and that group's number. Before a second group
-// exists it returns nil and 0; a previous group with no picker for its last
-// entry returns nil and the group number.
+// the current (highest) one, and that group's number. The previous group is
+// the highest group below the current one that has entries, so an emptied
+// group number is skipped. Before a second group exists it returns nil and 0;
+// a previous group with no picker for its last entry returns nil and the
+// group number.
 func (r *StatsRepository) GetAdvantageHolder(ctx context.Context) (*model.Person, int, error) {
 	query := `
 		WITH previous AS (
-			SELECT MAX(group_number) - 1 AS group_number
+			SELECT MAX(group_number) AS group_number
 			FROM entries
+			WHERE group_number < (SELECT MAX(group_number) FROM entries)
 		)
 		SELECT previous.group_number, p.id, p.initial, p.name
 		FROM previous

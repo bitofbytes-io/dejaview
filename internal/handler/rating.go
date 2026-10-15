@@ -85,6 +85,14 @@ func (h *RatingHandler) SaveRatings(w http.ResponseWriter, r *http.Request) {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return
 			}
+			if errors.Is(err, repository.ErrPersonNotFound) {
+				http.Error(w, "Unknown person ID", http.StatusBadRequest)
+				return
+			}
+			if errors.Is(err, repository.ErrEntryNotFound) {
+				http.Error(w, "Entry not found", http.StatusNotFound)
+				return
+			}
 			slog.Error("failed to save ratings", "error", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return

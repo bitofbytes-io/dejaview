@@ -91,25 +91,72 @@ func TestEntryUpdateMovesGroupPostgres(t *testing.T) {
 		t.Fatalf("same-group update moved entry to group=%d position=%d", group, position)
 	}
 
-	// Moving to an empty group starts at position 1 and still applies picked_by.
-	empty := 7
+	// Moving past the next new group would leave a gap, so it is rejected.
+	for _, invalid := range []int{0, 4} {
+		if err := repo.Update(ctx, a.ID, model.UpdateEntryInput{GroupNumber: &invalid}); !errors.Is(err, ErrInvalidGroup) {
+			t.Fatalf("move to group %d: expected ErrInvalidGroup, got %v", invalid, err)
+		}
+	}
+	if group, position := entryGroupAndPosition(t, ctx, pool, a.ID); group != 1 || position != 1 {
+		t.Fatalf("rejected move changed entry to group=%d position=%d", group, position)
+	}
+
+	// An unknown picker is rejected and rolls back the move with it.
+	next := 3
+	unknown := uuid.New()
+	if err := repo.Update(ctx, a.ID, model.UpdateEntryInput{GroupNumber: &next, PickedByPersonID: &unknown}); !errors.Is(err, ErrPersonNotFound) {
+		t.Fatalf("expected ErrPersonNotFound, got %v", err)
+	}
+	if group, position := entryGroupAndPosition(t, ctx, pool, a.ID); group != 1 || position != 1 {
+		t.Fatalf("unknown picker left entry at group=%d position=%d", group, position)
+	}
+
+	// Moving to the next new group starts at position 1 and still applies picked_by.
 	var picker uuid.UUID
 	if err := pool.QueryRow(ctx, `SELECT id FROM persons ORDER BY initial LIMIT 1`).Scan(&picker); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.Update(ctx, a.ID, model.UpdateEntryInput{GroupNumber: &empty, PickedByPersonID: &picker}); err != nil {
+	if err := repo.Update(ctx, a.ID, model.UpdateEntryInput{GroupNumber: &next, PickedByPersonID: &picker}); err != nil {
 		t.Fatal(err)
 	}
 	moved, err := repo.GetByID(ctx, a.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if moved.GroupNumber != 7 || moved.Position != 1 || moved.PickedByPersonID == nil || *moved.PickedByPersonID != picker {
+	if moved.GroupNumber != 3 || moved.Position != 1 || moved.PickedByPersonID == nil || *moved.PickedByPersonID != picker {
 		t.Fatalf("unexpected moved entry: group=%d position=%d picked_by=%v", moved.GroupNumber, moved.Position, moved.PickedByPersonID)
+	}
+
+	// The moved entry does not count toward the next new group, so the only
+	// entry of the last group cannot skip ahead and leave its group empty.
+	skip := 4
+	if err := repo.Update(ctx, a.ID, model.UpdateEntryInput{GroupNumber: &skip}); !errors.Is(err, ErrInvalidGroup) {
+		t.Fatalf("expected ErrInvalidGroup moving the last group's only entry ahead, got %v", err)
 	}
 
 	if err := repo.Update(ctx, uuid.New(), model.UpdateEntryInput{GroupNumber: &target}); !errors.Is(err, ErrEntryNotFound) {
 		t.Fatalf("expected ErrEntryNotFound, got %v", err)
+	}
+	if err := repo.Update(ctx, uuid.New(), model.UpdateEntryInput{PickedByPersonID: &picker}); !errors.Is(err, ErrEntryNotFound) {
+		t.Fatalf("expected ErrEntryNotFound without a group change, got %v", err)
+	}
+}
+
+func TestEntryDeletePostgres(t *testing.T) {
+	pool := ratingTestPool(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	repo := NewEntryRepository(pool)
+
+	entry := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Alien"), 1)
+	if err := repo.Delete(ctx, entry.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := repo.GetByID(ctx, entry.ID); err != nil || got != nil {
+		t.Fatalf("deleted entry still readable: %+v, err=%v", got, err)
+	}
+	if err := repo.Delete(ctx, entry.ID); !errors.Is(err, ErrEntryNotFound) {
+		t.Fatalf("expected ErrEntryNotFound deleting a missing entry, got %v", err)
 	}
 }
 

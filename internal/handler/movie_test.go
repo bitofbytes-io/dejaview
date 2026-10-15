@@ -117,7 +117,8 @@ func TestAddFromTMDBCreatesMovieAndEntry(t *testing.T) {
 	created := movies.created[0]
 	if created.Title != "Alien" || created.TMDBId == nil || *created.TMDBId != 348 ||
 		created.ReleaseYear == nil || *created.ReleaseYear != 1979 ||
-		created.PosterURL == nil || *created.PosterURL != "https://images.test/w500/alien.jpg" || len(created.MetadataJSON) == 0 {
+		created.PosterURL == nil || *created.PosterURL != "https://images.test/w500/alien.jpg" || len(created.MetadataJSON) == 0 ||
+		created.RuntimeMinutes == nil || *created.RuntimeMinutes != 117 {
 		t.Fatalf("unexpected movie input: %+v", created)
 	}
 	if len(entries.created) != 1 || entries.created[0].GroupNumber != 4 {
@@ -125,6 +126,21 @@ func TestAddFromTMDBCreatesMovieAndEntry(t *testing.T) {
 	}
 	if !strings.Contains(recorder.Header().Get("HX-Trigger"), "Movie added!") {
 		t.Fatalf("missing success trigger: %q", recorder.Header().Get("HX-Trigger"))
+	}
+}
+
+func TestAddFromTMDBStoresZeroRuntimeAsUnknown(t *testing.T) {
+	movies := &stubMovieRepo{}
+	client := &stubTMDBClient{details: &tmdb.MovieDetails{ID: 99, Title: "Untimed", Runtime: 0}}
+	handler := &MovieHandler{movieRepo: movies, entryRepo: &stubMovieEntryRepo{}, tmdbClient: client}
+
+	recorder := postAddFromTMDB(handler, url.Values{"tmdb_id": {"99"}, "group_number": {"1"}})
+
+	if recorder.Code != http.StatusOK || len(movies.created) != 1 {
+		t.Fatalf("expected one created movie, got status %d and %d creates", recorder.Code, len(movies.created))
+	}
+	if runtime := movies.created[0].RuntimeMinutes; runtime != nil {
+		t.Fatalf("expected unknown runtime, got %d", *runtime)
 	}
 }
 
