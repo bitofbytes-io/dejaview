@@ -89,6 +89,8 @@ psql "$DATABASE_URL" -c "DELETE FROM persons" -c "INSERT INTO persons (initial, 
 
 The `DELETE` fails once someone has ratings, so it cannot remove anyone's scores; rename a person instead with `UPDATE persons SET name = 'Alex' WHERE initial = 'A'`. A movie counts as fully rated in the Trophy Room once every person has rated it.
 
+The Trophy Room's Genre Spotlight reads the genres TMDB returned when each movie was added (saved in `movies.metadata_json`), so it needs no extra configuration. Movies without saved genres are skipped. A genre needs two family-rated movies to be the family favorite, and the Genre Loyalist trophy needs three genre-tagged picks.
+
 ## Run with Docker
 
 ```bash

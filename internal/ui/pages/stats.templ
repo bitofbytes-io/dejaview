@@ -67,6 +67,17 @@ templ StatsPage(data *model.StatsData, isAuthenticated bool) {
 				<section class="trophy-room-section">
 					<div class="trophy-room-heading">
 						<h2 class="trophy-room-section-title">
+							@components.Icon("film-reel", "")
+							<span>Genre Spotlight</span>
+						</h2>
+						<p>What we pick and what we love.</p>
+					</div>
+					@components.GenreSpotlight(data.Genres)
+				</section>
+
+				<section class="trophy-room-section">
+					<div class="trophy-room-heading">
+						<h2 class="trophy-room-section-title">
 							@components.Icon("star", "")
 							<span>Family Top Five</span>
 						</h2>
