@@ -7,6 +7,7 @@ import (
 
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -91,28 +92,42 @@ func (r *PersonRepository) Update(ctx context.Context, id uuid.UUID, name, color
 // it never erases scores or clears who picked an entry. It returns
 // ErrPersonInUse for anyone else and ErrPersonNotFound for an unknown ID.
 func (r *PersonRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	tag, err := r.pool.Exec(ctx, `
-		DELETE FROM persons p
-		WHERE p.id = $1
-		  AND NOT EXISTS (SELECT 1 FROM ratings r WHERE r.person_id = p.id)
-		  AND NOT EXISTS (SELECT 1 FROM entries e WHERE e.picked_by_person_id = p.id)`, id)
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23503" {
-		return ErrPersonInUse // rated between the check and the delete
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("delete person begin tx: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	// FOR UPDATE conflicts with the key-share lock that a rating or pick takes
+	// on this row to check its foreign key. A concurrent write therefore either
+	// committed before this point and shows in the check below, or waits for
+	// the commit and then fails its foreign key.
+	var locked uuid.UUID
+	err = tx.QueryRow(ctx, `SELECT id FROM persons WHERE id = $1 FOR UPDATE`, id).Scan(&locked)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrPersonNotFound
 	}
 	if err != nil {
-		return fmt.Errorf("delete person: %w", err)
-	}
-	if tag.RowsAffected() > 0 {
-		return nil
+		return fmt.Errorf("delete person lock: %w", err)
 	}
 
-	var exists bool
-	if err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM persons WHERE id = $1)`, id).Scan(&exists); err != nil {
-		return fmt.Errorf("delete person: %w", err)
+	var inUse bool
+	if err := tx.QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM ratings WHERE person_id = $1)
+		    OR EXISTS (SELECT 1 FROM entries WHERE picked_by_person_id = $1)`, id).Scan(&inUse); err != nil {
+		return fmt.Errorf("delete person check use: %w", err)
 	}
-	if exists {
+	if inUse {
 		return ErrPersonInUse
 	}
-	return ErrPersonNotFound
+
+	if _, err := tx.Exec(ctx, `DELETE FROM persons WHERE id = $1`, id); err != nil {
+		return fmt.Errorf("delete person: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("delete person commit: %w", err)
+	}
+	return nil
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -59,8 +60,13 @@ func (h *PeopleHandler) PeoplePage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	isAuthenticated := middleware.IsAuthenticated(r.Context())
-	errorMessage := peopleErrors[r.URL.Query().Get("error")]
-	if err := pages.PeoplePage(people, suggestColor(people), errorMessage, isAuthenticated).Render(r.Context(), w); err != nil {
+	query := r.URL.Query()
+	form := pages.PeopleFormData{Name: query.Get("name"), Initial: query.Get("initial"), Color: query.Get("color")}
+	if !model.ValidPersonColor(form.Color) {
+		form.Color = suggestColor(people)
+	}
+	errorMessage := peopleErrors[query.Get("error")]
+	if err := pages.PeoplePage(people, form, errorMessage, isAuthenticated).Render(r.Context(), w); err != nil {
 		slog.Error("failed to render people page", "error", err)
 	}
 }
@@ -71,10 +77,20 @@ func (h *PeopleHandler) Create(w http.ResponseWriter, r *http.Request) {
 		redirectPeople(w, r, "invalid_request")
 		return
 	}
+	// A rejected form comes back with what was typed.
+	reject := func(code string) {
+		query := url.Values{"error": {code}}
+		for _, field := range []string{"name", "initial", "color"} {
+			if value := r.PostFormValue(field); value != "" {
+				query.Set(field, value)
+			}
+		}
+		http.Redirect(w, r, "/people?"+query.Encode(), http.StatusSeeOther)
+	}
 
 	name, ok := cleanPersonName(r.PostFormValue("name"))
 	if !ok {
-		redirectPeople(w, r, "invalid_name")
+		reject("invalid_name")
 		return
 	}
 
@@ -84,7 +100,7 @@ func (h *PeopleHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	initial, ok = cleanPersonInitial(initial)
 	if !ok {
-		redirectPeople(w, r, "invalid_initial")
+		reject("invalid_initial")
 		return
 	}
 
@@ -99,13 +115,13 @@ func (h *PeopleHandler) Create(w http.ResponseWriter, r *http.Request) {
 		color = suggestColor(people)
 	}
 	if !model.ValidPersonColor(color) {
-		redirectPeople(w, r, "invalid_color")
+		reject("invalid_color")
 		return
 	}
 
 	person, err := h.personRepo.Create(r.Context(), initial, name, color)
 	if errors.Is(err, repository.ErrPersonInitialTaken) {
-		redirectPeople(w, r, "initial_taken")
+		reject("initial_taken")
 		return
 	}
 	if err != nil {

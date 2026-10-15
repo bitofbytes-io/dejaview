@@ -5,8 +5,14 @@ import (
 	"github.com/drywaters/dejaview/internal/ui/layout"
 )
 
-// PeoplePage lists everyone and the add form, which starts on newColor.
-templ PeoplePage(people []*model.Person, newColor string, errorMessage string, isAuthenticated bool) {
+// PeopleFormData fills the add-person form, so a rejected form keeps what was typed.
+type PeopleFormData struct {
+	Name    string
+	Initial string
+	Color   string
+}
+
+templ PeoplePage(people []*model.Person, form PeopleFormData, errorMessage string, isAuthenticated bool) {
 	@layout.Base("People") {
 		@layout.Header(isAuthenticated, "people")
 
@@ -64,6 +70,7 @@ templ PeoplePage(people []*model.Person, newColor string, errorMessage string, i
 							type="text"
 							id="new-name"
 							name="name"
+							value={ form.Name }
 							required
 							maxlength="50"
 							class="input-field"
@@ -75,13 +82,14 @@ templ PeoplePage(people []*model.Person, newColor string, errorMessage string, i
 							type="text"
 							id="new-initial"
 							name="initial"
+							value={ form.Initial }
 							maxlength="1"
 							class="input-field"
 							aria-describedby="new-initial-help"
 						/>
 						<p id="new-initial-help" class="field-help">One letter shown on badges. Defaults to the first letter of the name. It can't be changed later.</p>
 					</div>
-					@colorPicker(newColor, "new")
+					@colorPicker(form.Color, "new")
 					<div class="people-actions">
 						<button type="submit" class="btn-primary">Add person</button>
 					</div>

@@ -83,8 +83,17 @@ func TestCreatePerson(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			store := &stubPeopleStore{people: tc.people}
 			recorder := postPeople((&PeopleHandler{personRepo: store}).Create, "/people", "", tc.form)
-			if recorder.Code != http.StatusSeeOther || recorder.Header().Get("Location") != tc.wantLocation {
-				t.Fatalf("got %d %q, want 303 %q", recorder.Code, recorder.Header().Get("Location"), tc.wantLocation)
+			// Rejections also carry the typed fields back, so compare the error only.
+			location, err := url.Parse(recorder.Header().Get("Location"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantError := strings.TrimPrefix(tc.wantLocation, "/people?error=")
+			if tc.wantLocation == "/people" {
+				wantError = ""
+			}
+			if recorder.Code != http.StatusSeeOther || location.Path != "/people" || location.Query().Get("error") != wantError {
+				t.Fatalf("got %d %q, want 303 %q", recorder.Code, location, tc.wantLocation)
 			}
 			if tc.wantInitial == "" {
 				if store.created != nil {
@@ -102,9 +111,9 @@ func TestCreatePerson(t *testing.T) {
 
 func TestCreatePersonReportsTakenInitial(t *testing.T) {
 	store := &stubPeopleStore{createErr: repository.ErrPersonInitialTaken}
-	recorder := postPeople((&PeopleHandler{personRepo: store}).Create, "/people", "", url.Values{"name": {"Alex"}})
-	if recorder.Header().Get("Location") != "/people?error=initial_taken" {
-		t.Fatalf("location %q", recorder.Header().Get("Location"))
+	recorder := postPeople((&PeopleHandler{personRepo: store}).Create, "/people", "", url.Values{"name": {"Alex"}, "initial": {"a"}, "color": {"mint"}})
+	if got, want := recorder.Header().Get("Location"), "/people?color=mint&error=initial_taken&initial=a&name=Alex"; got != want {
+		t.Fatalf("location %q, want %q", got, want)
 	}
 
 	store.createErr = errors.New("boom")
@@ -187,6 +196,16 @@ func TestPeoplePageShowsPeopleAndErrors(t *testing.T) {
 	for _, want := range []string{"Alex", "person-rose", "Can&#39;t remove someone who has ratings or picks", "Add a person"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page is missing %q:\n%s", want, body)
+		}
+	}
+
+	// A rejected add form keeps what was typed.
+	req = httptest.NewRequest(http.MethodGet, "/people?error=initial_taken&name=Zo%C3%AB&initial=Z&color=mint", nil)
+	recorder = httptest.NewRecorder()
+	(&PeopleHandler{personRepo: store}).PeoplePage(recorder, req)
+	for _, want := range []string{`value="Zoë"`, `value="Z"`, `value="mint" checked`} {
+		if !strings.Contains(recorder.Body.String(), want) {
+			t.Errorf("rejected form lost %q:\n%s", want, recorder.Body.String())
 		}
 	}
 
