@@ -41,15 +41,32 @@ templ RatingInputSimple(entryID uuid.UUID, person *model.Person, currentScore *f
 	</div>
 }
 
-// PersonRatingRowSimple renders a rating row without the form wrapper
-templ PersonRatingRowSimple(entry *model.Entry, person *model.Person) {
+// PersonRatingRowSimple renders a rating row without the form wrapper. When
+// editable is false the score is shown read-only, with no input or clear button.
+templ PersonRatingRowSimple(entry *model.Entry, person *model.Person, editable bool) {
 	<div class={ "rating-row", person.ColorClass() }>
 		<span class="rating-person min-w-0" title={ person.Name }>
 			<span class="initial" aria-hidden="true">{ person.Initial }</span>
 			<span class="truncate">{ person.Name }</span>
 		</span>
-		@RatingInputSimple(entry.ID, person, ui.GetRatingScore(entry, person.ID))
+		if editable {
+			@RatingInputSimple(entry.ID, person, ui.GetRatingScore(entry, person.ID))
+		} else {
+			@RatingScore(ui.GetRatingScore(entry, person.ID))
+		}
 	</div>
+}
+
+// RatingScore renders one person's score as a read-only badge.
+templ RatingScore(score *float64) {
+	if score != nil {
+		<span class={ "rating-badge rating-score", model.ScoreColorClass(*score) }>{ ui.FormatFloat(*score) }</span>
+	} else {
+		<span class="rating-badge rating-score rating-empty">
+			<span aria-hidden="true">—</span>
+			<span class="sr-only">Not rated</span>
+		</span>
+	}
 }
 
 // AverageRating renders the average rating display; personCount is how many

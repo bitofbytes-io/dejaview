@@ -185,17 +185,29 @@ func TestDeletePerson(t *testing.T) {
 }
 
 func TestPeoplePageShowsPeopleAndErrors(t *testing.T) {
-	store := &stubPeopleStore{people: []*model.Person{
-		{ID: uuid.New(), Initial: "A", Name: "Alex", Color: "rose"},
-	}}
+	alex := &model.Person{ID: uuid.New(), Initial: "A", Name: "Alex", Color: "rose"}
+	store := &stubPeopleStore{people: []*model.Person{alex}}
 	req := httptest.NewRequest(http.MethodGet, "/people?error=in_use", nil)
 	recorder := httptest.NewRecorder()
 	(&PeopleHandler{personRepo: store}).PeoplePage(recorder, req)
 
 	body := recorder.Body.String()
-	for _, want := range []string{"Alex", "person-rose", "Can&#39;t remove someone who has ratings or picks", "Add a person"} {
+	removeForm := "remove-" + alex.ID.String()
+	for _, want := range []string{
+		"Alex", "person-rose", "Can&#39;t remove someone who has ratings or picks", "Add a person",
+		`<form id="` + removeForm + `" action="/people/` + alex.ID.String() + `/delete" method="POST"`,
+	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page is missing %q:\n%s", want, body)
+		}
+	}
+
+	// Save and Remove share one action row; Remove submits the delete form by id.
+	_, actions, _ := strings.Cut(body, `class="people-actions people-card-actions"`)
+	actions, _, _ = strings.Cut(actions, "</div>")
+	for _, want := range []string{">Save</button>", `form="` + removeForm + `" class="btn-danger">Remove</button>`} {
+		if !strings.Contains(actions, want) {
+			t.Errorf("person action row is missing %q: %s", want, actions)
 		}
 	}
 
