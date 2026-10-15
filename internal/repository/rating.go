@@ -28,6 +28,20 @@ func (r *RatingRepository) SaveBatch(ctx context.Context, entryID uuid.UUID, cha
 		return fmt.Errorf("begin rating batch: %w", err)
 	}
 	defer tx.Rollback(ctx)
+	// Deleting a rating never checks the person foreign key, so check every
+	// person up front.
+	personIDs := make([]uuid.UUID, 0, len(changes))
+	for _, change := range changes {
+		personIDs = append(personIDs, change.PersonID)
+	}
+	var unknown int
+	if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM unnest($1::uuid[]) AS c(id)
+    LEFT JOIN persons p ON p.id = c.id WHERE p.id IS NULL`, personIDs).Scan(&unknown); err != nil {
+		return fmt.Errorf("check rating persons: %w", err)
+	}
+	if unknown > 0 {
+		return ErrPersonNotFound
+	}
 	for _, change := range changes {
 		if change.Score == nil {
 			_, err = tx.Exec(ctx, `DELETE FROM ratings WHERE person_id = $1 AND entry_id = $2`, change.PersonID, entryID)

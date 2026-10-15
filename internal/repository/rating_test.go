@@ -111,6 +111,11 @@ func TestSaveBatchPostgres(t *testing.T) {
 	if !errors.Is(err, ErrPersonNotFound) {
 		t.Fatalf("expected ErrPersonNotFound, got %v", err)
 	}
+	// Clearing an unknown person's rating is rejected too, with the batch rolled back.
+	err = repo.SaveBatch(ctx, entryID, []model.RatingChange{{PersonID: people[0], Score: score(9)}, {PersonID: uuid.New()}})
+	if !errors.Is(err, ErrPersonNotFound) {
+		t.Fatalf("expected ErrPersonNotFound clearing an unknown person, got %v", err)
+	}
 	if err := repo.SaveBatch(ctx, uuid.New(), []model.RatingChange{{PersonID: people[0], Score: score(7)}}); !errors.Is(err, ErrEntryNotFound) {
 		t.Fatalf("expected ErrEntryNotFound for a missing entry, got %v", err)
 	}
