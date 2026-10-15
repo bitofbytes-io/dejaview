@@ -194,6 +194,15 @@ func (c *Client) PosterURL(path string, size string) string {
 	return fmt.Sprintf("%s/%s%s", imageBaseURL, size, path)
 }
 
+// RuntimeMinutes returns a TMDB runtime, or nil when TMDB has none. TMDB
+// reports an unknown runtime as 0 or null, which both decode to 0.
+func RuntimeMinutes(runtime int) *int {
+	if runtime <= 0 {
+		return nil
+	}
+	return &runtime
+}
+
 // ReleaseYear extracts the year from a TMDB release date string
 func ReleaseYear(releaseDate string) *int {
 	if len(releaseDate) < 4 {

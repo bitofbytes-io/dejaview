@@ -53,3 +53,14 @@ func TestTransportErrorsDoNotLeakAPIKey(t *testing.T) {
 		})
 	}
 }
+
+func TestRuntimeMinutesTreatsZeroAsUnknown(t *testing.T) {
+	for _, runtime := range []int{0, -1} {
+		if got := RuntimeMinutes(runtime); got != nil {
+			t.Fatalf("RuntimeMinutes(%d) = %d, want nil", runtime, *got)
+		}
+	}
+	if got := RuntimeMinutes(117); got == nil || *got != 117 {
+		t.Fatalf("RuntimeMinutes(117) = %v, want 117", got)
+	}
+}

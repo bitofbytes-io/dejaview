@@ -192,7 +192,7 @@ func (h *MovieHandler) AddFromTMDB(w http.ResponseWriter, r *http.Request) {
 			ReleaseYear:    tmdb.ReleaseYear(details.ReleaseDate),
 			PosterURL:      posterURL,
 			Synopsis:       &details.Overview,
-			RuntimeMinutes: &details.Runtime,
+			RuntimeMinutes: tmdb.RuntimeMinutes(details.Runtime),
 			TMDBId:         &tmdbID,
 			IMDBId:         details.IMDBId,
 			MetadataJSON:   metadataJSON,
