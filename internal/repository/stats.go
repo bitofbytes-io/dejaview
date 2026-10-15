@@ -203,6 +203,74 @@ func (r *StatsRepository) GetTopRatedMovies(ctx context.Context, limit int) ([]m
 	return movies, rows.Err()
 }
 
+// GetGenrePickStats returns, for each picker and genre in the saved TMDB
+// metadata, how many picks carry the genre and how the family rated them.
+// Movies without genre metadata are skipped, and only fully rated entries
+// count toward ratings.
+func (r *StatsRepository) GetGenrePickStats(ctx context.Context) ([]model.GenrePickStat, error) {
+	query := `
+		WITH entry_scores AS (
+			SELECT entry_id, AVG(score) AS average_rating
+			FROM ratings
+			GROUP BY entry_id
+			` + fullyRated + `
+		),
+		entry_genres AS (
+			SELECT e.id AS entry_id, e.picked_by_person_id AS person_id, g.genre, es.average_rating
+			FROM entries e
+			JOIN movies m ON m.id = e.movie_id
+			CROSS JOIN LATERAL (
+				SELECT DISTINCT BTRIM(elem.value ->> 'name') AS genre
+				FROM jsonb_array_elements(
+					CASE WHEN jsonb_typeof(m.metadata_json -> 'genres') = 'array'
+						THEN m.metadata_json -> 'genres' ELSE '[]'::jsonb END
+				) AS elem(value)
+				WHERE jsonb_typeof(elem.value) = 'object'
+					AND jsonb_typeof(elem.value -> 'name') = 'string'
+					AND BTRIM(elem.value ->> 'name') <> ''
+			) g
+			LEFT JOIN entry_scores es ON es.entry_id = e.id
+		),
+		tagged AS (
+			SELECT person_id, COUNT(DISTINCT entry_id) AS tagged_picks
+			FROM entry_genres
+			GROUP BY person_id
+		)
+		SELECT p.id, p.initial, p.name, eg.genre,
+			COUNT(*), MAX(t.tagged_picks),
+			COUNT(eg.average_rating), COALESCE(SUM(eg.average_rating), 0)
+		FROM entry_genres eg
+		JOIN tagged t ON t.person_id IS NOT DISTINCT FROM eg.person_id
+		LEFT JOIN persons p ON p.id = eg.person_id
+		GROUP BY p.id, p.initial, p.name, eg.genre
+		ORDER BY p.name, eg.genre`
+
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("get genre pick stats: %w", err)
+	}
+	defer rows.Close()
+
+	var stats []model.GenrePickStat
+	for rows.Next() {
+		var personID *uuid.UUID
+		var initial, name *string
+		var stat model.GenrePickStat
+		if err := rows.Scan(
+			&personID, &initial, &name, &stat.Genre,
+			&stat.Picks, &stat.TaggedPicks, &stat.RatedPicks, &stat.RatingTotal,
+		); err != nil {
+			return nil, fmt.Errorf("scan genre pick stat: %w", err)
+		}
+		if personID != nil && initial != nil && name != nil {
+			stat.Person = &model.Person{ID: *personID, Initial: *initial, Name: *name}
+		}
+		stats = append(stats, stat)
+	}
+
+	return stats, rows.Err()
+}
+
 // GetSummaryStats returns the compact family totals displayed at the bottom of the page.
 func (r *StatsRepository) GetSummaryStats(ctx context.Context) (totalWatched, totalRuntime, fullyRatedCount int, err error) {
 	query := `

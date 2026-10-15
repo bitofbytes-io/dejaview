@@ -198,3 +198,109 @@ func TestAdvantageHolderEdgesPostgres(t *testing.T) {
 	add("Dune", 2)
 	check(2) // group 2's last entry has no picker
 }
+
+// TestGenrePickStatsPostgres covers reading genres from saved TMDB metadata:
+// per-picker genre counts, family ratings only for fully rated entries, and
+// movies with missing or malformed genre metadata being skipped.
+func TestGenrePickStatsPostgres(t *testing.T) {
+	pool := ratingTestPool(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	entries := NewEntryRepository(pool)
+	stats := NewStatsRepository(pool)
+
+	people := map[string]uuid.UUID{}
+	rows, err := pool.Query(ctx, `SELECT initial, id FROM persons`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var initial string
+		var id uuid.UUID
+		if err := rows.Scan(&initial, &id); err != nil {
+			t.Fatal(err)
+		}
+		people[initial] = id
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	addEntry := func(title, metadata, picker string) uuid.UUID {
+		t.Helper()
+		var meta any
+		if metadata != "" {
+			meta = metadata
+		}
+		var movieID uuid.UUID
+		if err := pool.QueryRow(ctx, `INSERT INTO movies(title, metadata_json) VALUES ($1, $2::jsonb) RETURNING id`, title, meta).Scan(&movieID); err != nil {
+			t.Fatal(err)
+		}
+		input := model.CreateEntryInput{MovieID: movieID, GroupNumber: 1}
+		if picker != "" {
+			id := people[picker]
+			input.PickedByPersonID = &id
+		}
+		entry, err := entries.Create(ctx, input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return entry.ID
+	}
+	rate := func(entryID uuid.UUID, scores map[string]float64) {
+		t.Helper()
+		for initial, score := range scores {
+			if _, err := pool.Exec(ctx, `INSERT INTO ratings(person_id, entry_id, score) VALUES ($1, $2, $3)`, people[initial], entryID, score); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	alien := addEntry("Alien", `{"genres":[{"id":27,"name":"Horror"},{"id":878,"name":"Science Fiction"}]}`, "D")
+	rate(alien, map[string]float64{"D": 8, "J": 6, "C": 7, "A": 9}) // avg 7.5
+	addEntry("Brazil", `{"genres":[{"id":878,"name":"Science Fiction"},{"id":878,"name":"Science Fiction"}]}`, "D")
+	cube := addEntry("Cube", `{"genres":[{"id":27,"name":"Horror"}]}`, "J")
+	rate(cube, map[string]float64{"D": 5, "J": 5, "C": 5, "A": 5}) // avg 5
+	partial := addEntry("Dune", `{"genres":[{"id":878,"name":"Science Fiction"}]}`, "J")
+	rate(partial, map[string]float64{"D": 10}) // not fully rated
+	addEntry("Eraserhead", `{"genres":[{"id":1,"name":"Drama"}]}`, "")
+	addEntry("Fargo", "", "D")                          // no metadata
+	addEntry("Gattaca", `{"title":"Gattaca"}`, "D")     // no genres key
+	addEntry("Heat", `{"genres":null}`, "D")            // null genres
+	addEntry("Inception", `{"genres":"Thriller"}`, "D") // genres is not an array
+	addEntry("Jaws", `{"genres":["Thriller",{"id":2},{"name":"  "},{"name":99},{"name":null},{"name":" Thriller "}]}`, "C")
+
+	got, err := stats.GetGenrePickStats(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	type key struct{ picker, genre string }
+	type want struct {
+		picks, tagged, rated int
+		total                float64
+	}
+	expected := map[key]want{
+		{"Caleb", "Thriller"}:           {picks: 1, tagged: 1},
+		{"Daniel", "Horror"}:            {picks: 1, tagged: 2, rated: 1, total: 7.5},
+		{"Daniel", "Science Fiction"}:   {picks: 2, tagged: 2, rated: 1, total: 7.5},
+		{"Jennifer", "Horror"}:          {picks: 1, tagged: 2, rated: 1, total: 5},
+		{"Jennifer", "Science Fiction"}: {picks: 1, tagged: 2},
+		{"", "Drama"}:                   {picks: 1, tagged: 1},
+	}
+	if len(got) != len(expected) {
+		t.Fatalf("got %d genre rows, want %d: %+v", len(got), len(expected), got)
+	}
+	for _, stat := range got {
+		k := key{genre: stat.Genre}
+		if stat.Person != nil {
+			k.picker = stat.Person.Name
+		}
+		w, ok := expected[k]
+		if !ok {
+			t.Fatalf("unexpected genre row %+v", stat)
+		}
+		if stat.Picks != w.picks || stat.TaggedPicks != w.tagged || stat.RatedPicks != w.rated || math.Abs(stat.RatingTotal-w.total) > 1e-9 {
+			t.Fatalf("%v: got picks=%d tagged=%d rated=%d total=%v, want %+v", k, stat.Picks, stat.TaggedPicks, stat.RatedPicks, stat.RatingTotal, w)
+		}
+	}
+}

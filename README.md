@@ -87,6 +87,8 @@ Migration 003 seeds four example people (D, J, C and A) with the colours cyan, r
 
 No configuration is needed beyond running migration 013, which adds `persons.color`.
 
+The Trophy Room's Genre Spotlight reads the genres TMDB returned when each movie was added (saved in `movies.metadata_json`), so it needs no extra configuration. Movies without saved genres are skipped. A genre needs two family-rated movies to be the family favorite, and the Genre Loyalist trophy needs three genre-tagged picks.
+
 ## Run with Docker
 
 ```bash
