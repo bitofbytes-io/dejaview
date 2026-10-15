@@ -13,8 +13,6 @@ import (
 )
 
 var (
-	// ErrPersonNotFound is returned when the person to change does not exist.
-	ErrPersonNotFound = errors.New("person not found")
 	// ErrPersonInitialTaken is returned when another person already has the initial.
 	ErrPersonInitialTaken = errors.New("person initial already in use")
 	// ErrPersonInUse is returned when a person with ratings or picks is deleted.
