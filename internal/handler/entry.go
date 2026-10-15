@@ -82,6 +82,14 @@ func (h *EntryHandler) Update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Entry not found", http.StatusNotFound)
 		return
 	}
+	if errors.Is(err, repository.ErrInvalidGroup) {
+		http.Error(w, "Group must be an existing group or the next new one", http.StatusBadRequest)
+		return
+	}
+	if errors.Is(err, repository.ErrPersonNotFound) {
+		http.Error(w, "Unknown picked_by_person_id", http.StatusBadRequest)
+		return
+	}
 	if errors.Is(err, repository.ErrEntryExistsInGroup) {
 		http.Error(w, "Movie already exists in that group", http.StatusConflict)
 		return
@@ -112,7 +120,12 @@ func (h *EntryHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.entryRepo.Delete(ctx, entryID); err != nil {
+	err = h.entryRepo.Delete(ctx, entryID)
+	if errors.Is(err, repository.ErrEntryNotFound) {
+		http.Error(w, "Entry not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
 		slog.Error("failed to delete entry", "error", err)
 		http.Error(w, "Failed to delete entry", http.StatusInternalServerError)
 		return

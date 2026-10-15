@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -107,8 +108,11 @@ func TestSaveBatchPostgres(t *testing.T) {
 	}
 	// The missing person fails after an update and a delete; both must roll back.
 	err = repo.SaveBatch(ctx, entryID, []model.RatingChange{{PersonID: people[0], Score: score(9)}, {PersonID: people[1]}, {PersonID: uuid.New(), Score: score(7)}})
-	if err == nil {
-		t.Fatal("expected foreign-key failure")
+	if !errors.Is(err, ErrPersonNotFound) {
+		t.Fatalf("expected ErrPersonNotFound, got %v", err)
+	}
+	if err := repo.SaveBatch(ctx, uuid.New(), []model.RatingChange{{PersonID: people[0], Score: score(7)}}); !errors.Is(err, ErrEntryNotFound) {
+		t.Fatalf("expected ErrEntryNotFound for a missing entry, got %v", err)
 	}
 	ratings, err := entryRatings(ctx, pool, entryID)
 	if err != nil {

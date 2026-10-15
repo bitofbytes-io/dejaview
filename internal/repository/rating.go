@@ -19,7 +19,9 @@ func NewRatingRepository(pool *pgxpool.Pool) *RatingRepository {
 	return &RatingRepository{pool: pool}
 }
 
-// SaveBatch applies a validated submission atomically. Omitted people are unchanged.
+// SaveBatch applies a validated submission atomically. Omitted people are
+// unchanged. It returns ErrPersonNotFound when a score names an unknown person
+// and ErrEntryNotFound when the entry no longer exists.
 func (r *RatingRepository) SaveBatch(ctx context.Context, entryID uuid.UUID, changes []model.RatingChange) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -32,6 +34,12 @@ func (r *RatingRepository) SaveBatch(ctx context.Context, entryID uuid.UUID, cha
 		} else {
 			_, err = tx.Exec(ctx, `INSERT INTO ratings (person_id, entry_id, score) VALUES ($1, $2, $3)
     ON CONFLICT (person_id, entry_id) DO UPDATE SET score = EXCLUDED.score, updated_at = NOW()`, change.PersonID, entryID, *change.Score)
+		}
+		if isForeignKeyViolation(err, "ratings_person_id_fkey") {
+			return ErrPersonNotFound
+		}
+		if isForeignKeyViolation(err, "ratings_entry_id_fkey") {
+			return ErrEntryNotFound
 		}
 		if err != nil {
 			return fmt.Errorf("save rating batch: %w", err)

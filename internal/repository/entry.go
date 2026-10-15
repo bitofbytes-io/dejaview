@@ -8,6 +8,7 @@ import (
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -249,21 +250,32 @@ func (r *EntryRepository) ListAll(ctx context.Context) ([]*model.Entry, error) {
 }
 
 var (
-	// ErrEntryNotFound is returned when the entry to update does not exist.
+	// ErrEntryNotFound is returned when the entry to update, delete, or rate
+	// does not exist.
 	ErrEntryNotFound = errors.New("entry not found")
+	// ErrPersonNotFound is returned when a picker or rating names a person
+	// that does not exist.
+	ErrPersonNotFound = errors.New("person not found")
 	// ErrEntryExistsInGroup is returned when adding or moving an entry into a
 	// group that already contains the same movie.
 	ErrEntryExistsInGroup = errors.New("movie already exists in target group")
 	// ErrReorderMismatch is returned when a reorder does not list exactly
 	// the group's current entries, for example after another change.
 	ErrReorderMismatch = errors.New("reorder does not match the group's entries")
-	// ErrInvalidGroup is returned when adding to a group that is neither an
-	// existing group nor the next new one.
+	// ErrInvalidGroup is returned when adding or moving to a group that is
+	// neither an existing group nor the next new one.
 	ErrInvalidGroup = errors.New("group must be an existing group or the next new one")
 	// ErrEntryGroupChanged is returned when concurrent moves kept changing the
 	// entry's group and the move gave up after maxMoveAttempts.
 	ErrEntryGroupChanged = errors.New("entry group changed concurrently")
 )
+
+// isForeignKeyViolation reports whether err is a Postgres foreign key
+// violation of the named constraint.
+func isForeignKeyViolation(err error, constraint string) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23503" && pgErr.ConstraintName == constraint
+}
 
 // maxMoveAttempts bounds retries when a concurrent move changes the entry's
 // group between reading it and acquiring the group locks.
@@ -271,7 +283,9 @@ const maxMoveAttempts = 3
 
 // Update updates an existing entry. Changing the group moves the entry to the
 // end of the target group under the same per-group advisory locks used by
-// Create and ReorderEntries.
+// Create and ReorderEntries. It returns ErrEntryNotFound for a missing entry,
+// ErrInvalidGroup for a target group that is neither an existing group nor
+// the next new one, and ErrPersonNotFound for an unknown picker.
 func (r *EntryRepository) Update(ctx context.Context, id uuid.UUID, input model.UpdateEntryInput) error {
 	var err error
 	for attempt := 0; attempt < maxMoveAttempts; attempt++ {
@@ -307,8 +321,15 @@ func (r *EntryRepository) update(ctx context.Context, id uuid.UUID, input model.
 		    END
 		WHERE id = $1`
 
-	if _, err := tx.Exec(ctx, query, id, input.PickedByPersonID); err != nil {
+	tag, err := tx.Exec(ctx, query, id, input.PickedByPersonID)
+	if isForeignKeyViolation(err, "entries_picked_by_person_id_fkey") {
+		return ErrPersonNotFound
+	}
+	if err != nil {
 		return fmt.Errorf("update entry: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrEntryNotFound
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -361,6 +382,19 @@ func moveEntryToGroup(ctx context.Context, tx pgx.Tx, id uuid.UUID, targetGroup 
 		return nil
 	}
 
+	// Like Create, the target must be an existing group or the next new one.
+	// The moved entry does not count, so moving the only entry of the last
+	// group cannot skip a group number.
+	var maxGroup int
+	if err := tx.QueryRow(ctx,
+		"SELECT COALESCE(MAX(group_number), 0) FROM entries WHERE id <> $1", id,
+	).Scan(&maxGroup); err != nil {
+		return fmt.Errorf("move entry read groups: %w", err)
+	}
+	if targetGroup < 1 || targetGroup > maxGroup+1 {
+		return ErrInvalidGroup
+	}
+
 	var exists bool
 	if err := tx.QueryRow(ctx,
 		"SELECT EXISTS (SELECT 1 FROM entries WHERE movie_id = $1 AND group_number = $2)",
@@ -384,12 +418,16 @@ func moveEntryToGroup(ctx context.Context, tx pgx.Tx, id uuid.UUID, targetGroup 
 	return nil
 }
 
-// Delete removes an entry from the database
+// Delete removes an entry from the database. It returns ErrEntryNotFound when
+// the entry does not exist.
 func (r *EntryRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	query := `DELETE FROM entries WHERE id = $1`
-	_, err := r.pool.Exec(ctx, query, id)
+	tag, err := r.pool.Exec(ctx, query, id)
 	if err != nil {
 		return fmt.Errorf("delete entry: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrEntryNotFound
 	}
 	return nil
 }
