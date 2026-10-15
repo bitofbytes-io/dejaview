@@ -166,6 +166,11 @@ templ Header(isAuthenticated bool, current string) {
 					<a href="/stats" class="nav-link"><span class="sm:hidden">Trophies</span><span class="hidden sm:inline">Trophy room</span></a>
 				}
 				if isAuthenticated {
+					if current == "people" {
+						<a href="/people" class="nav-link hidden sm:inline-flex" aria-current="page">People</a>
+					} else {
+						<a href="/people" class="nav-link">People</a>
+					}
 					<form action="/logout" method="POST" class="inline">
 						<button type="submit" class="nav-link">Log out</button>
 					</form>

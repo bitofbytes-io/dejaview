@@ -81,13 +81,11 @@ goose -dir migrations postgres "$DATABASE_URL" up
 
 ### People
 
-Migration 003 seeds four example people (D, J, C and A). On a new install, replace them with everyone who picks and rates movies, each with a unique one-letter initial, before anyone picks or rates a movie:
+Manage people in the app at `/people` (the **People** link in the header; sign in first). Add everyone who picks and rates movies, give each a unique one-letter initial and one of five colours (cyan, rose, amber, mint, violet), and rename or recolour them later. The initial is fixed once a person is added. A person who has ratings or has picked a movie can't be removed, so no scores or picks are lost; rename them instead.
 
-```bash
-psql "$DATABASE_URL" -c "DELETE FROM persons" -c "INSERT INTO persons (initial, name) VALUES ('A', 'Alex'), ('B', 'Blake')"
-```
+Migration 003 seeds four example people (D, J, C and A) with the colours cyan, rose, amber and violet. On a new install, add your own people on the People page, then remove the examples before anyone picks or rates a movie. A movie counts as fully rated in the Trophy Room once every person has rated it.
 
-The `DELETE` fails once someone has ratings, so it cannot remove anyone's scores; rename a person instead with `UPDATE persons SET name = 'Alex' WHERE initial = 'A'`. A movie counts as fully rated in the Trophy Room once every person has rated it.
+No configuration is needed beyond running migration 013, which adds `persons.color`.
 
 ## Run with Docker
 

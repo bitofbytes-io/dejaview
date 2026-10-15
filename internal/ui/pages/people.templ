@@ -1,0 +1,118 @@
+package pages
+
+import (
+	"github.com/drywaters/dejaview/internal/model"
+	"github.com/drywaters/dejaview/internal/ui/layout"
+)
+
+// PeopleFormData fills the add-person form, so a rejected form keeps what was typed.
+type PeopleFormData struct {
+	Name    string
+	Initial string
+	Color   string
+}
+
+templ PeoplePage(people []*model.Person, form PeopleFormData, errorMessage string, isAuthenticated bool) {
+	@layout.Base("People") {
+		@layout.Header(isAuthenticated, "people")
+
+		<main class="page page-narrow">
+			<h1 class="detail-title">People</h1>
+			<p class="muted-note">Everyone who picks and rates movies. A movie counts as fully rated once every person has rated it.</p>
+
+			if errorMessage != "" {
+				<div class="login-error" role="alert">{ errorMessage }</div>
+			}
+
+			<section class="people-list" aria-label="Current people">
+				for _, person := range people {
+					<div class={ "card", person.ColorClass() }>
+						<div class="people-row-head">
+							<span class="people-badge" aria-hidden="true">{ person.Initial }</span>
+							<h2 class="card-title">{ person.Name }</h2>
+						</div>
+						<form action={ templ.SafeURL("/people/" + person.ID.String()) } method="POST" class="people-form">
+							<div>
+								<label for={ "name-" + person.ID.String() } class="field-label">Name</label>
+								<input
+									type="text"
+									id={ "name-" + person.ID.String() }
+									name="name"
+									value={ person.Name }
+									required
+									maxlength="50"
+									class="input-field"
+								/>
+							</div>
+							@colorPicker(person.Color, person.ID.String())
+							<div class="people-actions">
+								<button type="submit" class="btn-primary">Save</button>
+							</div>
+						</form>
+						<form
+							action={ templ.SafeURL("/people/" + person.ID.String() + "/delete") }
+							method="POST"
+							class="people-actions people-remove"
+							hx-confirm="Remove this person? This only works for someone with no ratings or picks."
+						>
+							<button type="submit" class="btn-danger btn-sm">Remove</button>
+						</form>
+					</div>
+				}
+			</section>
+
+			<section class="card" aria-labelledby="add-person-title">
+				<h2 id="add-person-title" class="card-title">Add a person</h2>
+				<form action="/people" method="POST" class="people-form">
+					<div>
+						<label for="new-name" class="field-label">Name</label>
+						<input
+							type="text"
+							id="new-name"
+							name="name"
+							value={ form.Name }
+							required
+							maxlength="50"
+							class="input-field"
+						/>
+					</div>
+					<div>
+						<label for="new-initial" class="field-label">Initial</label>
+						<input
+							type="text"
+							id="new-initial"
+							name="initial"
+							value={ form.Initial }
+							maxlength="1"
+							class="input-field"
+							aria-describedby="new-initial-help"
+						/>
+						<p id="new-initial-help" class="field-help">One letter shown on badges. Defaults to the first letter of the name. It can't be changed later.</p>
+					</div>
+					@colorPicker(form.Color, "new")
+					<div class="people-actions">
+						<button type="submit" class="btn-primary">Add person</button>
+					</div>
+				</form>
+			</section>
+		</main>
+	}
+}
+
+// colorPicker renders the palette as radio swatches. idPrefix keeps the ids
+// unique when several pickers share a page.
+templ colorPicker(selected string, idPrefix string) {
+	<fieldset class="color-picker">
+		<legend class="field-label">Colour</legend>
+		for _, color := range model.PersonColors {
+			<label class={ "color-option", "person-" + color } for={ "color-" + idPrefix + "-" + color }>
+				if color == selected {
+					<input type="radio" id={ "color-" + idPrefix + "-" + color } name="color" value={ color } checked/>
+				} else {
+					<input type="radio" id={ "color-" + idPrefix + "-" + color } name="color" value={ color }/>
+				}
+				<span class="color-swatch"><span class="sr-only">{ color }</span></span>
+			</label>
+		}
+	</fieldset>
+}

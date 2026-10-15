@@ -27,7 +27,7 @@ func NewEntryRepository(pool *pgxpool.Pool) *EntryRepository {
 const entrySelect = `
 	SELECT e.id, e.movie_id, e.group_number, e.position, e.added_at, e.picked_by_person_id,
 	       m.id, m.created_at, m.updated_at, m.title, m.release_year, m.poster_url, m.synopsis, m.runtime_minutes, m.tmdb_id, m.imdb_id, m.metadata_json,
-	       p.id, p.initial, p.name
+	       p.id, p.initial, p.name, p.color
 	FROM entries e
 	JOIN movies m ON e.movie_id = m.id
 	LEFT JOIN persons p ON e.picked_by_person_id = p.id`
@@ -39,6 +39,7 @@ func scanEntry(row pgx.Row) (*model.Entry, error) {
 	var pickedByPersonDBID *uuid.UUID
 	var pickedByInitial *string
 	var pickedByName *string
+	var pickedByColor *string
 
 	if err := row.Scan(
 		&entry.ID,
@@ -61,16 +62,18 @@ func scanEntry(row pgx.Row) (*model.Entry, error) {
 		&pickedByPersonDBID,
 		&pickedByInitial,
 		&pickedByName,
+		&pickedByColor,
 	); err != nil {
 		return nil, err
 	}
 
 	entry.Movie = movie
-	if pickedByPersonDBID != nil && pickedByInitial != nil && pickedByName != nil {
+	if pickedByPersonDBID != nil && pickedByInitial != nil && pickedByName != nil && pickedByColor != nil {
 		entry.PickedByPerson = &model.Person{
 			ID:      *pickedByPersonDBID,
 			Initial: *pickedByInitial,
 			Name:    *pickedByName,
+			Color:   *pickedByColor,
 		}
 	}
 	return entry, nil
@@ -183,7 +186,7 @@ func (r *EntryRepository) loadRatings(ctx context.Context, entries []*model.Entr
 
 	query := `
 		SELECT r.id, r.person_id, r.entry_id, r.score, r.created_at, r.updated_at,
-		       p.id, p.initial, p.name
+		       p.id, p.initial, p.name, p.color
 		FROM ratings r
 		JOIN persons p ON r.person_id = p.id
 		WHERE r.entry_id = ANY($1)
@@ -208,6 +211,7 @@ func (r *EntryRepository) loadRatings(ctx context.Context, entries []*model.Entr
 			&person.ID,
 			&person.Initial,
 			&person.Name,
+			&person.Color,
 		); err != nil {
 			return fmt.Errorf("scan rating: %w", err)
 		}
