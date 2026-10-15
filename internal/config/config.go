@@ -34,7 +34,7 @@ func Load() (*Config, error) {
 	if cfg.Port, err = getEnv("PORT", "4600"); err != nil {
 		return nil, err
 	}
-	if cfg.DatabaseURL, err = getEnvOrFile("DATABASE_URL", "/run/secrets/dejaview_database_url"); err != nil {
+	if cfg.DatabaseURL, err = LoadDatabaseURL(); err != nil {
 		return nil, err
 	}
 	if cfg.APIToken, err = getEnvOrFile("API_TOKEN", "/run/secrets/dejaview_api_token"); err != nil {
@@ -81,6 +81,14 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// LoadDatabaseURL reads DATABASE_URL the way Load does: the variable itself,
+// then DATABASE_URL_FILE, then the dejaview_database_url Swarm secret. It
+// returns an empty string when none is set. dejaview-migrate uses it because
+// the migration job gets only the database secret.
+func LoadDatabaseURL() (string, error) {
+	return getEnvOrFile("DATABASE_URL", "/run/secrets/dejaview_database_url")
 }
 
 // parseTrustedProxies reads a comma-separated list of CIDRs or single IPs.

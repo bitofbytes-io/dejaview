@@ -11,7 +11,8 @@ RUN go mod download
 # Copy pre-generated templ files and pre-built static assets from CI
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-X main.version=${VERSION} -X main.revision=${REVISION}" -o /out/dejaview ./cmd/dejaview
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-X main.version=${VERSION} -X main.revision=${REVISION}" -o /out/dejaview ./cmd/dejaview \
+ && CGO_ENABLED=0 GOOS=linux go build -o /out/dejaview-migrate ./cmd/dejaview-migrate
 
 FROM alpine:3.23.4
 ARG LOG_LEVEL=info
@@ -23,6 +24,8 @@ WORKDIR /app
 RUN apk add --no-cache ca-certificates
 
 COPY --from=builder /out/dejaview ./dejaview
+# The deploy hook runs /app/dejaview-migrate as a one-off job before each rollout.
+COPY --from=builder /out/dejaview-migrate ./dejaview-migrate
 COPY --from=builder /src/static ./static
 COPY migrations ./migrations
 

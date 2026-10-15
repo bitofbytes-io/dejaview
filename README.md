@@ -79,6 +79,8 @@ export DATABASE_URL='postgres://dejaview:change-me@localhost:5432/dejaview?sslmo
 goose -dir migrations postgres "$DATABASE_URL" up
 ```
 
+The image also ships `/app/dejaview-migrate`, which applies the same migrations (embedded in the binary) and records them in Goose's `goose_db_version` table. It reads the database URL the way the app does: `DATABASE_URL`, then `DATABASE_URL_FILE`, then the `/run/secrets/dejaview_database_url` Swarm secret. The home_swarm deploy hook runs it as a one-off job before rolling out each new image, so production migrations apply on deploy.
+
 ### People
 
 Manage people in the app at `/people` (the **People** link in the header; sign in first). Add everyone who picks and rates movies, give each a unique one-letter initial and one of five colours (cyan, rose, amber, mint, violet), and rename or recolour them later. The initial is fixed once a person is added. A person who has ratings or has picked a movie can't be removed, so no scores or picks are lost; rename them instead.
