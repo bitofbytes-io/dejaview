@@ -6,6 +6,6 @@
 - Use Conventional Commits, prefix maintenance branches with `chore/`, and assign pull requests to yourself.
 - Use `make run` for local development; it runs `templ` and `tail-prod` before `go run ./cmd/dejaview`.
 - `make build` creates `bin/` and regenerates Templ and minified CSS before writing `bin/dejaview`.
-- Database helpers are `make migrate`, `make migrate-status`, and `make migrate-down`; they require `DATABASE_URL` to be configured locally.
+- Database helpers are `make migrate`, `make migrate-status`, and `make migrate-down`; they require `DATABASE_URL` to be configured locally. Production applies migrations on deploy with `/app/dejaview-migrate`, which embeds `migrations/*.sql`.
 - Run `make test` and verify affected rendered routes for handler or template changes.
 - To match CI validation, configure `DEJAVIEW_TEST_DATABASE_URL` locally for repository tests, then run `make test build`, `go vet ./...`, and `go test -race ./internal/handler ./internal/repository`.

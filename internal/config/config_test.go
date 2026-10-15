@@ -2,6 +2,8 @@ package config
 
 import (
 	"net/netip"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -73,5 +75,29 @@ func TestSessionEpoch(t *testing.T) {
 		if _, err := Load(); err == nil || !strings.Contains(err.Error(), "SESSION_EPOCH") {
 			t.Fatalf("SESSION_EPOCH=%q: Load error = %v, want SESSION_EPOCH error", bad, err)
 		}
+	}
+}
+
+func TestLoadDatabaseURL(t *testing.T) {
+	// The hook's migration job sets only DATABASE_URL_FILE.
+	t.Setenv("DATABASE_URL", "")
+	secret := filepath.Join(t.TempDir(), "dejaview_database_url")
+	if err := os.WriteFile(secret, []byte("postgres://secret/dejaview\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DATABASE_URL_FILE", secret)
+	if got, err := LoadDatabaseURL(); err != nil || got != "postgres://secret/dejaview" {
+		t.Fatalf("LoadDatabaseURL from file = %q, %v", got, err)
+	}
+
+	t.Setenv("DATABASE_URL", "postgres://env/dejaview")
+	if got, err := LoadDatabaseURL(); err != nil || got != "postgres://env/dejaview" {
+		t.Fatalf("LoadDatabaseURL from env = %q, %v; want the variable to win", got, err)
+	}
+
+	t.Setenv("DATABASE_URL", "")
+	t.Setenv("DATABASE_URL_FILE", filepath.Join(t.TempDir(), "missing"))
+	if _, err := LoadDatabaseURL(); err != nil {
+		t.Fatalf("LoadDatabaseURL with missing file = %v, want empty value for the caller to reject", err)
 	}
 }
