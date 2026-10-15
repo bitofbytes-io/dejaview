@@ -20,6 +20,7 @@ type stubEntryStore struct {
 	updateCalls int
 	lastInput   model.UpdateEntryInput
 	reorderErr  error
+	deleteErr   error
 }
 
 func (s *stubEntryStore) Update(ctx context.Context, id uuid.UUID, input model.UpdateEntryInput) error {
@@ -28,7 +29,7 @@ func (s *stubEntryStore) Update(ctx context.Context, id uuid.UUID, input model.U
 	return s.updateErr
 }
 
-func (s *stubEntryStore) Delete(ctx context.Context, id uuid.UUID) error { return nil }
+func (s *stubEntryStore) Delete(ctx context.Context, id uuid.UUID) error { return s.deleteErr }
 
 func (s *stubEntryStore) ReorderEntries(ctx context.Context, groupNumber int, entryIDs []uuid.UUID) error {
 	return s.reorderErr
@@ -74,6 +75,8 @@ func TestUpdateEntryMapsRepositoryErrors(t *testing.T) {
 		{"duplicate in target group", repository.ErrEntryExistsInGroup, http.StatusConflict},
 		{"moved concurrently", repository.ErrEntryGroupChanged, http.StatusConflict},
 		{"missing entry", repository.ErrEntryNotFound, http.StatusNotFound},
+		{"invalid target group", repository.ErrInvalidGroup, http.StatusBadRequest},
+		{"unknown picker", repository.ErrPersonNotFound, http.StatusBadRequest},
 		{"unexpected", errors.New("boom"), http.StatusInternalServerError},
 	}
 	for _, tc := range cases {
@@ -88,6 +91,37 @@ func TestUpdateEntryMapsRepositoryErrors(t *testing.T) {
 				t.Fatalf("expected group 3 to be passed, got %v", store.lastInput.GroupNumber)
 			}
 			hasToast := strings.Contains(recorder.Header().Get("HX-Trigger"), "Entry updated!")
+			if hasToast != (tc.want == http.StatusOK) {
+				t.Fatalf("success toast present=%v for status %d", hasToast, recorder.Code)
+			}
+		})
+	}
+}
+
+func TestDeleteEntryMapsRepositoryErrors(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want int
+	}{
+		{"deleted", nil, http.StatusOK},
+		{"missing entry", repository.ErrEntryNotFound, http.StatusNotFound},
+		{"unexpected", errors.New("boom"), http.StatusInternalServerError},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			handler := &EntryHandler{entryRepo: &stubEntryStore{deleteErr: tc.err}}
+			entryID := uuid.NewString()
+			req := httptest.NewRequest(http.MethodDelete, "/api/entries/"+entryID, nil)
+			route := chi.NewRouteContext()
+			route.URLParams.Add("id", entryID)
+			req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, route))
+			recorder := httptest.NewRecorder()
+			handler.Delete(recorder, req)
+			if recorder.Code != tc.want {
+				t.Fatalf("expected status %d, got %d", tc.want, recorder.Code)
+			}
+			hasToast := strings.Contains(recorder.Header().Get("HX-Trigger"), "Entry deleted!")
 			if hasToast != (tc.want == http.StatusOK) {
 				t.Fatalf("success toast present=%v for status %d", hasToast, recorder.Code)
 			}

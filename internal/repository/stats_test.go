@@ -147,7 +147,8 @@ func TestStatsRepositoryPostgres(t *testing.T) {
 }
 
 // TestAdvantageHolderEdgesPostgres covers the advantage before a second group
-// exists and when the previous group's last entry has no picker.
+// exists, after a move empties the group before the current one, and when the
+// previous group's last entry has no picker.
 func TestAdvantageHolderEdgesPostgres(t *testing.T) {
 	pool := ratingTestPool(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -161,6 +162,10 @@ func TestAdvantageHolderEdgesPostgres(t *testing.T) {
 		if err != nil || holder != nil || group != wantGroup {
 			t.Fatalf("advantage holder=%+v group=%d err=%v, want nil in group %d", holder, group, err, wantGroup)
 		}
+	}
+	var picker model.Person
+	if err := pool.QueryRow(ctx, `SELECT id, initial, name FROM persons ORDER BY initial LIMIT 1`).Scan(&picker.ID, &picker.Initial, &picker.Name); err != nil {
+		t.Fatal(err)
 	}
 	add := func(title string, group int) uuid.UUID {
 		t.Helper()
@@ -180,11 +185,16 @@ func TestAdvantageHolderEdgesPostgres(t *testing.T) {
 	check(0) // only group 1
 	brazil := add("Brazil", 2)
 	add("Cube", 3)
+	// Moving group 2's only entry to the end of group 1 empties group 2, so
+	// the previous group is now group 1, where Brazil was picked last.
 	group1 := 1
-	if err := entries.Update(ctx, brazil, model.UpdateEntryInput{GroupNumber: &group1}); err != nil {
+	if err := entries.Update(ctx, brazil, model.UpdateEntryInput{GroupNumber: &group1, PickedByPersonID: &picker.ID}); err != nil {
 		t.Fatal(err)
 	}
-	check(2) // group 2 is empty
+	holder, group, err := stats.GetAdvantageHolder(ctx)
+	if err != nil || group != 1 || holder == nil || *holder != picker {
+		t.Fatalf("advantage holder=%+v group=%d err=%v, want %s in group 1", holder, group, err, picker.Initial)
+	}
 	add("Dune", 2)
 	check(2) // group 2's last entry has no picker
 }
