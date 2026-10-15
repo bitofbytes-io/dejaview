@@ -112,6 +112,13 @@ func (s *Server) Router() http.Handler {
 		statsHandler := handler.NewStatsHandler(s.statsRepo)
 		r.Get("/stats", statsHandler.StatsPage)
 
+		// People
+		peopleHandler := handler.NewPeopleHandler(s.personRepo)
+		r.Get("/people", peopleHandler.PeoplePage)
+		r.Post("/people", peopleHandler.Create)
+		r.Post("/people/{id}", peopleHandler.Update)
+		r.Post("/people/{id}/delete", peopleHandler.Delete)
+
 		// Movie detail page
 		movieHandler := handler.NewMovieHandler(s.movieRepo, s.entryRepo, s.personRepo, s.tmdbClient)
 		r.Get("/movies/{id}", movieHandler.MovieDetailPage)

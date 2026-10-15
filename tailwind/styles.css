@@ -29,10 +29,6 @@
 		--signal-error: #ff7a45;
 		--medal-bronze: #e0925a;
 		--on-neon: #1a0510;
-		--person-daniel: var(--neon-cyan);
-		--person-jennifer: var(--neon-rose);
-		--person-caleb: var(--neon-amber);
-		--person-aiden: var(--neon-violet);
 		--rating-low: var(--neon-rose);
 		--rating-mid: var(--neon-amber);
 		--rating-high: var(--neon-mint);
@@ -331,10 +327,12 @@
   background: var(--person, var(--ink)); color: var(--on-neon);
   box-shadow: 0 0 0 2px var(--surface-sunken);
 }
-.person-daniel { --person: var(--person-daniel); }
-.person-jennifer { --person: var(--person-jennifer); }
-.person-caleb { --person: var(--person-caleb); }
-.person-aiden { --person: var(--person-aiden); }
+/* One class per model.PersonColors entry */
+.person-cyan { --person: var(--neon-cyan); }
+.person-rose { --person: var(--neon-rose); }
+.person-amber { --person: var(--neon-amber); }
+.person-mint { --person: var(--neon-mint); }
+.person-violet { --person: var(--neon-violet); }
 .drag-handle {
   position: absolute; top: var(--space-2); left: var(--space-2); z-index: 2;
   display: inline-flex; align-items: center; justify-content: center;
@@ -739,6 +737,32 @@ body.dv-crt::before { position: fixed; }
 .login-error { margin-bottom: var(--space-6); padding: var(--space-3) var(--space-4); border: 1px solid var(--signal-error); border-radius: var(--radius-md); background: var(--surface-sunken); color: var(--ink); font-size: 14px; line-height: 20px; }
 .login-error strong { color: var(--signal-error); }
 .login-footer { margin: 0; text-align: center; }
+
+/* People */
+.people-list { display: grid; gap: var(--space-4); margin-bottom: var(--space-8); }
+.people-form { display: grid; gap: var(--space-4); }
+.people-row-head { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); }
+.people-row-head .card-title { margin: 0; }
+.people-remove { margin-top: var(--space-3); }
+.people-badge {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 32px; height: 32px; border-radius: var(--radius-pill);
+  background: var(--person, var(--ink)); color: var(--on-neon); font-size: 14px; font-weight: 800;
+}
+.people-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.color-picker { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: 0; padding: 0; border: 0; }
+.color-picker legend { padding: 0; }
+.color-option { position: relative; display: inline-flex; }
+.color-option input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.color-swatch {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; border-radius: var(--radius-pill);
+  background: var(--person); color: var(--on-neon); font-size: 18px; font-weight: 800;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.color-option input:checked + .color-swatch { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
+.color-option input:focus-visible + .color-swatch { outline: 2px solid var(--focus); outline-offset: 4px; }
+.color-option input:checked + .color-swatch::after { content: "\2713"; }
 
 /* Group heading: keep each piece whole, wrap between them on phones */
 .group-head { flex-wrap: wrap; row-gap: var(--space-1); }

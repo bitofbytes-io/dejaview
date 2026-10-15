@@ -29,7 +29,7 @@ func (r *StatsRepository) GetAdvantageHolder(ctx context.Context) (*model.Person
 			SELECT MAX(group_number) - 1 AS group_number
 			FROM entries
 		)
-		SELECT previous.group_number, p.id, p.initial, p.name
+		SELECT previous.group_number, p.id, p.initial, p.name, p.color
 		FROM previous
 		LEFT JOIN LATERAL (
 			SELECT e.picked_by_person_id
@@ -42,17 +42,17 @@ func (r *StatsRepository) GetAdvantageHolder(ctx context.Context) (*model.Person
 
 	var prevGroup *int
 	var personID *uuid.UUID
-	var initial, name *string
-	if err := r.pool.QueryRow(ctx, query).Scan(&prevGroup, &personID, &initial, &name); err != nil {
+	var initial, name, color *string
+	if err := r.pool.QueryRow(ctx, query).Scan(&prevGroup, &personID, &initial, &name, &color); err != nil {
 		return nil, 0, fmt.Errorf("get advantage holder: %w", err)
 	}
 	if prevGroup == nil || *prevGroup < 1 {
 		return nil, 0, nil
 	}
-	if personID == nil || initial == nil || name == nil {
+	if personID == nil || initial == nil || name == nil || color == nil {
 		return nil, *prevGroup, nil
 	}
-	return &model.Person{ID: *personID, Initial: *initial, Name: *name}, *prevGroup, nil
+	return &model.Person{ID: *personID, Initial: *initial, Name: *name, Color: *color}, *prevGroup, nil
 }
 
 // fullyRated is the HAVING clause, over ratings grouped by entry_id, that
@@ -93,7 +93,7 @@ func (r *StatsRepository) GetTrophyStats(ctx context.Context) ([]model.TrophySta
 			WHERE e.picked_by_person_id IS NOT NULL
 			GROUP BY e.picked_by_person_id
 		)
-		SELECT p.id, p.initial, p.name,
+		SELECT p.id, p.initial, p.name, p.color,
 			COALESCE(rg.average, 0), COALESCE(rg.rating_count, 0),
 			COALESCE(rr.average, 0), COALESCE(rr.pick_count, 0),
 			COALESCE(pr.total_runtime, 0), COALESCE(pr.runtime_pick_count, 0)
@@ -117,6 +117,7 @@ func (r *StatsRepository) GetTrophyStats(ctx context.Context) ([]model.TrophySta
 			&person.ID,
 			&person.Initial,
 			&person.Name,
+			&person.Color,
 			&stat.AvgRatingGiven,
 			&stat.RatingsGiven,
 			&stat.AvgRatingReceived,
@@ -144,7 +145,7 @@ func (r *StatsRepository) GetTopRatedMovies(ctx context.Context, limit int) ([]m
 		)
 		SELECT e.id, e.movie_id, e.group_number, e.position, e.added_at, e.picked_by_person_id,
 			m.id, m.title, m.release_year, m.poster_url, m.runtime_minutes,
-			p.id, p.initial, p.name,
+			p.id, p.initial, p.name, p.color,
 			es.average_rating
 		FROM entry_scores es
 		JOIN entries e ON e.id = es.entry_id
@@ -164,7 +165,7 @@ func (r *StatsRepository) GetTopRatedMovies(ctx context.Context, limit int) ([]m
 		entry := &model.Entry{}
 		movie := &model.Movie{}
 		var pickerID *uuid.UUID
-		var pickerInitial, pickerName *string
+		var pickerInitial, pickerName, pickerColor *string
 		var ranked model.RankedMovie
 
 		if err := rows.Scan(
@@ -182,14 +183,15 @@ func (r *StatsRepository) GetTopRatedMovies(ctx context.Context, limit int) ([]m
 			&pickerID,
 			&pickerInitial,
 			&pickerName,
+			&pickerColor,
 			&ranked.AverageRating,
 		); err != nil {
 			return nil, fmt.Errorf("scan top rated movie: %w", err)
 		}
 
 		entry.Movie = movie
-		if pickerID != nil && pickerInitial != nil && pickerName != nil {
-			entry.PickedByPerson = &model.Person{ID: *pickerID, Initial: *pickerInitial, Name: *pickerName}
+		if pickerID != nil && pickerInitial != nil && pickerName != nil && pickerColor != nil {
+			entry.PickedByPerson = &model.Person{ID: *pickerID, Initial: *pickerInitial, Name: *pickerName, Color: *pickerColor}
 		}
 		ranked.Entry = entry
 		movies = append(movies, ranked)

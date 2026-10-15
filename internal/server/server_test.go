@@ -14,6 +14,30 @@ import (
 	"github.com/drywaters/dejaview/internal/session"
 )
 
+// TestPeopleRoutesRequireLogin checks that nobody can read or change people
+// without a session.
+func TestPeopleRoutesRequireLogin(t *testing.T) {
+	router := New(&config.Config{APIToken: "api-token"}, nil, nil, nil, nil, nil, nil).Router()
+	id := "0b0a8f5e-2d86-4a46-8f0c-5e0d3f2f6f11"
+	for _, tc := range []struct {
+		method, path string
+		want         int
+	}{
+		{http.MethodGet, "/people", http.StatusSeeOther},
+		{http.MethodPost, "/people", http.StatusUnauthorized},
+		{http.MethodPost, "/people/" + id, http.StatusUnauthorized},
+		{http.MethodPost, "/people/" + id + "/delete", http.StatusUnauthorized},
+	} {
+		req := httptest.NewRequest(tc.method, tc.path, nil)
+		req.Header.Set("Origin", "http://example.com")
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, req)
+		if recorder.Code != tc.want {
+			t.Errorf("%s %s: status %d, want %d", tc.method, tc.path, recorder.Code, tc.want)
+		}
+	}
+}
+
 // TestPreviousReleaseSessionStaysValid sends a cookie built exactly as the
 // release before session epochs did through the real router: it still signs
 // in at the default epoch 0, and raising SESSION_EPOCH ends it.
