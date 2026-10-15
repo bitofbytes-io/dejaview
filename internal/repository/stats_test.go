@@ -164,7 +164,7 @@ func TestAdvantageHolderEdgesPostgres(t *testing.T) {
 		}
 	}
 	var picker model.Person
-	if err := pool.QueryRow(ctx, `SELECT id, initial, name FROM persons ORDER BY initial LIMIT 1`).Scan(&picker.ID, &picker.Initial, &picker.Name); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT id, initial, name, color FROM persons ORDER BY initial LIMIT 1`).Scan(&picker.ID, &picker.Initial, &picker.Name, &picker.Color); err != nil {
 		t.Fatal(err)
 	}
 	add := func(title string, group int) uuid.UUID {
