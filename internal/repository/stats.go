@@ -224,6 +224,7 @@ func (r *StatsRepository) GetGenrePickStats(ctx context.Context) ([]model.GenreP
 						THEN m.metadata_json -> 'genres' ELSE '[]'::jsonb END
 				) AS elem(value)
 				WHERE jsonb_typeof(elem.value) = 'object'
+					AND jsonb_typeof(elem.value -> 'name') = 'string'
 					AND BTRIM(elem.value ->> 'name') <> ''
 			) g
 			LEFT JOIN entry_scores es ON es.entry_id = e.id

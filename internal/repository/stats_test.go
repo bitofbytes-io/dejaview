@@ -268,7 +268,7 @@ func TestGenrePickStatsPostgres(t *testing.T) {
 	addEntry("Gattaca", `{"title":"Gattaca"}`, "D")     // no genres key
 	addEntry("Heat", `{"genres":null}`, "D")            // null genres
 	addEntry("Inception", `{"genres":"Thriller"}`, "D") // genres is not an array
-	addEntry("Jaws", `{"genres":["Thriller",{"id":2},{"name":"  "},{"name":" Thriller "}]}`, "C")
+	addEntry("Jaws", `{"genres":["Thriller",{"id":2},{"name":"  "},{"name":99},{"name":null},{"name":" Thriller "}]}`, "C")
 
 	got, err := stats.GetGenrePickStats(ctx)
 	if err != nil {
