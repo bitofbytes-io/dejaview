@@ -27,10 +27,13 @@ templ TopMovieList(movies []model.RankedMovie) {
 								<span>{ ui.IntToStr(*ranked.Entry.Movie.ReleaseYear) }</span>
 							}
 							<span>Group { ui.IntToStr(ranked.Entry.GroupNumber) }</span>
-							if ranked.Entry.PickedByPerson != nil {
-								<span>Picked by { ranked.Entry.PickedByPerson.Name }</span>
-							}
 						</div>
+						if ranked.Entry.PickedByPerson != nil {
+							<div class="top-movie-picker">
+								<span class="sr-only">Picked by</span>
+								@PersonPill(ranked.Entry.PickedByPerson)
+							</div>
+						}
 					</div>
 					<div class="top-movie-score">
 						<strong>{ fmt.Sprintf("%.1f", ranked.AverageRating) }</strong>

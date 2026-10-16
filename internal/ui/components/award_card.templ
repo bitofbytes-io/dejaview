@@ -4,27 +4,39 @@ import "github.com/drywaters/dejaview/internal/model"
 
 // TrophyCard renders one friendly award and supports shared wins.
 templ TrophyCard(trophy model.Trophy) {
-	<article class="trophy-card">
-		<div class="trophy-card-icon">@Icon(trophy.Icon, "")</div>
-		<h3>{ trophy.Title }</h3>
-		<p class="trophy-card-description">{ trophy.Description }</p>
-		<div class="trophy-winners">
-			if len(trophy.Winners) > 0 {
-				for _, winner := range trophy.Winners {
-					<span class={ "trophy-winner", winner.ColorClass() }>
-						<span class="trophy-winner-badge" aria-hidden="true">{ winner.Initial }</span>
-						<span>{ winner.Name }</span>
-					</span>
-				}
-			} else {
-				<span class="trophy-winner trophy-winner-pending">
-					<span class="trophy-winner-badge" aria-hidden="true">?</span>
-					<span>Still up for grabs</span>
-				</span>
+	@trophyCardLayout(trophy.Icon, trophy.Title, trophy.Description, trophy.Value, false) {
+		if len(trophy.Winners) > 0 {
+			for _, winner := range trophy.Winners {
+				@PersonPill(winner)
 			}
+		} else {
+			@pendingWinner("Still up for grabs")
+		}
+	}
+}
+
+// trophyCardLayout is the card every trophy shares: icon, heading and
+// description on top, the winners centred below them, then the divider and
+// footer value. The trophy grid lines these rows up across each row of cards.
+// Stacked winners sit one per line, centred as a group.
+templ trophyCardLayout(icon, title, description, value string, stacked bool) {
+	<article class="trophy-card">
+		<div class="trophy-card-icon">@Icon(icon, "")</div>
+		<h3>{ title }</h3>
+		<p class="trophy-card-description">{ description }</p>
+		<div class={ "trophy-winners", templ.KV("trophy-winners-stacked", stacked) }>
+			{ children... }
 		</div>
-		<div class="trophy-card-value">{ trophy.Value }</div>
+		<div class="trophy-card-value">{ value }</div>
 	</article>
+}
+
+// pendingWinner is the placeholder pill for a trophy nobody has won yet.
+templ pendingWinner(label string) {
+	<span class="trophy-winner trophy-winner-pending">
+		<span class="trophy-winner-badge" aria-hidden="true">?</span>
+		<span>{ label }</span>
+	</span>
 }
 
 // TrophyGrid renders the three Trophy Room awards.

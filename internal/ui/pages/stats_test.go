@@ -79,9 +79,23 @@ func TestStatsPageRendersTrophiesAndRankedMovies(t *testing.T) {
 	}
 
 	// Every person chip wears the person's colour: Crowd Pleaser, Genre
-	// Loyalist and Go-To Genres.
-	if got := strings.Count(html, `class="trophy-winner person-mint"`); got != 3 {
-		t.Errorf("found %d person chips in Daniel's colour, want 3", got)
+	// Loyalist, Go-To Genres and the Top Five picker.
+	if got := strings.Count(html, `class="trophy-winner person-mint"`); got != 4 {
+		t.Errorf("found %d person chips in Daniel's colour, want 4", got)
+	}
+	// Crowd Pleaser and all three genre cards share the trophy card layout,
+	// footer included, so their rows line up.
+	if got := strings.Count(html, `<article class="trophy-card">`); got != 4 {
+		t.Errorf("found %d trophy cards, want 4", got)
+	}
+	if got := strings.Count(html, `<div class="trophy-card-value">`); got != 4 {
+		t.Errorf("found %d trophy card footers, want 4", got)
+	}
+	if got := strings.Count(html, `class="trophy-winners trophy-winners-stacked"`); got != 1 {
+		t.Errorf("found %d stacked winner lists, want 1 for Go-To Genres", got)
+	}
+	if !strings.Contains(html, `<div class="top-movie-picker"><span class="sr-only">Picked by</span><span class="trophy-winner person-mint">`) {
+		t.Error("Top Five did not show the picker as a person chip")
 	}
 }
 
