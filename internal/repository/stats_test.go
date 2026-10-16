@@ -10,9 +10,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// TestStatsRepositoryPostgres covers the fully-rated filtering shared by the
-// Trophy Room queries: only entries rated by every family member count toward
-// rating averages and the top list, while runtime totals use every pick.
+// TestStatsRepositoryPostgres covers the family-rated filtering shared by the
+// Trophy Room queries: only entries rated by all but one family member count
+// toward rating averages and the top list, while runtime totals use every pick.
 func TestStatsRepositoryPostgres(t *testing.T) {
 	pool := ratingTestPool(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -69,8 +69,10 @@ func TestStatsRepositoryPostgres(t *testing.T) {
 	brazil := addEntry("Brazil", minutes(120), 1, "J")
 	rate(brazil, map[string]float64{"D": 4, "J": 5, "C": 6, "A": 5}) // avg 5
 	partial := addEntry("Cube", nil, 2, "D")
-	rate(partial, map[string]float64{"D": 10, "J": 10}) // not fully rated
+	rate(partial, map[string]float64{"D": 10, "J": 10}) // 2 of 4: does not count
 	addEntry("Dune", minutes(90), 2, "")
+	eraserhead := addEntry("Eraserhead", minutes(80), 2, "C")
+	rate(eraserhead, map[string]float64{"D": 6, "J": 8, "C": 4}) // 3 of 4 counts: avg 6
 
 	trophies, err := stats.GetTrophyStats(ctx)
 	if err != nil {
@@ -81,9 +83,9 @@ func TestStatsRepositoryPostgres(t *testing.T) {
 		given, picks, runtime, runtimePick int
 	}
 	expected := map[string]want{
-		"D": {avgGiven: 6, given: 2, avgReceived: 7.5, picks: 1, runtime: 100, runtimePick: 1},
-		"J": {avgGiven: 5.5, given: 2, avgReceived: 5, picks: 1, runtime: 120, runtimePick: 1},
-		"C": {avgGiven: 6.5, given: 2},
+		"D": {avgGiven: 6, given: 3, avgReceived: 7.5, picks: 1, runtime: 100, runtimePick: 1},
+		"J": {avgGiven: 19.0 / 3, given: 3, avgReceived: 5, picks: 1, runtime: 120, runtimePick: 1},
+		"C": {avgGiven: 17.0 / 3, given: 3, avgReceived: 6, picks: 1, runtime: 80, runtimePick: 1},
 		"A": {avgGiven: 7, given: 2},
 	}
 	if len(trophies) != len(expected) {
@@ -105,8 +107,11 @@ func TestStatsRepositoryPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(top) != 2 || top[0].Entry.ID != alien || top[1].Entry.ID != brazil {
+	if len(top) != 3 || top[0].Entry.ID != alien || top[1].Entry.ID != eraserhead || top[2].Entry.ID != brazil {
 		t.Fatalf("unexpected top movies: %+v", top)
+	}
+	if top[1].AverageRating != 6 {
+		t.Fatalf("3-of-4 movie averages its ratings: got %v, want 6", top[1].AverageRating)
 	}
 	if top[0].AverageRating != 7.5 || top[0].Entry.Movie.Title != "Alien" || top[0].Entry.PickedByPerson == nil || top[0].Entry.PickedByPerson.Initial != "D" {
 		t.Fatalf("unexpected top movie: %+v", top[0])
@@ -119,8 +124,8 @@ func TestStatsRepositoryPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if watched != 4 || runtime != 310 || fullyRated != 2 {
-		t.Fatalf("summary watched=%d runtime=%d fullyRated=%d, want 4/310/2", watched, runtime, fullyRated)
+	if watched != 5 || runtime != 390 || fullyRated != 3 {
+		t.Fatalf("summary watched=%d runtime=%d fullyRated=%d, want 5/390/3", watched, runtime, fullyRated)
 	}
 
 	// The advantage goes to whoever picked the last entry of the group
@@ -130,19 +135,81 @@ func TestStatsRepositoryPostgres(t *testing.T) {
 		t.Fatalf("advantage holder=%+v group=%d err=%v, want J in group 1", holder, group, err)
 	}
 
-	// "Fully rated" follows the number of people: with a fifth person, no
-	// entry is fully rated until they rate it too.
+	// The threshold follows the number of people: with a fifth person, a
+	// movie needs 4 ratings, so the 3-of-4 Eraserhead drops out until
+	// someone else rates it.
 	var eve uuid.UUID
 	if err := pool.QueryRow(ctx, `INSERT INTO persons (initial, name) VALUES ('E', 'Eve') RETURNING id`).Scan(&eve); err != nil {
 		t.Fatal(err)
 	}
 	people["E"] = eve
-	if _, _, fullyRated, err := stats.GetSummaryStats(ctx); err != nil || fullyRated != 0 {
-		t.Fatalf("fully rated with five people = %d (err %v), want 0", fullyRated, err)
+	if _, _, fullyRated, err := stats.GetSummaryStats(ctx); err != nil || fullyRated != 2 {
+		t.Fatalf("family rated with five people = %d (err %v), want 2", fullyRated, err)
 	}
-	rate(alien, map[string]float64{"E": 9})
-	if top, err := stats.GetTopRatedMovies(ctx, 5); err != nil || len(top) != 1 || top[0].Entry.ID != alien {
-		t.Fatalf("top movies with five people = %+v (err %v), want only Alien", top, err)
+	if top, err := stats.GetTopRatedMovies(ctx, 5); err != nil || len(top) != 2 || top[0].Entry.ID != alien || top[1].Entry.ID != brazil {
+		t.Fatalf("top movies with five people = %+v (err %v), want Alien and Brazil", top, err)
+	}
+	rate(eraserhead, map[string]float64{"E": 10}) // 4 of 5: avg 7
+	if top, err := stats.GetTopRatedMovies(ctx, 5); err != nil || len(top) != 3 || top[1].Entry.ID != eraserhead || top[1].AverageRating != 7 {
+		t.Fatalf("top movies after Eve rates Eraserhead = %+v (err %v), want it second at 7", top, err)
+	}
+}
+
+// TestTrophyRatingThresholdPostgres checks the SQL rule against
+// model.TrophyRatingThreshold as the family shrinks: all but one person must
+// rate a movie, and with one or two people a single rating is enough.
+func TestTrophyRatingThresholdPostgres(t *testing.T) {
+	pool := ratingTestPool(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	entries := NewEntryRepository(pool)
+	stats := NewStatsRepository(pool)
+
+	var movieID uuid.UUID
+	if err := pool.QueryRow(ctx, `INSERT INTO movies(title) VALUES ('Alien') RETURNING id`).Scan(&movieID); err != nil {
+		t.Fatal(err)
+	}
+	entry, err := entries.Create(ctx, model.CreateEntryInput{MovieID: movieID, GroupNumber: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Seeded people, rated in this order: D, J, C, A.
+	order := []string{"D", "J", "C", "A"}
+	setRaters := func(raters int) {
+		t.Helper()
+		if _, err := pool.Exec(ctx, `DELETE FROM ratings`); err != nil {
+			t.Fatal(err)
+		}
+		for _, initial := range order[:raters] {
+			if _, err := pool.Exec(ctx, `INSERT INTO ratings(person_id, entry_id, score) SELECT id, $1, 7 FROM persons WHERE initial = $2`, entry.ID, initial); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	for _, people := range []int{4, 3, 2, 1} {
+		// Remove people from the end of the order, so the raters remain.
+		if _, err := pool.Exec(ctx, `DELETE FROM ratings WHERE person_id IN (SELECT id FROM persons WHERE initial = ANY($1))`, order[people:]); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `DELETE FROM persons WHERE initial = ANY($1)`, order[people:]); err != nil {
+			t.Fatal(err)
+		}
+		threshold := model.TrophyRatingThreshold(people)
+		for raters := 0; raters <= people; raters++ {
+			setRaters(raters)
+			want := 0
+			if raters > 0 && raters >= threshold {
+				want = 1
+			}
+			_, _, got, err := stats.GetSummaryStats(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != want {
+				t.Errorf("%d of %d people rated: counted %d, want %d", raters, people, got, want)
+			}
+		}
 	}
 }
 
@@ -200,7 +267,7 @@ func TestAdvantageHolderEdgesPostgres(t *testing.T) {
 }
 
 // TestGenrePickStatsPostgres covers reading genres from saved TMDB metadata:
-// per-picker genre counts, family ratings only for fully rated entries, and
+// per-picker genre counts, family ratings only for family-rated entries, and
 // movies with missing or malformed genre metadata being skipped.
 func TestGenrePickStatsPostgres(t *testing.T) {
 	pool := ratingTestPool(t)
@@ -262,7 +329,7 @@ func TestGenrePickStatsPostgres(t *testing.T) {
 	cube := addEntry("Cube", `{"genres":[{"id":27,"name":"Horror"}]}`, "J")
 	rate(cube, map[string]float64{"D": 5, "J": 5, "C": 5, "A": 5}) // avg 5
 	partial := addEntry("Dune", `{"genres":[{"id":878,"name":"Science Fiction"}]}`, "J")
-	rate(partial, map[string]float64{"D": 10}) // not fully rated
+	rate(partial, map[string]float64{"D": 10}) // 1 of 4: does not count
 	addEntry("Eraserhead", `{"genres":[{"id":1,"name":"Drama"}]}`, "")
 	addEntry("Fargo", "", "D")                          // no metadata
 	addEntry("Gattaca", `{"title":"Gattaca"}`, "D")     // no genres key
@@ -294,6 +361,10 @@ func TestGenrePickStatsPostgres(t *testing.T) {
 		k := key{genre: stat.Genre}
 		if stat.Person != nil {
 			k.picker = stat.Person.Name
+			// The Trophy Room colours genre chips by the picker's colour.
+			if !model.ValidPersonColor(stat.Person.Color) {
+				t.Fatalf("%s has no colour: %+v", stat.Person.Name, stat.Person)
+			}
 		}
 		w, ok := expected[k]
 		if !ok {

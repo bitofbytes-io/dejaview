@@ -85,7 +85,7 @@ The image also ships `/app/dejaview-migrate`, which applies the same migrations 
 
 Manage people in the app at `/people` (the **People** link in the header; sign in first). Add everyone who picks and rates movies, give each a unique one-letter initial and one of five colours (cyan, rose, amber, mint, violet), and rename or recolour them later. The initial is fixed once a person is added. A person who has ratings or has picked a movie can't be removed, so no scores or picks are lost; rename them instead.
 
-Migration 003 seeds four example people (D, J, C and A) with the colours cyan, rose, amber and violet. On a new install, add your own people on the People page, then remove the examples before anyone picks or rates a movie. A movie counts as fully rated in the Trophy Room once every person has rated it.
+Migration 003 seeds four example people (D, J, C and A) with the colours cyan, rose, amber and violet. On a new install, add your own people on the People page, then remove the examples before anyone picks or rates a movie. A movie counts in the Trophy Room (rating trophies, Genre Spotlight ratings, Family Top Five and the family-rated total) once all but one person has rated it, and always at least one: 3 of 4 people, or 1 of 2. Its score is the average of the ratings it has.
 
 No configuration is needed beyond running migration 013, which adds `persons.color`.
 
