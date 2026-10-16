@@ -11,10 +11,7 @@ templ TrophyCard(trophy model.Trophy) {
 		<div class="trophy-winners">
 			if len(trophy.Winners) > 0 {
 				for _, winner := range trophy.Winners {
-					<span class={ "trophy-winner", winner.ColorClass() }>
-						<span class="trophy-winner-badge" aria-hidden="true">{ winner.Initial }</span>
-						<span>{ winner.Name }</span>
-					</span>
+					@PersonPill(winner)
 				}
 			} else {
 				<span class="trophy-winner trophy-winner-pending">

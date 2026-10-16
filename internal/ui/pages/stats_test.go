@@ -79,9 +79,12 @@ func TestStatsPageRendersTrophiesAndRankedMovies(t *testing.T) {
 	}
 
 	// Every person chip wears the person's colour: Crowd Pleaser, Genre
-	// Loyalist and Go-To Genres.
-	if got := strings.Count(html, `class="trophy-winner person-mint"`); got != 3 {
-		t.Errorf("found %d person chips in Daniel's colour, want 3", got)
+	// Loyalist, Go-To Genres and the Top Five picker.
+	if got := strings.Count(html, `class="trophy-winner person-mint"`); got != 4 {
+		t.Errorf("found %d person chips in Daniel's colour, want 4", got)
+	}
+	if !strings.Contains(html, `<div class="top-movie-picker"><span class="sr-only">Picked by</span><span class="trophy-winner person-mint">`) {
+		t.Error("Top Five did not show the picker as a person chip")
 	}
 }
 

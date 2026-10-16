@@ -1,0 +1,12 @@
+package components
+
+import "github.com/drywaters/dejaview/internal/model"
+
+// PersonPill renders a person's coloured initial and name, as used for
+// trophy winners and Top Five pickers.
+templ PersonPill(person *model.Person) {
+	<span class={ "trophy-winner", person.ColorClass() }>
+		<span class="trophy-winner-badge" aria-hidden="true">{ person.Initial }</span>
+		<span>{ person.Name }</span>
+	</span>
+}
