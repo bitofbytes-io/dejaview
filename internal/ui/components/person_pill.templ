@@ -7,6 +7,6 @@ import "github.com/drywaters/dejaview/internal/model"
 templ PersonPill(person *model.Person) {
 	<span class={ "trophy-winner", person.ColorClass() }>
 		<span class="trophy-winner-badge" aria-hidden="true">{ person.Initial }</span>
-		<span>{ person.Name }</span>
+		<span class="trophy-winner-name">{ person.Name }</span>
 	</span>
 }

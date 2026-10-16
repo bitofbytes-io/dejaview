@@ -53,7 +53,7 @@ templ PickerGenresCard(pickerGenres []model.PickerGenre) {
 				for _, pick := range pickerGenres {
 					<span class={ "trophy-winner", pick.Person.ColorClass() }>
 						<span class="trophy-winner-badge" aria-hidden="true">{ pick.Person.Initial }</span>
-						<span>{ pick.Person.Name }: { pick.Genre } ({ ui.IntToStr(pick.Picks) })</span>
+						<span class="trophy-winner-label">{ pick.Person.Name }: { pick.Genre } ({ ui.IntToStr(pick.Picks) })</span>
 					</span>
 				}
 			} else {
