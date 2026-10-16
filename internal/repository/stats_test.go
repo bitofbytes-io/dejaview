@@ -71,7 +71,7 @@ func TestStatsRepositoryPostgres(t *testing.T) {
 	partial := addEntry("Cube", nil, 2, "D")
 	rate(partial, map[string]float64{"D": 10, "J": 10}) // 2 of 4: does not count
 	addEntry("Dune", minutes(90), 2, "")
-	eraserhead := addEntry("Eraserhead", minutes(80), 2, "C")
+	eraserhead := addEntry("Eraserhead", minutes(80), 2, "D")
 	rate(eraserhead, map[string]float64{"D": 6, "J": 8, "C": 4}) // 3 of 4 counts: avg 6
 
 	trophies, err := stats.GetTrophyStats(ctx)
@@ -82,10 +82,13 @@ func TestStatsRepositoryPostgres(t *testing.T) {
 		avgGiven, avgReceived              float64
 		given, picks, runtime, runtimePick int
 	}
+	// D's picks average per movie, (7.5 + 6) / 2, so the 3-rating Eraserhead
+	// weighs the same as the 4-rating Alien; pooling the 7 scores would give
+	// 48/7.
 	expected := map[string]want{
-		"D": {avgGiven: 6, given: 3, avgReceived: 7.5, picks: 1, runtime: 100, runtimePick: 1},
+		"D": {avgGiven: 6, given: 3, avgReceived: 6.75, picks: 2, runtime: 180, runtimePick: 2},
 		"J": {avgGiven: 19.0 / 3, given: 3, avgReceived: 5, picks: 1, runtime: 120, runtimePick: 1},
-		"C": {avgGiven: 17.0 / 3, given: 3, avgReceived: 6, picks: 1, runtime: 80, runtimePick: 1},
+		"C": {avgGiven: 17.0 / 3, given: 3},
 		"A": {avgGiven: 7, given: 2},
 	}
 	if len(trophies) != len(expected) {

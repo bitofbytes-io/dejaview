@@ -67,8 +67,8 @@ const fullyRated = `HAVING COUNT(DISTINCT person_id) >= GREATEST((SELECT COUNT(*
 // GetTrophyStats returns the three straightforward metrics used by the Trophy Room.
 func (r *StatsRepository) GetTrophyStats(ctx context.Context) ([]model.TrophyStats, error) {
 	query := `
-		WITH fully_rated_entries AS (
-			SELECT entry_id
+		WITH entry_scores AS (
+			SELECT entry_id, AVG(score) AS average_rating
 			FROM ratings
 			GROUP BY entry_id
 			` + fullyRated + `
@@ -76,16 +76,17 @@ func (r *StatsRepository) GetTrophyStats(ctx context.Context) ([]model.TrophySta
 		ratings_given AS (
 			SELECT r.person_id, AVG(r.score) AS average, COUNT(*) AS rating_count
 			FROM ratings r
-			JOIN fully_rated_entries fre ON fre.entry_id = r.entry_id
+			JOIN entry_scores es ON es.entry_id = r.entry_id
 			GROUP BY r.person_id
 		),
+		-- Average each pick's family score, so a pick rated by three people
+		-- weighs the same as one rated by four.
 		ratings_received AS (
 			SELECT e.picked_by_person_id AS person_id,
-				AVG(r.score) AS average,
-				COUNT(DISTINCT e.id) AS pick_count
+				AVG(es.average_rating) AS average,
+				COUNT(*) AS pick_count
 			FROM entries e
-			JOIN fully_rated_entries fre ON fre.entry_id = e.id
-			JOIN ratings r ON r.entry_id = e.id
+			JOIN entry_scores es ON es.entry_id = e.id
 			WHERE e.picked_by_person_id IS NOT NULL
 			GROUP BY e.picked_by_person_id
 		),
