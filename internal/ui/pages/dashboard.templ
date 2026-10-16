@@ -93,7 +93,7 @@ templ GroupSection(groupNum int, entries []*model.Entry, persons []*model.Person
 				<span>Group { ui.IntToStr(groupNum) }</span>
 			</h2>
 			<span class="group-count">
-				{ ui.IntToStr(len(entries)) } { pluralize(len(entries), "movie", "movies") }
+				{ ui.IntToStr(len(entries)) } out of { ui.IntToStr(groupTotal(groupNum)) }
 			</span>
 		</div>
 
@@ -113,9 +113,11 @@ templ GroupSection(groupNum int, entries []*model.Entry, persons []*model.Person
 	</section>
 }
 
-func pluralize(count int, singular, plural string) string {
-	if count == 1 {
-		return singular
+// groupTotal is how many movies a group holds once every pick is made. A full
+// group is 9 picks; group 1 has 8 because its third pick round never happened.
+func groupTotal(groupNum int) int {
+	if groupNum == 1 {
+		return 8
 	}
-	return plural
+	return 9
 }

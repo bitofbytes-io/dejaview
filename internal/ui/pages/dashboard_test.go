@@ -43,6 +43,30 @@ func TestDashboardHidesAddMovieWhenLoggedOut(t *testing.T) {
 	}
 }
 
+func TestDashboardGroupCountShowsTotal(t *testing.T) {
+	entries := func(group, n int) []*model.Entry {
+		out := make([]*model.Entry, n)
+		for i := range out {
+			out[i] = &model.Entry{ID: uuid.New(), GroupNumber: group, Movie: &model.Movie{Title: "Heat"}}
+		}
+		return out
+	}
+	groups := []GroupData{
+		{Number: 1, Entries: entries(1, 8)},
+		{Number: 2, Entries: entries(2, 9)},
+		{Number: 3, Entries: entries(3, 5)},
+	}
+
+	for _, authed := range []bool{false, true} {
+		html := render(t, DashboardContent(groups, nil, 3, authed))
+		for _, want := range []string{"8 out of 8", "9 out of 9", "5 out of 9"} {
+			if !strings.Contains(html, want) {
+				t.Errorf("dashboard (authenticated=%v) is missing group count %q", authed, want)
+			}
+		}
+	}
+}
+
 func TestDashboardEmptyStateMatchesVisitor(t *testing.T) {
 	if html := render(t, DashboardContent(nil, nil, 1, false)); strings.Contains(html, "Search for a movie above") {
 		t.Error("logged-out empty state points at the hidden search")
