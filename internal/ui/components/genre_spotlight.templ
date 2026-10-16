@@ -18,51 +18,34 @@ templ GenreSpotlight(genres model.GenreSpotlight) {
 
 // FamilyFavoriteGenreCard shows the genre the family rates highest.
 templ FamilyFavoriteGenreCard(favorite *model.GenreRating) {
-	<article class="trophy-card" data-genre-card="family-favorite">
-		<div class="trophy-card-icon">@Icon("star", "")</div>
-		<h3>Family Favorite Genre</h3>
-		<p class="trophy-card-description">The genre we rate highest together</p>
-		<div class="trophy-winners">
-			if favorite != nil {
-				<span class="trophy-winner genre-pill">{ favorite.Genre }</span>
-			} else {
-				<span class="trophy-winner trophy-winner-pending">
-					<span class="trophy-winner-badge" aria-hidden="true">?</span>
-					<span>Still up for grabs</span>
-				</span>
-			}
-		</div>
-		<div class="trophy-card-value">
-			if favorite != nil {
-				{ fmt.Sprintf("%.1f family average over %d movies", favorite.AverageRating, favorite.Movies) }
-			} else {
-				Waiting for family-rated movies in one genre
-			}
-		</div>
-	</article>
+	@trophyCardLayout("star", "Family Favorite Genre", "The genre we rate highest together", familyFavoriteValue(favorite), false) {
+		if favorite != nil {
+			<span class="trophy-winner genre-pill">{ favorite.Genre }</span>
+		} else {
+			@pendingWinner("Still up for grabs")
+		}
+	}
+}
+
+func familyFavoriteValue(favorite *model.GenreRating) string {
+	if favorite == nil {
+		return "Waiting for family-rated movies in one genre"
+	}
+	return fmt.Sprintf("%.1f family average over %d movies", favorite.AverageRating, favorite.Movies)
 }
 
 // PickerGenresCard lists the genre each person picks most often.
 templ PickerGenresCard(pickerGenres []model.PickerGenre) {
-	<article class="trophy-card" data-genre-card="picker-genres">
-		<div class="trophy-card-icon">@Icon("popcorn", "")</div>
-		<h3>Go-To Genres</h3>
-		<p class="trophy-card-description">The genre each picker reaches for most</p>
-		<div class="trophy-winners genre-picker-list">
-			if len(pickerGenres) > 0 {
-				for _, pick := range pickerGenres {
-					<span class={ "trophy-winner", pick.Person.ColorClass() }>
-						<span class="trophy-winner-badge" aria-hidden="true">{ pick.Person.Initial }</span>
-						<span class="trophy-winner-label">{ pick.Person.Name }: { pick.Genre } ({ ui.IntToStr(pick.Picks) })</span>
-					</span>
-				}
-			} else {
-				<span class="trophy-winner trophy-winner-pending">
-					<span class="trophy-winner-badge" aria-hidden="true">?</span>
-					<span>No genres yet</span>
+	@trophyCardLayout("popcorn", "Go-To Genres", "The genre each picker reaches for most", "Counts picks per genre; movies can have several", true) {
+		if len(pickerGenres) > 0 {
+			for _, pick := range pickerGenres {
+				<span class={ "trophy-winner", pick.Person.ColorClass() }>
+					<span class="trophy-winner-badge" aria-hidden="true">{ pick.Person.Initial }</span>
+					<span class="trophy-winner-label">{ pick.Person.Name }: { pick.Genre } ({ ui.IntToStr(pick.Picks) })</span>
 				</span>
 			}
-		</div>
-		<div class="trophy-card-value">Counts picks per genre; movies can have several</div>
-	</article>
+		} else {
+			@pendingWinner("No genres yet")
+		}
+	}
 }
