@@ -1,5 +1,12 @@
 package model
 
+// TrophyRatingThreshold returns how many people must rate a movie before it
+// counts toward the Trophy Room: everyone but one, and at least one. With four
+// people that is three. The stats queries apply the same rule in SQL.
+func TrophyRatingThreshold(people int) int {
+	return max(people-1, 1)
+}
+
 // Trophy represents one friendly family movie-night award.
 type Trophy struct {
 	ID          string
@@ -21,7 +28,7 @@ type TrophyStats struct {
 	PicksWithKnownRuntime int
 }
 
-// RankedMovie is a fully rated entry in the family's top-five list.
+// RankedMovie is a family-rated entry in the family's top-five list.
 type RankedMovie struct {
 	Entry         *Entry
 	AverageRating float64
@@ -37,7 +44,8 @@ type GenrePickStat struct {
 	Picks int
 	// TaggedPicks counts this picker's entries that have any genre.
 	TaggedPicks int
-	// RatedPicks counts those Picks that every person rated, and RatingTotal
+	// RatedPicks counts those Picks rated by enough people to count (see
+	// TrophyRatingThreshold), and RatingTotal
 	// sums their family averages.
 	RatedPicks  int
 	RatingTotal float64
@@ -51,7 +59,7 @@ type PickerGenre struct {
 	TaggedPicks int
 }
 
-// GenreRating is a genre's average family rating across fully rated movies.
+// GenreRating is a genre's average family rating across family-rated movies.
 type GenreRating struct {
 	Genre         string
 	AverageRating float64

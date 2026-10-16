@@ -111,3 +111,40 @@ func TestMovieDetailPageHasNoRatingsFormWhenLoggedOut(t *testing.T) {
 		t.Error("logged-in movie page has no ratings form")
 	}
 }
+
+// Edit controls for the entry itself, hidden entirely from visitors.
+var entryEditControls = []string{
+	`id="picked-by"`,
+	"Picked by</label>",
+	"hx-delete=",
+	"Remove from collection",
+}
+
+func TestMovieDetailPageHidesEntryControlsWhenLoggedOut(t *testing.T) {
+	entry, persons := ratedEntry()
+	entry.PickedByPersonID = &persons[1].ID
+	entry.PickedByPerson = persons[1]
+
+	html := render(t, MovieDetailPage(entry, persons, false))
+	for _, unwanted := range entryEditControls {
+		if strings.Contains(html, unwanted) {
+			t.Errorf("logged-out movie page contains %q", unwanted)
+		}
+	}
+	// Visitors still see who picked the movie and its group.
+	for _, want := range []string{"Picked by Ben", `class="text-kicker">Group</span>`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("logged-out movie page is missing %q", want)
+		}
+	}
+
+	html = render(t, MovieDetailPage(entry, persons, true))
+	for _, want := range entryEditControls {
+		if !strings.Contains(html, want) {
+			t.Errorf("logged-in movie page is missing %q", want)
+		}
+	}
+	if strings.Contains(html, "disabled") {
+		t.Error("logged-in movie page has disabled controls")
+	}
+}

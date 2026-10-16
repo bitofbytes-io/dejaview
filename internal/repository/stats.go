@@ -59,14 +59,16 @@ func (r *StatsRepository) GetAdvantageHolder(ctx context.Context) (*model.Person
 }
 
 // fullyRated is the HAVING clause, over ratings grouped by entry_id, that
-// keeps entries rated by every person.
-const fullyRated = `HAVING COUNT(DISTINCT person_id) = (SELECT COUNT(*) FROM persons)`
+// keeps the entries that count toward the Trophy Room: those rated by all
+// but one person, and by at least one. It matches
+// model.TrophyRatingThreshold.
+const fullyRated = `HAVING COUNT(DISTINCT person_id) >= GREATEST((SELECT COUNT(*) FROM persons) - 1, 1)`
 
 // GetTrophyStats returns the three straightforward metrics used by the Trophy Room.
 func (r *StatsRepository) GetTrophyStats(ctx context.Context) ([]model.TrophyStats, error) {
 	query := `
-		WITH fully_rated_entries AS (
-			SELECT entry_id
+		WITH entry_scores AS (
+			SELECT entry_id, AVG(score) AS average_rating
 			FROM ratings
 			GROUP BY entry_id
 			` + fullyRated + `
@@ -74,16 +76,17 @@ func (r *StatsRepository) GetTrophyStats(ctx context.Context) ([]model.TrophySta
 		ratings_given AS (
 			SELECT r.person_id, AVG(r.score) AS average, COUNT(*) AS rating_count
 			FROM ratings r
-			JOIN fully_rated_entries fre ON fre.entry_id = r.entry_id
+			JOIN entry_scores es ON es.entry_id = r.entry_id
 			GROUP BY r.person_id
 		),
+		-- Average each pick's family score, so a pick rated by three people
+		-- weighs the same as one rated by four.
 		ratings_received AS (
 			SELECT e.picked_by_person_id AS person_id,
-				AVG(r.score) AS average,
-				COUNT(DISTINCT e.id) AS pick_count
+				AVG(es.average_rating) AS average,
+				COUNT(*) AS pick_count
 			FROM entries e
-			JOIN fully_rated_entries fre ON fre.entry_id = e.id
-			JOIN ratings r ON r.entry_id = e.id
+			JOIN entry_scores es ON es.entry_id = e.id
 			WHERE e.picked_by_person_id IS NOT NULL
 			GROUP BY e.picked_by_person_id
 		),
@@ -137,7 +140,7 @@ func (r *StatsRepository) GetTrophyStats(ctx context.Context) ([]model.TrophySta
 	return stats, rows.Err()
 }
 
-// GetTopRatedMovies returns up to limit fully rated entries ranked by family average.
+// GetTopRatedMovies returns up to limit family-rated entries ranked by family average.
 func (r *StatsRepository) GetTopRatedMovies(ctx context.Context, limit int) ([]model.RankedMovie, error) {
 	query := `
 		WITH entry_scores AS (
@@ -205,8 +208,8 @@ func (r *StatsRepository) GetTopRatedMovies(ctx context.Context, limit int) ([]m
 
 // GetGenrePickStats returns, for each picker and genre in the saved TMDB
 // metadata, how many picks carry the genre and how the family rated them.
-// Movies without genre metadata are skipped, and only fully rated entries
-// count toward ratings.
+// Movies without genre metadata are skipped, and only family-rated entries
+// (see fullyRated) count toward ratings.
 func (r *StatsRepository) GetGenrePickStats(ctx context.Context) ([]model.GenrePickStat, error) {
 	query := `
 		WITH entry_scores AS (
@@ -236,13 +239,13 @@ func (r *StatsRepository) GetGenrePickStats(ctx context.Context) ([]model.GenreP
 			FROM entry_genres
 			GROUP BY person_id
 		)
-		SELECT p.id, p.initial, p.name, eg.genre,
+		SELECT p.id, p.initial, p.name, p.color, eg.genre,
 			COUNT(*), MAX(t.tagged_picks),
 			COUNT(eg.average_rating), COALESCE(SUM(eg.average_rating), 0)
 		FROM entry_genres eg
 		JOIN tagged t ON t.person_id IS NOT DISTINCT FROM eg.person_id
 		LEFT JOIN persons p ON p.id = eg.person_id
-		GROUP BY p.id, p.initial, p.name, eg.genre
+		GROUP BY p.id, p.initial, p.name, p.color, eg.genre
 		ORDER BY p.name, eg.genre`
 
 	rows, err := r.pool.Query(ctx, query)
@@ -254,16 +257,16 @@ func (r *StatsRepository) GetGenrePickStats(ctx context.Context) ([]model.GenreP
 	var stats []model.GenrePickStat
 	for rows.Next() {
 		var personID *uuid.UUID
-		var initial, name *string
+		var initial, name, color *string
 		var stat model.GenrePickStat
 		if err := rows.Scan(
-			&personID, &initial, &name, &stat.Genre,
+			&personID, &initial, &name, &color, &stat.Genre,
 			&stat.Picks, &stat.TaggedPicks, &stat.RatedPicks, &stat.RatingTotal,
 		); err != nil {
 			return nil, fmt.Errorf("scan genre pick stat: %w", err)
 		}
-		if personID != nil && initial != nil && name != nil {
-			stat.Person = &model.Person{ID: *personID, Initial: *initial, Name: *name}
+		if personID != nil && initial != nil && name != nil && color != nil {
+			stat.Person = &model.Person{ID: *personID, Initial: *initial, Name: *name, Color: *color}
 		}
 		stats = append(stats, stat)
 	}

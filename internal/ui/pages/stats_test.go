@@ -24,7 +24,7 @@ func TestStatsPageRendersFriendlyEmptyState(t *testing.T) {
 }
 
 func TestStatsPageRendersTrophiesAndRankedMovies(t *testing.T) {
-	winner := &model.Person{ID: uuid.New(), Initial: "D", Name: "Daniel"}
+	winner := &model.Person{ID: uuid.New(), Initial: "D", Name: "Daniel", Color: "mint"}
 	entry := &model.Entry{
 		ID:             uuid.New(),
 		GroupNumber:    2,
@@ -76,6 +76,12 @@ func TestStatsPageRendersTrophiesAndRankedMovies(t *testing.T) {
 		if !strings.Contains(html, want) {
 			t.Errorf("populated Trophy Room did not contain %q", want)
 		}
+	}
+
+	// Every person chip wears the person's colour: Crowd Pleaser, Genre
+	// Loyalist and Go-To Genres.
+	if got := strings.Count(html, `class="trophy-winner person-mint"`); got != 3 {
+		t.Errorf("found %d person chips in Daniel's colour, want 3", got)
 	}
 }
 

@@ -7,8 +7,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/drywaters/dejaview/internal/middleware"
 	"github.com/drywaters/dejaview/internal/model"
+	"github.com/drywaters/dejaview/internal/session"
 	"github.com/google/uuid"
 )
 
@@ -67,10 +70,27 @@ func TestDashboardCurrentGroup(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			handler := &DashboardHandler{entryRepo: &stubDashboardEntries{entries: tc.entries}, personRepo: &stubPersonRepo{}}
+			manager := session.NewManager("secret", time.Hour, false, 0)
+			serve := middleware.Auth(manager)(http.HandlerFunc(handler.DashboardContent))
+
+			// The group picker is part of the Add movie panel, which only
+			// logged-in people see.
+			req := httptest.NewRequest(http.MethodGet, "/dashboard-content", nil)
+			cookie, err := manager.NewCookie()
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.AddCookie(cookie)
 			recorder := httptest.NewRecorder()
-			handler.DashboardContent(recorder, httptest.NewRequest(http.MethodGet, "/dashboard-content", nil))
+			serve.ServeHTTP(recorder, req)
 			if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), tc.want) {
 				t.Fatalf("status %d, body missing %q:\n%s", recorder.Code, tc.want, recorder.Body.String())
+			}
+
+			recorder = httptest.NewRecorder()
+			serve.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/dashboard-content", nil))
+			if recorder.Code != http.StatusOK || strings.Contains(recorder.Body.String(), "add-group-select") {
+				t.Fatalf("logged out: status %d, body has the Add movie panel:\n%s", recorder.Code, recorder.Body.String())
 			}
 		})
 	}

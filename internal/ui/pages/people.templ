@@ -2,6 +2,7 @@ package pages
 
 import (
 	"github.com/drywaters/dejaview/internal/model"
+	"github.com/drywaters/dejaview/internal/ui"
 	"github.com/drywaters/dejaview/internal/ui/layout"
 )
 
@@ -18,7 +19,12 @@ templ PeoplePage(people []*model.Person, form PeopleFormData, errorMessage strin
 
 		<main class="page page-narrow">
 			<h1 class="detail-title">People</h1>
-			<p class="muted-note page-intro">Everyone who picks and rates movies. A movie counts as fully rated once every person has rated it.</p>
+			<p class="muted-note page-intro">
+				Everyone who picks and rates movies. A movie counts in the Trophy Room once all but one person has rated it, and always needs at least one rating.
+				if len(people) > 0 {
+					{ " Right now that's " + ui.IntToStr(model.TrophyRatingThreshold(len(people))) + " of " + ui.IntToStr(len(people)) + " people." }
+				}
+			</p>
 
 			if errorMessage != "" {
 				<div class="login-error" role="alert">{ errorMessage }</div>
@@ -26,38 +32,7 @@ templ PeoplePage(people []*model.Person, form PeopleFormData, errorMessage strin
 
 			<section class="people-list" aria-label="Current people">
 				for _, person := range people {
-					<div class={ "card", person.ColorClass() }>
-						<div class="people-row-head">
-							<span class="people-badge" aria-hidden="true">{ person.Initial }</span>
-							<h2 class="card-title">{ person.Name }</h2>
-						</div>
-						<form action={ templ.SafeURL("/people/" + person.ID.String()) } method="POST" class="people-form">
-							<div>
-								<label for={ "name-" + person.ID.String() } class="field-label">Name</label>
-								<input
-									type="text"
-									id={ "name-" + person.ID.String() }
-									name="name"
-									value={ person.Name }
-									required
-									maxlength="50"
-									class="input-field"
-								/>
-							</div>
-							@colorPicker(person.Color, person.ID.String())
-							<div class="people-actions people-card-actions">
-								<button type="submit" class="btn-primary">Save</button>
-								<button type="submit" form={ "remove-" + person.ID.String() } class="btn-danger">Remove</button>
-							</div>
-						</form>
-						<!-- Forms can't nest, so Remove submits this one through its form attribute. -->
-						<form
-							id={ "remove-" + person.ID.String() }
-							action={ templ.SafeURL("/people/" + person.ID.String() + "/delete") }
-							method="POST"
-							hx-confirm="Remove this person? This only works for someone with no ratings or picks."
-						></form>
-					</div>
+					@PersonCard(person, PeopleFormData{Name: person.Name, Color: person.Color}, "")
 				}
 			</section>
 
@@ -97,6 +72,56 @@ templ PeoplePage(people []*model.Person, form PeopleFormData, errorMessage strin
 			</section>
 		</main>
 	}
+}
+
+// PersonCard is one person's edit card. Save posts through htmx and swaps
+// just this card, so the page keeps its scroll position; without JavaScript
+// the form posts normally. form fills the inputs, so a rejected save keeps
+// what was typed, and errorMessage explains why.
+templ PersonCard(person *model.Person, form PeopleFormData, errorMessage string) {
+	<div id={ "person-" + person.ID.String() } class={ "card", person.ColorClass() }>
+		<div class="people-row-head">
+			<span class="people-badge" aria-hidden="true">{ person.Initial }</span>
+			<h2 class="card-title">{ person.Name }</h2>
+		</div>
+		if errorMessage != "" {
+			<div class="login-error" role="alert">{ errorMessage }</div>
+		}
+		<form
+			action={ templ.SafeURL("/people/" + person.ID.String()) }
+			method="POST"
+			class="people-form"
+			hx-post={ "/people/" + person.ID.String() }
+			hx-target={ "#person-" + person.ID.String() }
+			hx-swap="outerHTML"
+		>
+			<div>
+				<label for={ "name-" + person.ID.String() } class="field-label">Name</label>
+				<input
+					type="text"
+					id={ "name-" + person.ID.String() }
+					name="name"
+					value={ form.Name }
+					required
+					maxlength="50"
+					class="input-field"
+				/>
+			</div>
+			@colorPicker(form.Color, person.ID.String())
+			<div class="people-actions people-card-actions">
+				<!-- The id lets htmx put focus back on Save after the swap. -->
+				<button type="submit" id={ "save-" + person.ID.String() } class="btn-primary">Save</button>
+				<button type="submit" form={ "remove-" + person.ID.String() } class="btn-danger">Remove</button>
+			</div>
+		</form>
+		<!-- Forms can't nest, so Remove submits this one through its form attribute. -->
+		<form
+			id={ "remove-" + person.ID.String() }
+			action={ templ.SafeURL("/people/" + person.ID.String() + "/delete") }
+			method="POST"
+			hx-confirm="Remove this person? This only works for someone with no ratings or picks."
+		></form>
+	</div>
 }
 
 // colorPicker renders the palette as radio swatches. idPrefix keeps the ids

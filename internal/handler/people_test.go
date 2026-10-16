@@ -39,6 +39,13 @@ func (s *stubPeopleStore) Create(ctx context.Context, initial, name, color strin
 func (s *stubPeopleStore) Update(ctx context.Context, id uuid.UUID, name, color string) error {
 	s.updateCalls++
 	s.updatedName, s.updatedColor = name, color
+	if s.updateErr == nil {
+		for _, person := range s.people {
+			if person.ID == id {
+				person.Name, person.Color = name, color
+			}
+		}
+	}
 	return s.updateErr
 }
 
@@ -48,8 +55,15 @@ func (s *stubPeopleStore) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func postPeople(h http.HandlerFunc, path, id string, form url.Values) *httptest.ResponseRecorder {
+	return postPeopleWithHeaders(h, path, id, form, nil)
+}
+
+func postPeopleWithHeaders(h http.HandlerFunc, path, id string, form url.Values, headers map[string]string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
 	route := chi.NewRouteContext()
 	route.URLParams.Add("id", id)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, route))
@@ -158,6 +172,77 @@ func TestUpdatePerson(t *testing.T) {
 	}
 }
 
+// TestUpdatePersonInPlace covers a Save sent by htmx from a person's card:
+// the response is just that card, never a redirect that reloads the page.
+func TestUpdatePersonInPlace(t *testing.T) {
+	htmx := map[string]string{"HX-Request": "true"}
+	newStore := func() (*stubPeopleStore, *model.Person) {
+		dan := &model.Person{ID: uuid.New(), Initial: "D", Name: "Dan", Color: "cyan"}
+		return &stubPeopleStore{people: []*model.Person{dan}}, dan
+	}
+
+	t.Run("saves and returns the card", func(t *testing.T) {
+		store, dan := newStore()
+		id := dan.ID.String()
+		recorder := postPeopleWithHeaders((&PeopleHandler{personRepo: store}).Update, "/people/"+id, id, url.Values{"name": {"Daniel"}, "color": {"rose"}}, htmx)
+		body := recorder.Body.String()
+		if recorder.Code != http.StatusOK || recorder.Header().Get("Location") != "" {
+			t.Fatalf("got %d location %q, want 200 with no redirect", recorder.Code, recorder.Header().Get("Location"))
+		}
+		if !strings.Contains(recorder.Header().Get("HX-Trigger"), "Saved!") {
+			t.Errorf("no saved toast: %q", recorder.Header().Get("HX-Trigger"))
+		}
+		for _, want := range []string{
+			`<div id="person-` + id + `" class="card person-rose">`,
+			`hx-target="#person-` + id + `"`,
+			`value="Daniel"`,
+			`value="rose" checked`,
+		} {
+			if !strings.Contains(body, want) {
+				t.Errorf("card is missing %q:\n%s", want, body)
+			}
+		}
+		if strings.Contains(body, "<html") || strings.Contains(body, `role="alert"`) {
+			t.Errorf("in-place save returned more than a clean card:\n%s", body)
+		}
+	})
+
+	t.Run("rejected save keeps what was typed", func(t *testing.T) {
+		store, dan := newStore()
+		id := dan.ID.String()
+		recorder := postPeopleWithHeaders((&PeopleHandler{personRepo: store}).Update, "/people/"+id, id, url.Values{"name": {"Daniel"}, "color": {"teal"}}, htmx)
+		body := recorder.Body.String()
+		if recorder.Code != http.StatusOK || store.updateCalls != 0 || recorder.Header().Get("HX-Trigger") != "" {
+			t.Fatalf("got %d, %d updates, trigger %q; want 200, no update, no toast", recorder.Code, store.updateCalls, recorder.Header().Get("HX-Trigger"))
+		}
+		for _, want := range []string{`role="alert">Pick one of the listed colours.`, `value="Daniel"`, `class="card person-cyan"`} {
+			if !strings.Contains(body, want) {
+				t.Errorf("card is missing %q:\n%s", want, body)
+			}
+		}
+	})
+
+	t.Run("unknown person reloads the page with a message", func(t *testing.T) {
+		store, _ := newStore()
+		id := uuid.NewString()
+		store.updateErr = repository.ErrPersonNotFound
+		recorder := postPeopleWithHeaders((&PeopleHandler{personRepo: store}).Update, "/people/"+id, id, url.Values{"name": {"Dan"}, "color": {"rose"}}, htmx)
+		if got := recorder.Header().Get("HX-Redirect"); got != "/people?error=not_found" {
+			t.Fatalf("HX-Redirect = %q", got)
+		}
+	})
+
+	t.Run("boosted post still redirects", func(t *testing.T) {
+		store, dan := newStore()
+		id := dan.ID.String()
+		recorder := postPeopleWithHeaders((&PeopleHandler{personRepo: store}).Update, "/people/"+id, id, url.Values{"name": {"Dan"}, "color": {"rose"}},
+			map[string]string{"HX-Request": "true", "HX-Boosted": "true"})
+		if recorder.Code != http.StatusSeeOther || recorder.Header().Get("Location") != "/people" {
+			t.Fatalf("got %d %q, want 303 /people", recorder.Code, recorder.Header().Get("Location"))
+		}
+	})
+}
+
 func TestDeletePerson(t *testing.T) {
 	id := uuid.NewString()
 	cases := []struct {
@@ -195,6 +280,8 @@ func TestPeoplePageShowsPeopleAndErrors(t *testing.T) {
 	removeForm := "remove-" + alex.ID.String()
 	for _, want := range []string{
 		"Alex", "person-rose", "Can&#39;t remove someone who has ratings or picks", "Add a person",
+		// The help text states the Trophy Room rule and today's numbers.
+		"once all but one person has rated it", "1 of 1 people.",
 		`<form id="` + removeForm + `" action="/people/` + alex.ID.String() + `/delete" method="POST"`,
 	} {
 		if !strings.Contains(body, want) {
@@ -210,6 +297,15 @@ func TestPeoplePageShowsPeopleAndErrors(t *testing.T) {
 			t.Errorf("person action row is missing %q: %s", want, actions)
 		}
 	}
+
+	// With four people, three ratings are enough.
+	store.people = []*model.Person{alex, {ID: uuid.New()}, {ID: uuid.New()}, {ID: uuid.New()}}
+	recorder = httptest.NewRecorder()
+	(&PeopleHandler{personRepo: store}).PeoplePage(recorder, httptest.NewRequest(http.MethodGet, "/people", nil))
+	if !strings.Contains(recorder.Body.String(), "3 of 4 people.") {
+		t.Errorf("help text does not say 3 of 4:\n%s", recorder.Body.String())
+	}
+	store.people = []*model.Person{alex}
 
 	// A rejected add form keeps what was typed.
 	req = httptest.NewRequest(http.MethodGet, "/people?error=initial_taken&name=Zo%C3%AB&initial=Z&color=mint", nil)

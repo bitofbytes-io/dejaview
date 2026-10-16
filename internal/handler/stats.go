@@ -21,7 +21,7 @@ const (
 	// minLoyalistPicks is how many genre-tagged picks someone needs before
 	// they can be a Genre Loyalist, so one lucky pick cannot win the trophy.
 	minLoyalistPicks = 3
-	// minFavoriteGenreMovies is how many fully rated movies a genre needs
+	// minFavoriteGenreMovies is how many family-rated movies a genre needs
 	// before it can be the family's highest-rated genre.
 	minFavoriteGenreMovies = 2
 )

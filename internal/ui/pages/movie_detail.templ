@@ -93,37 +93,38 @@ templ movieGroupCard(entry *model.Entry, persons []*model.Person, isAuthenticate
 		<span class="osd osd-rose">{ ui.IntToStr(entry.GroupNumber) }</span>
 	</div>
 
-	<div>
-		<label for="picked-by" class="field-label">Picked by</label>
-		<select
-			id="picked-by"
-			name="picked_by_person_id"
-			hx-put={ "/api/entries/" + entry.ID.String() }
-			hx-trigger="change"
-			hx-swap="none"
-			class="input-field"
-			disabled?={ !isAuthenticated }
-		>
-			<option value="">No one</option>
-			for _, person := range persons {
-				if entry.PickedByPersonID != nil && *entry.PickedByPersonID == person.ID {
-					<option value={ person.ID.String() } data-initial={ person.Initial } data-color={ person.ColorClass() } selected>{ person.Name }</option>
-				} else {
-					<option value={ person.ID.String() } data-initial={ person.Initial } data-color={ person.ColorClass() }>{ person.Name }</option>
+	<!-- Visitors see who picked it under the title; only logged-in people can edit. -->
+	if isAuthenticated {
+		<div>
+			<label for="picked-by" class="field-label">Picked by</label>
+			<select
+				id="picked-by"
+				name="picked_by_person_id"
+				hx-put={ "/api/entries/" + entry.ID.String() }
+				hx-trigger="change"
+				hx-swap="none"
+				class="input-field"
+			>
+				<option value="">No one</option>
+				for _, person := range persons {
+					if entry.PickedByPersonID != nil && *entry.PickedByPersonID == person.ID {
+						<option value={ person.ID.String() } data-initial={ person.Initial } data-color={ person.ColorClass() } selected>{ person.Name }</option>
+					} else {
+						<option value={ person.ID.String() } data-initial={ person.Initial } data-color={ person.ColorClass() }>{ person.Name }</option>
+					}
 				}
-			}
-		</select>
-	</div>
+			</select>
+		</div>
 
-	<button
-		hx-delete={ "/api/entries/" + entry.ID.String() }
-		hx-confirm="Remove this movie from your collection?"
-		hx-swap="none"
-		class="btn-danger w-full"
-		disabled?={ !isAuthenticated }
-	>
-		Remove from collection
-	</button>
+		<button
+			hx-delete={ "/api/entries/" + entry.ID.String() }
+			hx-confirm="Remove this movie from your collection?"
+			hx-swap="none"
+			class="btn-danger w-full"
+		>
+			Remove from collection
+		</button>
+	}
 }
 
 // RatingsCard is the ratings card body shared by the page and the save response.

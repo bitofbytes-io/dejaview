@@ -134,32 +134,42 @@ func (h *PeopleHandler) Create(w http.ResponseWriter, r *http.Request) {
 	redirectPeople(w, r, "")
 }
 
-// Update renames a person and sets their colour.
+// Update renames a person and sets their colour. A save from the person's
+// card through htmx gets just that card back, so the page keeps its scroll
+// position; a plain form post gets a redirect to the page.
 func (h *PeopleHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		http.Error(w, "Invalid person ID", http.StatusBadRequest)
 		return
 	}
+	inPlace := r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-Boosted") != "true"
+	finish := func(code string) {
+		if inPlace {
+			h.renderPersonCard(w, r, id, code)
+			return
+		}
+		redirectPeople(w, r, code)
+	}
 	if err := r.ParseForm(); err != nil {
-		redirectPeople(w, r, "invalid_request")
+		finish("invalid_request")
 		return
 	}
 
 	name, ok := cleanPersonName(r.PostFormValue("name"))
 	if !ok {
-		redirectPeople(w, r, "invalid_name")
+		finish("invalid_name")
 		return
 	}
 	color := r.PostFormValue("color")
 	if !model.ValidPersonColor(color) {
-		redirectPeople(w, r, "invalid_color")
+		finish("invalid_color")
 		return
 	}
 
 	err = h.personRepo.Update(r.Context(), id, name, color)
 	if errors.Is(err, repository.ErrPersonNotFound) {
-		redirectPeople(w, r, "not_found")
+		finish("not_found")
 		return
 	}
 	if err != nil {
@@ -169,7 +179,42 @@ func (h *PeopleHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("person updated", "person_id", id)
-	redirectPeople(w, r, "")
+	finish("")
+}
+
+// renderPersonCard answers an in-place save with the person's card. A
+// rejected save keeps what was typed and shows why, with a 200 status because
+// htmx does not swap error responses. A successful save also raises the
+// "Saved!" toast. A person who no longer exists sends the browser back to the
+// page with the not_found message.
+func (h *PeopleHandler) renderPersonCard(w http.ResponseWriter, r *http.Request, id uuid.UUID, errorCode string) {
+	people, err := h.personRepo.GetAll(r.Context())
+	if err != nil {
+		slog.Error("failed to list people", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	var person *model.Person
+	for _, p := range people {
+		if p.ID == id {
+			person = p
+			break
+		}
+	}
+	if person == nil {
+		w.Header().Set("HX-Redirect", "/people?error=not_found")
+		return
+	}
+
+	form := pages.PeopleFormData{Name: person.Name, Color: person.Color}
+	if errorCode != "" {
+		form = pages.PeopleFormData{Name: r.PostFormValue("name"), Color: r.PostFormValue("color")}
+	} else {
+		w.Header().Set("HX-Trigger", `{"showToast": {"message": "Saved!", "type": "success"}}`)
+	}
+	if err := pages.PersonCard(person, form, peopleErrors[errorCode]).Render(r.Context(), w); err != nil {
+		slog.Error("failed to render person card", "error", err)
+	}
 }
 
 // Delete removes a person who has no ratings or picks.
