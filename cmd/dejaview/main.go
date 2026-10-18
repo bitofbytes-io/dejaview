@@ -93,7 +93,7 @@ func run() error {
 	}
 
 	// Create server
-	srv := server.New(cfg, movieRepo, entryRepo, personRepo, ratingRepo, statsRepo, tmdbClient)
+	srv := server.New(cfg, pool, movieRepo, entryRepo, personRepo, ratingRepo, statsRepo, tmdbClient)
 
 	// Start HTTP server
 	httpServer := &http.Server{

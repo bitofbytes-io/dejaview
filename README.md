@@ -100,7 +100,7 @@ docker run --rm --name dejaview --network dejaview \
   dejaview:local
 ```
 
-Open <http://localhost:4600> and sign in with the value configured as `API_TOKEN`. The health endpoint is <http://localhost:4600/health>.
+Open <http://localhost:4600> and sign in with the value configured as `API_TOKEN`. Two endpoints need no sign-in. <http://localhost:4600/health> returns `ok` whenever the process is up. <http://localhost:4600/ready> pings the database (2 s timeout) and returns `{"status":"ok","db":"ok"}`, or HTTP 503 with `{"status":"degraded","db":"error"}` when the database is unreachable. Neither needs any configuration.
 
 For production, use HTTPS, set `SECURE_COOKIES=true`, restrict the TMDB key where supported, and load credentials through a secret manager.
 
