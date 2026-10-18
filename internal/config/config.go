@@ -22,6 +22,8 @@ type Config struct {
 	// SessionEpoch must match the epoch in a session cookie; raising it signs
 	// out every browser.
 	SessionEpoch int64
+	// MetricsAddr is the internal Prometheus listener address; empty disables it.
+	MetricsAddr string
 }
 
 // Load reads configuration from environment variables.
@@ -68,6 +70,18 @@ func Load() (*Config, error) {
 	}
 	if cfg.SessionEpoch, err = strconv.ParseInt(strings.TrimSpace(sessionEpoch), 10, 64); err != nil || cfg.SessionEpoch < 0 {
 		return nil, fmt.Errorf("SESSION_EPOCH must be a non-negative integer, got %q", sessionEpoch)
+	}
+
+	// METRICS_ADDR=off disables the metrics listener.
+	const defaultMetricsAddr = ":9464"
+	if cfg.MetricsAddr, err = getEnv("METRICS_ADDR", defaultMetricsAddr); err != nil {
+		return nil, err
+	}
+	switch cfg.MetricsAddr = strings.TrimSpace(cfg.MetricsAddr); {
+	case cfg.MetricsAddr == "":
+		cfg.MetricsAddr = defaultMetricsAddr
+	case strings.EqualFold(cfg.MetricsAddr, "off"):
+		cfg.MetricsAddr = ""
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -183,5 +197,3 @@ func readSecret(path, name string) (string, error) {
 	}
 	return value, nil
 }
-
-

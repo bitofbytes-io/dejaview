@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/drywaters/dejaview/internal/assets"
 	"github.com/drywaters/dejaview/internal/config"
+	"github.com/drywaters/dejaview/internal/metrics"
 	"github.com/drywaters/dejaview/internal/repository"
 	"github.com/drywaters/dejaview/internal/server"
 	"github.com/drywaters/dejaview/internal/tmdb"
@@ -92,8 +94,15 @@ func run() error {
 		layout.SetAssetsVersion(assetsVersion)
 	}
 
+	// Metrics are recorded even when the listener is off, which keeps the
+	// router identical either way.
+	appMetrics := metrics.New()
+	if err := appMetrics.Register(metrics.NewPgxPoolCollector(pool)); err != nil {
+		return fmt.Errorf("failed to register pool metrics: %w", err)
+	}
+
 	// Create server
-	srv := server.New(cfg, pool, movieRepo, entryRepo, personRepo, ratingRepo, statsRepo, tmdbClient)
+	srv := server.New(cfg, pool, movieRepo, entryRepo, personRepo, ratingRepo, statsRepo, tmdbClient, appMetrics)
 
 	// Start HTTP server
 	httpServer := &http.Server{
@@ -104,17 +113,43 @@ func run() error {
 		IdleTimeout:  60 * time.Second,
 	}
 
+	// Internal metrics listener, separate from the public router.
+	var metricsServer *http.Server
+	if cfg.MetricsAddr != "" {
+		metricsServer = &http.Server{
+			Addr:              cfg.MetricsAddr,
+			Handler:           appMetrics.Handler(),
+			ReadHeaderTimeout: 5 * time.Second,
+			WriteTimeout:      15 * time.Second,
+			IdleTimeout:       60 * time.Second,
+		}
+	} else {
+		slog.Info("metrics listener disabled")
+	}
+
 	// Graceful shutdown
 	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	return serve(sigCtx, httpServer)
+	return serve(sigCtx, httpServer, metricsServer)
 }
 
-// serve runs httpServer until ctx is done, then shuts it down gracefully.
-// It returns promptly with an error if the server fails to start or stops
-// unexpectedly (e.g. the port is already in use).
-func serve(ctx context.Context, httpServer *http.Server) error {
+// serve runs httpServer, and metricsServer when it is not nil, until ctx is
+// done, then shuts both down gracefully. It returns promptly with an error if
+// httpServer fails to start or stops unexpectedly (e.g. the port is already
+// in use). Metrics server failures are logged, never fatal.
+func serve(ctx context.Context, httpServer, metricsServer *http.Server) error {
+	if metricsServer != nil {
+		startMetricsServer(metricsServer)
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+				slog.Warn("metrics server shutdown error", "error", err)
+			}
+		}()
+	}
+
 	serverErr := make(chan error, 1)
 	go func() {
 		slog.Info("server listening", "addr", httpServer.Addr)
@@ -140,4 +175,20 @@ func serve(ctx context.Context, httpServer *http.Server) error {
 
 	slog.Info("server stopped")
 	return nil
+}
+
+// startMetricsServer binds the metrics listener and serves it in the
+// background. A bind failure is logged and the app runs without metrics.
+func startMetricsServer(metricsServer *http.Server) {
+	ln, err := net.Listen("tcp", metricsServer.Addr)
+	if err != nil {
+		slog.Error("metrics listener failed; continuing without metrics", "addr", metricsServer.Addr, "error", err)
+		return
+	}
+	slog.Info("metrics listening", "addr", ln.Addr().String())
+	go func() {
+		if err := metricsServer.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("metrics server error", "error", err)
+		}
+	}()
 }
