@@ -26,6 +26,7 @@ const (
 // Server represents the HTTP server
 type Server struct {
 	cfg        *config.Config
+	db         handler.Pinger
 	movieRepo  *repository.MovieRepository
 	entryRepo  *repository.EntryRepository
 	personRepo *repository.PersonRepository
@@ -37,6 +38,7 @@ type Server struct {
 // New creates a new Server
 func New(
 	cfg *config.Config,
+	db handler.Pinger,
 	movieRepo *repository.MovieRepository,
 	entryRepo *repository.EntryRepository,
 	personRepo *repository.PersonRepository,
@@ -46,6 +48,7 @@ func New(
 ) *Server {
 	return &Server{
 		cfg:        cfg,
+		db:         db,
 		movieRepo:  movieRepo,
 		entryRepo:  entryRepo,
 		personRepo: personRepo,
@@ -84,12 +87,10 @@ func (s *Server) Router() http.Handler {
 		r.Get("/"+file, serveStaticFile("static/"+file))
 	}
 
-	// Health check
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	})
+	// Health checks: /health is liveness, /ready also pings the database
+	healthHandler := handler.NewHealthHandler(s.db)
+	r.Get("/health", healthHandler.Health)
+	r.Get("/ready", healthHandler.Ready)
 
 	// Auth handlers
 	sessionManager := session.NewManager(s.cfg.APIToken, 90*24*time.Hour, s.cfg.SecureCookies, s.cfg.SessionEpoch)
