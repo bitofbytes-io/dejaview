@@ -89,12 +89,13 @@ func TestReadyBoundsPing(t *testing.T) {
 		if remaining := time.Until(deadline); remaining > readyTimeout {
 			t.Fatalf("ping deadline %s away, want at most %s", remaining, readyTimeout)
 		}
+		<-ctx.Done()
 		return ctx.Err()
 	}))
 	rec := httptest.NewRecorder()
 	h.Ready(rec, httptest.NewRequest(http.MethodGet, "/ready", nil))
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status %d, want 200", rec.Code)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status %d, want 503", rec.Code)
 	}
 }
