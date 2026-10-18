@@ -7,6 +7,7 @@ import (
 	"github.com/drywaters/dejaview/internal/auth"
 	"github.com/drywaters/dejaview/internal/config"
 	"github.com/drywaters/dejaview/internal/handler"
+	"github.com/drywaters/dejaview/internal/metrics"
 	"github.com/drywaters/dejaview/internal/middleware"
 	"github.com/drywaters/dejaview/internal/repository"
 	"github.com/drywaters/dejaview/internal/session"
@@ -33,9 +34,10 @@ type Server struct {
 	ratingRepo *repository.RatingRepository
 	statsRepo  *repository.StatsRepository
 	tmdbClient *tmdb.Client
+	metrics    *metrics.Metrics
 }
 
-// New creates a new Server
+// New creates a new Server. m may be nil, which records no metrics.
 func New(
 	cfg *config.Config,
 	db handler.Pinger,
@@ -45,6 +47,7 @@ func New(
 	ratingRepo *repository.RatingRepository,
 	statsRepo *repository.StatsRepository,
 	tmdbClient *tmdb.Client,
+	m *metrics.Metrics,
 ) *Server {
 	return &Server{
 		cfg:        cfg,
@@ -55,6 +58,7 @@ func New(
 		ratingRepo: ratingRepo,
 		statsRepo:  statsRepo,
 		tmdbClient: tmdbClient,
+		metrics:    m,
 	}
 }
 
@@ -65,6 +69,9 @@ func (s *Server) Router() http.Handler {
 	// Middleware
 	r.Use(chimw.RequestID)
 	r.Use(middleware.RealIP(s.cfg.TrustedProxies))
+	// Outside Recoverer so panics count as 500s. /metrics is served only on
+	// the internal metrics listener, never on this router.
+	r.Use(s.metrics.Middleware)
 	r.Use(middleware.Logger)
 	r.Use(chimw.Recoverer)
 	r.Use(middleware.SameOrigin)
@@ -95,7 +102,7 @@ func (s *Server) Router() http.Handler {
 	// Auth handlers
 	sessionManager := session.NewManager(s.cfg.APIToken, 90*24*time.Hour, s.cfg.SecureCookies, s.cfg.SessionEpoch)
 	loginLimiter := auth.NewLoginLimiter(maxLoginFailuresPerIP, maxLoginFailures, loginFailureWindow)
-	authHandler := handler.NewAuthHandler(s.cfg.APIToken, sessionManager, loginLimiter)
+	authHandler := handler.NewAuthHandler(s.cfg.APIToken, sessionManager, loginLimiter, s.metrics)
 	r.Get("/login", authHandler.LoginPage)
 	r.Post("/login", authHandler.Login)
 	r.Post("/logout", authHandler.Logout)

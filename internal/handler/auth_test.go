@@ -21,7 +21,7 @@ func testLimiter() *auth.LoginLimiter {
 
 func TestLoginSetsSignedSessionCookie(t *testing.T) {
 	sessionManager := session.NewManager("secret", 90*24*time.Hour, false, 0)
-	handler := NewAuthHandler("secret", sessionManager, testLimiter())
+	handler := NewAuthHandler("secret", sessionManager, testLimiter(), nil)
 
 	form := url.Values{}
 	form.Set("api_key", "secret")
@@ -49,7 +49,7 @@ func TestLoginSetsSignedSessionCookie(t *testing.T) {
 
 func TestLoginPageRejectsLegacyRawTokenCookie(t *testing.T) {
 	sessionManager := session.NewManager("secret", 90*24*time.Hour, false, 0)
-	handler := NewAuthHandler("secret", sessionManager, testLimiter())
+	handler := NewAuthHandler("secret", sessionManager, testLimiter(), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/login", nil)
 	req.AddCookie(&http.Cookie{Name: session.CookieName, Value: "secret"})
@@ -72,7 +72,7 @@ func TestLoginRedirectValidation(t *testing.T) {
 		{"/%5cexample.com", false}, {"/%2fexample.com", false}, {"/%00bad", false}, {"/bad\npath", false},
 		{"/%zz", false}, {"relative", false},
 	}
-	handler := NewAuthHandler("secret", session.NewManager("secret", time.Hour, false, 0), testLimiter())
+	handler := NewAuthHandler("secret", session.NewManager("secret", time.Hour, false, 0), testLimiter(), nil)
 	for _, tc := range cases {
 		t.Run(tc.destination, func(t *testing.T) {
 			if got := isValidRedirect(tc.destination); got != tc.valid {
@@ -123,7 +123,7 @@ func assertRateLimited(t *testing.T, recorder *httptest.ResponseRecorder) {
 
 func TestLoginRateLimitsFailuresPerVerifiedIP(t *testing.T) {
 	manager := session.NewManager("secret", time.Hour, false, 0)
-	handler := NewAuthHandler("secret", manager, auth.NewLoginLimiter(3, 5, time.Hour))
+	handler := NewAuthHandler("secret", manager, auth.NewLoginLimiter(3, 5, time.Hour), nil)
 	proxies := []netip.Prefix{netip.MustParsePrefix("10.0.1.0/24")}
 	server := middleware.RealIP(proxies)(http.HandlerFunc(handler.Login))
 
@@ -149,7 +149,7 @@ func TestLoginRateLimitsFailuresPerVerifiedIP(t *testing.T) {
 
 func TestLoginRateLimitsAllClientsWhenIPIsUnknown(t *testing.T) {
 	manager := session.NewManager("secret", time.Hour, false, 0)
-	handler := NewAuthHandler("secret", manager, auth.NewLoginLimiter(3, 5, time.Hour))
+	handler := NewAuthHandler("secret", manager, auth.NewLoginLimiter(3, 5, time.Hour), nil)
 	// Without trusted proxies the client IP is never verified, and a
 	// forged X-Forwarded-For changes nothing.
 	server := middleware.RealIP(nil)(http.HandlerFunc(handler.Login))
@@ -164,7 +164,7 @@ func TestLoginRateLimitsAllClientsWhenIPIsUnknown(t *testing.T) {
 
 func TestLoginSuccessClearsFailures(t *testing.T) {
 	manager := session.NewManager("secret", time.Hour, false, 0)
-	handler := NewAuthHandler("secret", manager, auth.NewLoginLimiter(3, 5, time.Hour))
+	handler := NewAuthHandler("secret", manager, auth.NewLoginLimiter(3, 5, time.Hour), nil)
 	server := http.HandlerFunc(handler.Login)
 
 	for range 4 {
@@ -182,7 +182,7 @@ func TestLoginSuccessClearsFailures(t *testing.T) {
 
 func TestLoginWithoutKeyDoesNotCount(t *testing.T) {
 	manager := session.NewManager("secret", time.Hour, false, 0)
-	handler := NewAuthHandler("secret", manager, auth.NewLoginLimiter(1, 1, time.Hour))
+	handler := NewAuthHandler("secret", manager, auth.NewLoginLimiter(1, 1, time.Hour), nil)
 	server := http.HandlerFunc(handler.Login)
 	for range 3 {
 		if recorder := postLogin(server, "203.0.113.1:4000", ""); recorder.Header().Get("Location") != "/login?error=missing_key" {

@@ -11,6 +11,7 @@ import (
 	"unicode"
 
 	"github.com/drywaters/dejaview/internal/auth"
+	"github.com/drywaters/dejaview/internal/metrics"
 	"github.com/drywaters/dejaview/internal/middleware"
 	"github.com/drywaters/dejaview/internal/session"
 	"github.com/drywaters/dejaview/internal/ui/pages"
@@ -21,14 +22,16 @@ type AuthHandler struct {
 	apiToken       string
 	sessionManager *session.Manager
 	limiter        *auth.LoginLimiter
+	metrics        *metrics.Metrics
 }
 
-// NewAuthHandler creates a new AuthHandler
-func NewAuthHandler(apiToken string, sessionManager *session.Manager, limiter *auth.LoginLimiter) *AuthHandler {
+// NewAuthHandler creates a new AuthHandler. m may be nil.
+func NewAuthHandler(apiToken string, sessionManager *session.Manager, limiter *auth.LoginLimiter, m *metrics.Metrics) *AuthHandler {
 	return &AuthHandler{
 		apiToken:       apiToken,
 		sessionManager: sessionManager,
 		limiter:        limiter,
+		metrics:        m,
 	}
 }
 
@@ -49,6 +52,7 @@ func (h *AuthHandler) LoginPage(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		slog.Info("login failed", "reason", "invalid_request")
+		h.metrics.LoginFailure("invalid_request")
 		http.Redirect(w, r, "/login?error=invalid_request", http.StatusSeeOther)
 		return
 	}
@@ -56,6 +60,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.FormValue("api_key")
 	if apiKey == "" {
 		slog.Info("login failed", "reason", "missing_key")
+		h.metrics.LoginFailure("missing_key")
 		http.Redirect(w, r, "/login?error=missing_key", http.StatusSeeOther)
 		return
 	}
@@ -68,6 +73,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	if wait, ok := h.limiter.Allow(limitIP); !ok {
 		slog.Warn("login failed", "reason", "rate_limited", "client_ip", clientIP, "client_ip_verified", ipVerified)
+		h.metrics.LoginFailure("rate_limited")
 		redirectURL := r.FormValue("redirect")
 		if !isValidRedirect(redirectURL) {
 			redirectURL = ""
@@ -81,6 +87,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	// Validate the API token with constant-time comparison
 	if !constantTimeEqual(apiKey, h.apiToken) {
 		slog.Info("login failed", "reason", "invalid_key", "client_ip", clientIP, "client_ip_verified", ipVerified)
+		h.metrics.LoginFailure("invalid_key")
 		http.Redirect(w, r, "/login?error=invalid_key", http.StatusSeeOther)
 		return
 	}

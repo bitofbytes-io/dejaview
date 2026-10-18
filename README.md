@@ -48,6 +48,7 @@ Do not commit this file.
 | `LOG_LEVEL` | No | Application log level; defaults to `info` |
 | `TRUSTED_PROXY_CIDRS` | Behind a reverse proxy | Comma-separated CIDRs or IPs whose `X-Forwarded-For` header is trusted; defaults to empty, which ignores forwarded headers and disables the per-IP login limit |
 | `SESSION_EPOCH` | No | Non-negative integer; raise it and redeploy to sign out every browser without changing `API_TOKEN`; defaults to `0` |
+| `METRICS_ADDR` | No | Listen address for the internal Prometheus metrics listener; defaults to `:9464`; set `off` to disable it |
 
 Required secrets support corresponding `*_FILE` variables and default Docker secret paths under `/run/secrets/dejaview_*`.
 
@@ -101,6 +102,20 @@ docker run --rm --name dejaview --network dejaview \
 ```
 
 Open <http://localhost:4600> and sign in with the value configured as `API_TOKEN`. Two endpoints need no sign-in. <http://localhost:4600/health> returns `ok` whenever the process is up. <http://localhost:4600/ready> pings the database (2 s timeout) and returns `{"status":"ok","db":"ok"}`, or HTTP 503 with `{"status":"degraded","db":"error"}` when the database is unreachable. Neither needs any configuration.
+
+### Metrics
+
+Prometheus metrics are served at `GET /metrics` on a separate internal listener (`METRICS_ADDR`, default `:9464`), never on the public port, so a reverse proxy routing the app port can't expose them. Scrape it over a private network only, and don't publish the port. `METRICS_ADDR=off` disables the listener. If the address can't be bound, the app logs the error and keeps running without it.
+
+| Metric | Labels | Meaning |
+| --- | --- | --- |
+| `http_requests_total` | `method`, `route`, `status` | Requests handled. `route` is the router pattern (e.g. `/movies/{id}`), or `unmatched` for unknown paths; `/health`, `/ready` and `/metrics` are not counted |
+| `http_request_duration_seconds` | `method`, `route`, `status` | Request latency histogram |
+| `pgxpool_acquired_conns`, `pgxpool_idle_conns`, `pgxpool_constructing_conns`, `pgxpool_total_conns`, `pgxpool_max_conns` | | Database pool gauges |
+| `pgxpool_acquire_count_total`, `pgxpool_acquire_duration_seconds_total`, `pgxpool_empty_acquire_count_total`, `pgxpool_empty_acquire_wait_seconds_total`, `pgxpool_canceled_acquire_count_total` | | Database pool counters; empty acquires waited for a free connection |
+| `dejaview_login_failures_total` | `reason` | Failed logins: `invalid_key`, `missing_key`, `invalid_request` or `rate_limited` |
+
+The Go runtime (`go_*`) and process (`process_*`) collectors are also included.
 
 For production, use HTTPS, set `SECURE_COOKIES=true`, restrict the TMDB key where supported, and load credentials through a secret manager.
 

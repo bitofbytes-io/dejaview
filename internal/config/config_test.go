@@ -15,6 +15,25 @@ func setRequiredEnv(t *testing.T) {
 	t.Setenv("TMDB_API_KEY", "test-key")
 	t.Setenv("TRUSTED_PROXY_CIDRS", "")
 	t.Setenv("SESSION_EPOCH", "")
+	t.Setenv("METRICS_ADDR", "")
+}
+
+func TestMetricsAddr(t *testing.T) {
+	setRequiredEnv(t)
+
+	for _, tc := range []struct{ value, want string }{
+		{"", ":9464"},
+		{"  ", ":9464"},
+		{"127.0.0.1:9100", "127.0.0.1:9100"},
+		{"off", ""},
+		{"OFF", ""},
+	} {
+		t.Setenv("METRICS_ADDR", tc.value)
+		cfg, err := Load()
+		if err != nil || cfg.MetricsAddr != tc.want {
+			t.Fatalf("METRICS_ADDR=%q: addr = %v, %v; want %q", tc.value, cfg, err, tc.want)
+		}
+	}
 }
 
 func TestTrustedProxyCIDRs(t *testing.T) {
