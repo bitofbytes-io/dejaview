@@ -139,6 +139,13 @@ func run() error {
 // httpServer fails to start or stops unexpectedly (e.g. the port is already
 // in use). Metrics server failures are logged, never fatal.
 func serve(ctx context.Context, httpServer, metricsServer *http.Server) error {
+	// Bind the public port first so the optional metrics listener can never
+	// take it, e.g. when PORT=9464 and METRICS_ADDR is left at its default.
+	ln, err := net.Listen("tcp", httpServer.Addr)
+	if err != nil {
+		return fmt.Errorf("server error: %w", err)
+	}
+
 	if metricsServer != nil {
 		startMetricsServer(metricsServer)
 		defer func() {
@@ -153,7 +160,7 @@ func serve(ctx context.Context, httpServer, metricsServer *http.Server) error {
 	serverErr := make(chan error, 1)
 	go func() {
 		slog.Info("server listening", "addr", httpServer.Addr)
-		serverErr <- httpServer.ListenAndServe()
+		serverErr <- httpServer.Serve(ln)
 	}()
 
 	select {

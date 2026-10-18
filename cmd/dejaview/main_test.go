@@ -179,6 +179,31 @@ func TestServeRunsMetricsServer(t *testing.T) {
 	}
 }
 
+// TestServePublicPortWinsOverMetrics gives the metrics listener the public
+// server's address, as with PORT=9464 and the default METRICS_ADDR, and checks
+// the public server still gets the port.
+func TestServePublicPortWinsOverMetrics(t *testing.T) {
+	addr := freeAddr(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	httpServer := &http.Server{Addr: addr, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})}
+	metricsServer := &http.Server{Addr: addr, Handler: http.NotFoundHandler()}
+	done := make(chan error, 1)
+	go func() { done <- serve(ctx, httpServer, metricsServer) }()
+
+	client := &http.Client{
+		Timeout:   time.Second,
+		Transport: &http.Transport{DisableKeepAlives: true},
+	}
+	waitForStatus(t, client, "http://"+addr+"/", http.StatusNoContent, done)
+
+	cancel()
+	waitForServe(t, done)
+}
+
 // TestServeIgnoresMetricsBindFailure holds the metrics port open and checks
 // that the app still serves and shuts down cleanly.
 func TestServeIgnoresMetricsBindFailure(t *testing.T) {
