@@ -1,6 +1,8 @@
 package pages
 
 import (
+	"net/url"
+
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/drywaters/dejaview/internal/ui/components"
 	"github.com/drywaters/dejaview/internal/ui/layout"
@@ -13,18 +15,61 @@ type GroupData struct {
 	Entries []*model.Entry
 }
 
-templ DashboardPage(groups []GroupData, persons []*model.Person, currentGroup int, isAuthenticated bool) {
+// Waiting is one person and how many movies they have not rated yet.
+type Waiting struct {
+	Person *model.Person
+	Count  int
+}
+
+// RatingFilter drives the dashboard's "Waiting on" line and its
+// needs-rating filter.
+type RatingFilter struct {
+	// Waiting lists the people with movies left to rate, in persons order.
+	Waiting []Waiting
+	// Needs, when set, limits the groups to the movies this person has not
+	// rated.
+	Needs *model.Person
+}
+
+// Shown returns the entries the filter keeps, in order.
+func (f RatingFilter) Shown(entries []*model.Entry) []*model.Entry {
+	if f.Needs == nil {
+		return entries
+	}
+	var shown []*model.Entry
+	for _, entry := range entries {
+		if !entry.RatedBy(f.Needs.ID) {
+			shown = append(shown, entry)
+		}
+	}
+	return shown
+}
+
+// CaughtUp reports whether the filtered person has rated every movie.
+func (f RatingFilter) CaughtUp() bool {
+	if f.Needs == nil {
+		return false
+	}
+	for _, w := range f.Waiting {
+		if w.Person.ID == f.Needs.ID {
+			return false
+		}
+	}
+	return true
+}
+
+templ DashboardPage(groups []GroupData, persons []*model.Person, currentGroup int, filter RatingFilter, isAuthenticated bool) {
 	@layout.Base("Dashboard") {
 		@layout.Header(isAuthenticated, "movies")
 
 		<main class="page stack-12" id="dashboard-content">
-			@DashboardContent(groups, persons, currentGroup, isAuthenticated)
+			@DashboardContent(groups, persons, currentGroup, filter, isAuthenticated)
 		</main>
 	}
 }
 
 // DashboardContent renders just the inner content for HTMX partial updates
-templ DashboardContent(groups []GroupData, persons []*model.Person, currentGroup int, isAuthenticated bool) {
+templ DashboardContent(groups []GroupData, persons []*model.Person, currentGroup int, filter RatingFilter, isAuthenticated bool) {
 	<!-- Search Section: only for people who can add movies -->
 	if isAuthenticated {
 		<section class="card">
@@ -80,32 +125,81 @@ templ DashboardContent(groups []GroupData, persons []*model.Person, currentGroup
 			}
 		</div>
 	} else {
+		if len(persons) > 0 {
+			@ratingNudge(persons, filter)
+		}
+		if filter.CaughtUp() {
+			<p class="nudge-caught-up">
+				{ filter.Needs.Name } has rated every movie. <a href="/?needs=">Show all movies</a>
+			</p>
+		}
 		for _, group := range groups {
-			@GroupSection(group.Number, group.Entries, persons, isAuthenticated, group.Number == currentGroup)
+			if shown := filter.Shown(group.Entries); len(shown) > 0 {
+				@GroupSection(group.Number, len(group.Entries), shown, persons, isAuthenticated && filter.Needs == nil, group.Number == currentGroup)
+			}
 		}
 	}
 }
 
-templ GroupSection(groupNum int, entries []*model.Entry, persons []*model.Person, isAuthenticated bool, isCurrent bool) {
+// ratingNudge is the line above the groups: who still has movies to rate,
+// and a filter for the movies one person has not rated. Choosing someone
+// reloads the page; the server remembers the choice in the dv_me cookie.
+templ ratingNudge(persons []*model.Person, filter RatingFilter) {
+	<div class="nudge-bar">
+		<p class="nudge-waiting">
+			if len(filter.Waiting) == 0 {
+				Everyone has rated every movie.
+			} else {
+				<span class="nudge-label">Waiting on</span>
+				for _, w := range filter.Waiting {
+					<a
+						href={ templ.SafeURL("/?needs=" + url.QueryEscape(w.Person.Initial)) }
+						class={ "nudge-link", w.Person.ColorClass() }
+						title={ "Show the movies " + w.Person.Name + " hasn't rated" }
+					>
+						<span class="nudge-initial" aria-hidden="true">{ w.Person.Initial }</span>
+						<span class="sr-only">{ w.Person.Name }:</span>
+						<span class="nudge-count">{ ui.IntToStr(w.Count) }</span>
+					</a>
+				}
+			}
+		</p>
+		<form method="get" action="/" class="nudge-filter">
+			<label for="needs-select" class="nudge-label">Needs rating from</label>
+			<select id="needs-select" name="needs" class="input-field nudge-select" onchange="this.form.submit()">
+				<option value="" selected?={ filter.Needs == nil }>Anyone</option>
+				for _, person := range persons {
+					<option value={ person.Initial } selected?={ filter.Needs != nil && filter.Needs.ID == person.ID }>{ person.Name }</option>
+				}
+			</select>
+			<noscript><button type="submit" class="btn-secondary btn-sm">Show</button></noscript>
+		</form>
+	</div>
+}
+
+// GroupSection renders one group. count is how many movies the group holds;
+// entries are the ones shown, which the rating filter may limit. A filtered
+// group is partial, so it is never sortable: a reorder must list every entry.
+templ GroupSection(groupNum int, count int, entries []*model.Entry, persons []*model.Person, sortable bool, isCurrent bool) {
 	<section class={ "group-section", templ.KV("is-current", isCurrent) } id={ "group-" + ui.IntToStr(groupNum) }>
 		<div class="group-head">
 			<h2 class="group-title">
 				<span>Group { ui.IntToStr(groupNum) }</span>
 			</h2>
 			<span class="group-count">
-				{ ui.IntToStr(len(entries)) } out of { ui.IntToStr(groupTotal(groupNum)) }
+				{ ui.IntToStr(count) } out of { ui.IntToStr(groupTotal(groupNum)) }
 			</span>
 		</div>
 
 		if len(entries) == 0 {
 			<p class="text-ink-muted">No movies in this group yet.</p>
 		} else {
-			<div class="sortable-grid poster-grid" data-group={ ui.IntToStr(groupNum) }>
+			<div class={ "poster-grid", templ.KV("sortable-grid", sortable) } data-group={ ui.IntToStr(groupNum) }>
 				for _, entry := range entries {
-					if isAuthenticated {
-						@components.DraggablePosterCard(entry, true, true)
+					if sortable {
+						@components.DraggablePosterCard(entry, persons, true, true)
 					} else {
-						@components.PosterCard(entry, true)
+						@components.PosterCard(entry, persons, true)
 					}
 				}
 			</div>

@@ -43,8 +43,9 @@ templ RatingInputSimple(entryID uuid.UUID, person *model.Person, currentScore *f
 
 // PersonRatingRowSimple renders a rating row without the form wrapper. When
 // editable is false the score is shown read-only, with no input or clear button.
+// The row is muted while the person has not rated the movie.
 templ PersonRatingRowSimple(entry *model.Entry, person *model.Person, editable bool) {
-	<div class={ "rating-row", person.ColorClass() }>
+	<div class={ "rating-row", person.ColorClass(), templ.KV("rating-row-missing", !entry.RatedBy(person.ID)) }>
 		<span class="rating-person min-w-0" title={ person.Name }>
 			<span class="initial" aria-hidden="true">{ person.Initial }</span>
 			<span class="truncate">{ person.Name }</span>

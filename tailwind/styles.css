@@ -361,6 +361,8 @@
 .rating-mid { --rating: var(--rating-mid); }
 .rating-high { --rating: var(--rating-high); }
 .rating-empty { --rating: var(--surface-raised); color: var(--ink-muted); box-shadow: inset 0 0 0 1px var(--line-control); }
+/* A person who has not rated yet: their initial, outlined in their colour. */
+.rating-missing { --rating: rgba(8, 6, 11, 0.6); color: var(--person, var(--ink-muted)); border: 1px dashed var(--person, var(--line-control)); }
 
 /* ---------- Rating input row ---------- */
 .rating-row {
@@ -784,6 +786,27 @@ body.dv-crt::before { position: fixed; }
 .group-head { flex-wrap: wrap; row-gap: var(--space-1); }
 .group-title { flex-wrap: wrap; row-gap: var(--space-1); }
 .group-title > span, .group-count { white-space: nowrap; }
+
+/* Rating nudges: who still has movies to rate, and the needs-rating filter */
+.nudge-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3) var(--space-6); margin-bottom: calc(var(--space-6) * -1); }
+.nudge-waiting { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin: 0; font-size: 14px; line-height: 20px; color: var(--ink-muted); }
+.nudge-label { font-size: 12px; line-height: 16px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-muted); white-space: nowrap; }
+.nudge-link { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; text-decoration: none; }
+.nudge-initial {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 24px; height: 24px; border-radius: var(--radius-pill);
+  background: var(--person, var(--ink)); color: var(--on-neon); font-size: 12px; font-weight: 800;
+}
+.nudge-count { font-family: var(--font-mono); font-size: 13px; line-height: 18px; color: var(--ink-muted); }
+.nudge-link:hover .nudge-count, .nudge-link:focus-visible .nudge-count { color: var(--ink); }
+.nudge-filter { display: flex; align-items: center; gap: var(--space-3); }
+.nudge-select { width: auto; min-height: 40px; padding-top: 7px; padding-bottom: 7px; font-size: 14px; line-height: 24px; }
+.nudge-caught-up { margin: 0; color: var(--ink-muted); }
+.nudge-caught-up a { margin-left: var(--space-2); font-weight: 600; color: var(--neon-cyan); }
+
+/* Movie detail: a person who has not rated yet is muted. */
+.rating-row-missing .rating-person { color: var(--ink-muted); font-weight: 500; }
+.rating-row-missing .rating-person .initial { background: transparent; color: var(--person); border: 1px dashed var(--person); }
 
 /* Family totals: the VCR counter shrinks on phones */
 @media (max-width: 639px) { .family-total strong { font-size: 30px; line-height: 32px; } }

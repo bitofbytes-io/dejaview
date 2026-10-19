@@ -24,14 +24,16 @@ templ Poster(movie *model.Movie, size string) {
 	}
 }
 
-// PosterCard renders a clickable movie poster card
-templ PosterCard(entry *model.Entry, showRatings bool) {
+// PosterCard renders a clickable movie poster card. With showRatings, the
+// ratings show along the bottom, followed by outlined initials for the
+// persons who have not rated yet.
+templ PosterCard(entry *model.Entry, persons []*model.Person, showRatings bool) {
 	<a href={ templ.SafeURL("/movies/" + entry.ID.String()) } class="poster-card">
-		@posterCardContent(entry, showRatings)
+		@posterCardContent(entry, persons, showRatings)
 	</a>
 }
 
-templ posterCardContent(entry *model.Entry, showRatings bool) {
+templ posterCardContent(entry *model.Entry, persons []*model.Person, showRatings bool) {
 	if entry.PickedByPerson != nil {
 		<span class={ "picker-badge", entry.PickedByPerson.ColorClass() } title={ "Picked by " + entry.PickedByPerson.Name }>
 			{ entry.PickedByPerson.Initial }
@@ -39,19 +41,26 @@ templ posterCardContent(entry *model.Entry, showRatings bool) {
 	}
 	@Poster(entry.Movie, "")
 
-	if showRatings && len(entry.Ratings) > 0 {
-		<div class="poster-overlay">
-			for _, rating := range entry.Ratings {
-				<span class={ "rating-badge", rating.RatingColor() } title={ rating.Person.Name + ": " + ui.FormatFloat(rating.Score) }>
-					{ rating.Person.Initial }
-				</span>
-			}
-		</div>
+	if showRatings {
+		if missing := entry.MissingRaters(persons); len(entry.Ratings) > 0 || len(missing) > 0 {
+			<div class="poster-overlay">
+				for _, rating := range entry.Ratings {
+					<span class={ "rating-badge", rating.RatingColor() } title={ rating.Person.Name + ": " + ui.FormatFloat(rating.Score) }>
+						{ rating.Person.Initial }
+					</span>
+				}
+				for _, person := range missing {
+					<span class={ "rating-badge rating-missing", person.ColorClass() } title={ "Waiting on " + person.Name }>
+						{ person.Initial }
+					</span>
+				}
+			</div>
+		}
 	}
 }
 
 // DraggablePosterCard renders a draggable movie poster card for reordering
-templ DraggablePosterCard(entry *model.Entry, showRatings bool, isAuthenticated bool) {
+templ DraggablePosterCard(entry *model.Entry, persons []*model.Person, showRatings bool, isAuthenticated bool) {
 	if isAuthenticated {
 		<div class="draggable-item" data-entry-id={ entry.ID.String() }>
 			<div class="drag-handle" aria-label="Drag to reorder" title="Drag to reorder">
@@ -60,10 +69,10 @@ templ DraggablePosterCard(entry *model.Entry, showRatings bool, isAuthenticated 
 				</svg>
 			</div>
 			<a href={ templ.SafeURL("/movies/" + entry.ID.String()) } class="poster-card">
-				@posterCardContent(entry, showRatings)
+				@posterCardContent(entry, persons, showRatings)
 			</a>
 		</div>
 	} else {
-		@PosterCard(entry, showRatings)
+		@PosterCard(entry, persons, showRatings)
 	}
 }
