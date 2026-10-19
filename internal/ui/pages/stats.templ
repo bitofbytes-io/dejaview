@@ -78,6 +78,17 @@ templ StatsPage(data *model.StatsData, isAuthenticated bool) {
 				<section class="trophy-room-section">
 					<div class="trophy-room-heading">
 						<h2 class="trophy-room-section-title">
+							@components.Icon("target", "")
+							<span>Taste Match</span>
+						</h2>
+						<p>Who agrees, and who goes their own way.</p>
+					</div>
+					@components.TasteMatch(data.TasteMatch)
+				</section>
+
+				<section class="trophy-room-section">
+					<div class="trophy-room-heading">
+						<h2 class="trophy-room-section-title">
 							@components.Icon("star", "")
 							<span>Family Top Five</span>
 						</h2>

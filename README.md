@@ -94,6 +94,8 @@ No configuration is needed beyond running migration 013, which adds `persons.col
 
 The Trophy Room's Genre Spotlight reads the genres TMDB returned when each movie was added (saved in `movies.metadata_json`), so it needs no extra configuration. Movies without saved genres are skipped. A genre needs two family-rated movies to be the family favorite, and the Genre Loyalist trophy needs three genre-tagged picks.
 
+The Trophy Room's Taste Match compares every pair of people over the movies both have rated, family-rated or not. Each cell shows how many points apart their scores are on average (±), or, once the pair shares five movies, the correlation of their scores (−1 to 1). Most Divisive Movie is the family-rated movie with the widest gap between its lowest and highest score. The Contrarian is whoever's scores sit furthest from the average of everyone else's on the same family-rated movies, after rating at least three of them. It's all computed from `ratings`, with no extra configuration.
+
 ## Run with Docker
 
 ```bash

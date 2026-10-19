@@ -144,6 +144,70 @@ func TestCalculateGenreSpotlightSharesLoyalistTies(t *testing.T) {
 	}
 }
 
+func TestCalculateTasteMatchBuildsLowerTriangle(t *testing.T) {
+	aiden := testPerson("Aiden", "A")
+	caleb := testPerson("Caleb", "C")
+	daniel := testPerson("Daniel", "D")
+	stats := []model.TrophyStats{{Person: aiden}, {Person: caleb}, {Person: daniel}}
+	// Pairs may come in either order; Aiden and Daniel share no movies.
+	pairs := []model.TastePair{
+		{PersonA: caleb.ID, PersonB: aiden.ID, SharedMovies: 2, AvgGap: 1.5},
+		{PersonA: daniel.ID, PersonB: caleb.ID, SharedMovies: 6, AvgGap: 0.5},
+	}
+	divisive := &model.DivisiveMovie{Title: "Cube", LowScore: 2, HighScore: 9}
+
+	match := calculateTasteMatch(stats, pairs, divisive)
+
+	if len(match.Columns) != 2 || match.Columns[0] != aiden || match.Columns[1] != caleb {
+		t.Fatalf("columns = %+v, want Aiden and Caleb", match.Columns)
+	}
+	if len(match.Rows) != 2 || match.Rows[0].Person != caleb || match.Rows[1].Person != daniel {
+		t.Fatalf("rows = %+v, want Caleb and Daniel", match.Rows)
+	}
+	if cells := match.Rows[0].Cells; len(cells) != 1 || cells[0] == nil || cells[0].AvgGap != 1.5 {
+		t.Errorf("Caleb's row = %+v, want only Aiden at 1.5", cells)
+	}
+	if cells := match.Rows[1].Cells; len(cells) != 2 || cells[0] != nil || cells[1] == nil || cells[1].SharedMovies != 6 {
+		t.Errorf("Daniel's row = %+v, want no Aiden pair and the Caleb pair", cells)
+	}
+	if match.MostDivisive != divisive {
+		t.Errorf("most divisive = %+v, want %+v", match.MostDivisive, divisive)
+	}
+}
+
+func TestCalculateTasteMatchNeedsTwoPeople(t *testing.T) {
+	match := calculateTasteMatch([]model.TrophyStats{{Person: testPerson("Daniel", "D")}}, nil, nil)
+	if len(match.Columns) != 0 || len(match.Rows) != 0 {
+		t.Errorf("one person built a matrix: %+v", match)
+	}
+	if len(match.Contrarian.Winners) != 0 || match.Contrarian.Value != "Waiting for 3 family-rated movies" {
+		t.Errorf("contrarian = %+v, want an open trophy", match.Contrarian)
+	}
+}
+
+func TestCalculateTasteMatchContrarian(t *testing.T) {
+	aiden := testPerson("Aiden", "A")
+	caleb := testPerson("Caleb", "C")
+	daniel := testPerson("Daniel", "D")
+	jennifer := testPerson("Jennifer", "J")
+
+	// Aiden strays furthest but has rated too few family-rated movies.
+	match := calculateTasteMatch([]model.TrophyStats{
+		{Person: aiden, AvgRatingGap: 4, GapRatings: 2},
+		{Person: caleb, AvgRatingGap: 2.4, GapRatings: 3},
+		{Person: daniel, AvgRatingGap: 1, GapRatings: 5},
+		{Person: jennifer, AvgRatingGap: 2.4, GapRatings: 4},
+	}, nil, nil)
+
+	winners := match.Contrarian.Winners
+	if len(winners) != 2 || winners[0] != caleb || winners[1] != jennifer {
+		t.Fatalf("contrarian winners = %+v, want Caleb and Jennifer", winners)
+	}
+	if match.Contrarian.Title != "Contrarian" || match.Contrarian.Value != "2.4 points from the family, on average" {
+		t.Errorf("contrarian = %+v", match.Contrarian)
+	}
+}
+
 func testPerson(name, initial string) *model.Person {
 	return &model.Person{ID: uuid.New(), Name: name, Initial: initial}
 }
