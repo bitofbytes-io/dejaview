@@ -88,6 +88,8 @@ Manage people in the app at `/people` (the **People** link in the header; sign i
 
 Migration 003 seeds four example people (D, J, C and A) with the colours cyan, rose, amber and violet. On a new install, add your own people on the People page, then remove the examples before anyone picks or rates a movie. A movie counts in the Trophy Room (rating trophies, Genre Spotlight ratings, Family Top Five and the family-rated total) once all but one person has rated it, and always at least one: 3 of 4 people, or 1 of 2. Its score is the average of the ratings it has.
 
+The dashboard nudges people to rate: each poster shows a dashed initial for everyone who hasn't rated it yet, a **Waiting on** line above the groups counts each person's unrated movies, and the **Needs rating from** dropdown (or `/?needs=<initial>`) shows only one person's unrated movies. The choice is remembered in a `dv_me` cookie, which is just a default for the filter, not a login; choose **Anyone** (`/?needs=`) to see every movie again.
+
 No configuration is needed beyond running migration 013, which adds `persons.color`.
 
 The Trophy Room's Genre Spotlight reads the genres TMDB returned when each movie was added (saved in `movies.metadata_json`), so it needs no extra configuration. Movies without saved genres are skipped. A genre needs two family-rated movies to be the family favorite, and the Genre Loyalist trophy needs three genre-tagged picks.
