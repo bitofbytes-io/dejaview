@@ -1,0 +1,112 @@
+package components
+
+import (
+	"fmt"
+	"github.com/drywaters/dejaview/internal/model"
+	"strings"
+)
+
+// TasteMatch renders the rating-agreement matrix alongside the Most Divisive
+// Movie and Contrarian trophies.
+templ TasteMatch(match model.TasteMatch) {
+	<div class="trophy-grid">
+		@TasteMatrixCard(match)
+		@DivisiveMovieCard(match.MostDivisive)
+		@TrophyCard(match.Contrarian)
+	</div>
+}
+
+// TasteMatrixCard shows how closely each pair of people rate alike, once per
+// pair: each row's person against every column person before them.
+templ TasteMatrixCard(match model.TasteMatch) {
+	@trophyCardLayout("target", "Who Rates Alike", "Each pair, compared on the movies both rated", tasteMatrixLegend, false) {
+		if len(match.Rows) > 0 {
+			<table class="taste-matrix">
+				<caption class="sr-only">Rating agreement between each pair of people</caption>
+				<thead>
+					<tr>
+						<td></td>
+						for _, person := range match.Columns {
+							<th scope="col">
+								@tasteBadge(person)
+							</th>
+						}
+					</tr>
+				</thead>
+				<tbody>
+					for _, row := range match.Rows {
+						<tr>
+							<th scope="row">
+								@tasteBadge(row.Person)
+							</th>
+							for i := range match.Columns {
+								if i < len(row.Cells) {
+									@tasteCell(row.Cells[i])
+								} else {
+									<td></td>
+								}
+							}
+						</tr>
+					}
+				</tbody>
+			</table>
+		} else {
+			@pendingWinner("Needs two people")
+		}
+	}
+}
+
+const tasteMatrixLegend = "± average points apart; correlation (−1 to 1) once a pair shares 5 movies"
+
+templ tasteBadge(person *model.Person) {
+	<span class={ "trophy-winner-badge", person.ColorClass() } title={ person.Name } aria-hidden="true">{ person.Initial }</span>
+	<span class="sr-only">{ person.Name }</span>
+}
+
+templ tasteCell(pair *model.TastePair) {
+	if pair == nil {
+		<td class="taste-cell taste-cell-empty" title="No shared movies yet">
+			<span class="taste-cell-value" aria-hidden="true">&mdash;</span>
+			<span class="sr-only">No shared movies yet</span>
+		</td>
+	} else {
+		<td class={ "taste-cell", pair.AgreementClass() } title={ tasteCellTitle(pair) }>
+			<span class="taste-cell-value">{ tasteCellValue(pair) }</span>
+		</td>
+	}
+}
+
+// tasteCellValue shows the correlation once the pair shares enough movies,
+// and the average gap, marked ±, before that.
+func tasteCellValue(pair *model.TastePair) string {
+	if pair.UsesCorrelation() {
+		return strings.Replace(fmt.Sprintf("%.2f", *pair.Correlation), "-", "−", 1)
+	}
+	return fmt.Sprintf("±%.1f", pair.AvgGap)
+}
+
+func tasteCellTitle(pair *model.TastePair) string {
+	movies := "movies"
+	if pair.SharedMovies == 1 {
+		movies = "movie"
+	}
+	return fmt.Sprintf("%d shared %s, %.1f points apart on average", pair.SharedMovies, movies, pair.AvgGap)
+}
+
+// DivisiveMovieCard shows the family-rated movie whose scores spread widest.
+templ DivisiveMovieCard(movie *model.DivisiveMovie) {
+	@trophyCardLayout("bar-chart", "Most Divisive Movie", "The one that split the room", divisiveValue(movie), false) {
+		if movie != nil {
+			<a href={ templ.SafeURL("/movies/" + movie.EntryID.String()) } class="trophy-winner genre-pill trophy-winner-link">{ movie.Title }</a>
+		} else {
+			@pendingWinner("Still up for grabs")
+		}
+	}
+}
+
+func divisiveValue(movie *model.DivisiveMovie) string {
+	if movie == nil {
+		return "Waiting for a family-rated split"
+	}
+	return fmt.Sprintf("Scores from %.1f to %.1f", movie.LowScore, movie.HighScore)
+}

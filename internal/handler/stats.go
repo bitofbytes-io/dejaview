@@ -24,6 +24,9 @@ const (
 	// minFavoriteGenreMovies is how many family-rated movies a genre needs
 	// before it can be the family's highest-rated genre.
 	minFavoriteGenreMovies = 2
+	// minContrarianRatings is how many family-rated movies someone must rate
+	// before they can be the Contrarian, so one odd score cannot win it.
+	minContrarianRatings = 3
 )
 
 // StatsHandler handles the Trophy Room.
@@ -72,6 +75,16 @@ func (h *StatsHandler) buildStatsData(ctx context.Context) (*model.StatsData, er
 		return nil, fmt.Errorf("get genre pick stats: %w", err)
 	}
 
+	tastePairs, err := h.statsRepo.GetTastePairs(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get taste pairs: %w", err)
+	}
+
+	mostDivisive, err := h.statsRepo.GetMostDivisiveMovie(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get most divisive movie: %w", err)
+	}
+
 	totalWatched, totalRuntime, fullyRated, err := h.statsRepo.GetSummaryStats(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get summary stats: %w", err)
@@ -83,6 +96,7 @@ func (h *StatsHandler) buildStatsData(ctx context.Context) (*model.StatsData, er
 		Trophies:              calculateTrophies(trophyStats),
 		TopMovies:             topMovies,
 		Genres:                calculateGenreSpotlight(genreStats),
+		TasteMatch:            calculateTasteMatch(trophyStats, tastePairs, mostDivisive),
 		TotalMoviesWatched:    totalWatched,
 		TotalWatchTimeMinutes: totalRuntime,
 		FullyRatedMovies:      fullyRated,
@@ -250,6 +264,58 @@ func calculateGenreSpotlight(stats []model.GenrePickStat) model.GenreSpotlight {
 	}
 
 	return model.GenreSpotlight{PickerGenres: pickerGenres, FamilyFavorite: familyFavorite, Loyalist: loyalist}
+}
+
+// calculateTasteMatch lays out each pair's rating agreement as the lower
+// triangle of a matrix over the people in stats, in their order, and awards
+// the Contrarian trophy to whoever strays furthest from the rest of the
+// family's scores.
+func calculateTasteMatch(stats []model.TrophyStats, pairs []model.TastePair, mostDivisive *model.DivisiveMovie) model.TasteMatch {
+	// Index each pair under both orders so lookups need not sort the IDs.
+	byPair := make(map[[2]uuid.UUID]*model.TastePair, 2*len(pairs))
+	for i := range pairs {
+		pair := &pairs[i]
+		byPair[[2]uuid.UUID{pair.PersonA, pair.PersonB}] = pair
+		byPair[[2]uuid.UUID{pair.PersonB, pair.PersonA}] = pair
+	}
+
+	var people []*model.Person
+	for _, stat := range stats {
+		if stat.Person != nil {
+			people = append(people, stat.Person)
+		}
+	}
+
+	var match model.TasteMatch
+	if len(people) > 1 {
+		match.Columns = people[:len(people)-1]
+		for i, person := range people[1:] {
+			row := model.TasteRow{Person: person, Cells: make([]*model.TastePair, i+1)}
+			for j, other := range people[:i+1] {
+				row.Cells[j] = byPair[[2]uuid.UUID{person.ID, other.ID}]
+			}
+			match.Rows = append(match.Rows, row)
+		}
+	}
+	match.MostDivisive = mostDivisive
+
+	winners, gap := maxWinners(stats, trophyStatsPerson,
+		func(stat model.TrophyStats) bool { return stat.GapRatings >= minContrarianRatings },
+		func(stat model.TrophyStats) float64 { return stat.AvgRatingGap },
+	)
+	match.Contrarian = model.Trophy{
+		ID:          "contrarian",
+		Title:       "Contrarian",
+		Description: "Rates to the beat of their own drum",
+		Icon:        "chart-up",
+		Winners:     winners,
+		Value:       fmt.Sprintf("Waiting for %d family-rated movies", minContrarianRatings),
+	}
+	if len(winners) > 0 {
+		match.Contrarian.Value = fmt.Sprintf("%.1f points from the family, on average", gap)
+	}
+
+	return match
 }
 
 // betterGenreRating orders genres by average rating, then by how many movies

@@ -106,6 +106,34 @@ func TestStatsRepositoryPostgres(t *testing.T) {
 		}
 	}
 
+	// Contrarian gaps compare each family-rated score with the average of
+	// everyone else's scores on that movie. D: Alien |8-22/3|, Brazil
+	// |4-16/3|, Eraserhead |6-6|; the 2-of-4 Cube does not count.
+	gaps := map[string]struct {
+		gap   float64
+		count int
+	}{
+		"D": {2.0 / 3, 3},
+		"J": {5.0 / 3, 3},
+		"C": {5.0 / 3, 3},
+		"A": {1, 2},
+	}
+	for _, stat := range trophies {
+		w := gaps[stat.Person.Initial]
+		if math.Abs(stat.AvgRatingGap-w.gap) > 1e-9 || stat.GapRatings != w.count {
+			t.Fatalf("%s: rating gap %v over %d, want %v over %d", stat.Person.Initial, stat.AvgRatingGap, stat.GapRatings, w.gap, w.count)
+		}
+	}
+
+	// Eraserhead's 4 to 8 beats Alien's 6 to 9; Cube's split is not family-rated.
+	divisive, err := stats.GetMostDivisiveMovie(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if divisive == nil || divisive.EntryID != eraserhead || divisive.Title != "Eraserhead" || divisive.LowScore != 4 || divisive.HighScore != 8 {
+		t.Fatalf("most divisive = %+v, want Eraserhead 4 to 8", divisive)
+	}
+
 	top, err := stats.GetTopRatedMovies(ctx, 5)
 	if err != nil {
 		t.Fatal(err)
@@ -155,6 +183,134 @@ func TestStatsRepositoryPostgres(t *testing.T) {
 	rate(eraserhead, map[string]float64{"E": 10}) // 4 of 5: avg 7
 	if top, err := stats.GetTopRatedMovies(ctx, 5); err != nil || len(top) != 3 || top[1].Entry.ID != eraserhead || top[1].AverageRating != 7 {
 		t.Fatalf("top movies after Eve rates Eraserhead = %+v (err %v), want it second at 7", top, err)
+	}
+}
+
+// TestTasteMatchPostgres covers pairwise rating agreement over every shared
+// rating, and the Most Divisive Movie's tie-breaks and empty state.
+func TestTasteMatchPostgres(t *testing.T) {
+	pool := ratingTestPool(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	entries := NewEntryRepository(pool)
+	stats := NewStatsRepository(pool)
+
+	people := map[string]uuid.UUID{}
+	rows, err := pool.Query(ctx, `SELECT initial, id FROM persons`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var initial string
+		var id uuid.UUID
+		if err := rows.Scan(&initial, &id); err != nil {
+			t.Fatal(err)
+		}
+		people[initial] = id
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	if pairs, err := stats.GetTastePairs(ctx); err != nil || len(pairs) != 0 {
+		t.Fatalf("pairs with no ratings = %+v (err %v), want none", pairs, err)
+	}
+	if divisive, err := stats.GetMostDivisiveMovie(ctx); err != nil || divisive != nil {
+		t.Fatalf("most divisive with no ratings = %+v (err %v), want nil", divisive, err)
+	}
+
+	addRated := func(title string, scores map[string]float64) uuid.UUID {
+		t.Helper()
+		var movieID uuid.UUID
+		if err := pool.QueryRow(ctx, `INSERT INTO movies(title) VALUES ($1) RETURNING id`, title).Scan(&movieID); err != nil {
+			t.Fatal(err)
+		}
+		entry, err := entries.Create(ctx, model.CreateEntryInput{MovieID: movieID, GroupNumber: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for initial, score := range scores {
+			if _, err := pool.Exec(ctx, `INSERT INTO ratings(person_id, entry_id, score) VALUES ($1, $2, $3)`, people[initial], entry.ID, score); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return entry.ID
+	}
+
+	// J scores one point above D every time, C mirrors D, and A rates
+	// everything 5. Only D rates the last movie, so no pair shares it.
+	addRated("Alien", map[string]float64{"D": 2, "J": 3, "C": 9, "A": 5})
+	addRated("Brazil", map[string]float64{"D": 4, "J": 5, "C": 7, "A": 5})
+	addRated("Cube", map[string]float64{"D": 6, "J": 7, "C": 5, "A": 5})
+	addRated("Dune", map[string]float64{"D": 8, "J": 9, "C": 3, "A": 5})
+	addRated("Eraserhead", map[string]float64{"D": 7, "J": 8, "C": 4})
+	addRated("Fargo", map[string]float64{"D": 10})
+
+	pairs, err := stats.GetTastePairs(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	type pairKey struct{ a, b string }
+	initials := map[uuid.UUID]string{}
+	for initial, id := range people {
+		initials[id] = initial
+	}
+	got := map[pairKey]model.TastePair{}
+	for _, pair := range pairs {
+		if pair.PersonA.String() >= pair.PersonB.String() {
+			t.Fatalf("pair not ordered: %+v", pair)
+		}
+		a, b := initials[pair.PersonA], initials[pair.PersonB]
+		if b < a {
+			a, b = b, a
+		}
+		got[pairKey{a, b}] = pair
+	}
+	corr := func(v float64) *float64 { return &v }
+	expected := map[pairKey]struct {
+		shared int
+		gap    float64
+		corr   *float64
+	}{
+		{"D", "J"}: {5, 1, corr(1)},
+		{"C", "D"}: {5, 3.8, corr(-1)}, // |2-9|, |4-7|, |6-5|, |8-3|, |7-4|
+		{"C", "J"}: {5, 4, corr(-1)},   // |3-9|, |5-7|, |7-5|, |9-3|, |8-4|
+		{"A", "D"}: {4, 2, nil},        // A's constant scores have no correlation
+		{"A", "J"}: {4, 2, nil},
+		{"A", "C"}: {4, 2, nil},
+	}
+	if len(got) != len(expected) {
+		t.Fatalf("got %d pairs, want %d: %+v", len(got), len(expected), pairs)
+	}
+	for k, w := range expected {
+		pair, ok := got[k]
+		if !ok {
+			t.Fatalf("missing pair %v", k)
+		}
+		if pair.SharedMovies != w.shared || math.Abs(pair.AvgGap-w.gap) > 1e-9 {
+			t.Errorf("%v: shared=%d gap=%v, want %d and %v", k, pair.SharedMovies, pair.AvgGap, w.shared, w.gap)
+		}
+		switch {
+		case w.corr == nil && pair.Correlation != nil:
+			t.Errorf("%v: correlation %v, want none", k, *pair.Correlation)
+		case w.corr != nil && (pair.Correlation == nil || math.Abs(*pair.Correlation-*w.corr) > 1e-9):
+			t.Errorf("%v: correlation %v, want %v", k, pair.Correlation, *w.corr)
+		}
+	}
+
+	// Alien's 2 to 9 spans 7 points, Dune's 3 to 9 only 6, and Fargo has a
+	// single rating so it is not family-rated. A tie on range goes to the
+	// wider overall spread: Garden State's 1, 1, 8, 8 beats Alien's 2, 3, 9, 5.
+	divisive, err := stats.GetMostDivisiveMovie(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if divisive == nil || divisive.Title != "Alien" || divisive.LowScore != 2 || divisive.HighScore != 9 {
+		t.Fatalf("most divisive = %+v, want Alien 2 to 9", divisive)
+	}
+	garden := addRated("Garden State", map[string]float64{"D": 1, "J": 1, "C": 8, "A": 8})
+	if divisive, err := stats.GetMostDivisiveMovie(ctx); err != nil || divisive == nil || divisive.EntryID != garden {
+		t.Fatalf("most divisive after a wider split = %+v (err %v), want Garden State", divisive, err)
 	}
 }
 

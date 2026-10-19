@@ -456,6 +456,14 @@
 .trophy-card-value b { color: var(--neon-amber); font-weight: 600; }
 .genre-pill { padding: var(--space-2) var(--space-3); }
 .trophy-winners-stacked { flex-direction: column; align-items: flex-start; justify-self: center; max-width: 100%; }
+.trophy-winner-link { color: var(--ink); text-decoration: none; overflow-wrap: anywhere; }
+.trophy-winner-link:hover { box-shadow: inset 0 0 0 1px var(--line-control); }
+
+.taste-matrix { border-collapse: separate; border-spacing: var(--space-1); margin: calc(-1 * var(--space-1)); }
+.taste-matrix th { padding: 0; font-weight: inherit; }
+.taste-matrix th .trophy-winner-badge { display: flex; margin: 0 auto; }
+.taste-cell { width: 64px; height: 40px; padding: var(--space-1); text-align: center; vertical-align: middle; border-radius: var(--radius-md); background: var(--surface-sunken); }
+.taste-cell-value { font-family: var(--font-mono); font-size: 15px; line-height: 20px; font-weight: 600; color: var(--rating, var(--ink-muted)); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 .top-movies-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
 .top-movie-row {

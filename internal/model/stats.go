@@ -1,5 +1,7 @@
 package model
 
+import "github.com/google/uuid"
+
 // TrophyRatingThreshold returns how many people must rate a movie before it
 // counts toward the Trophy Room: everyone but one, and at least one. With four
 // people that is three. The stats queries apply the same rule in SQL.
@@ -26,6 +28,84 @@ type TrophyStats struct {
 	FullyRatedPicks       int
 	TotalRuntimePicked    int
 	PicksWithKnownRuntime int
+	// AvgRatingGap is how far, on average, this person's scores sit from the
+	// average of everyone else's scores on the same family-rated movie;
+	// GapRatings counts those scores.
+	AvgRatingGap float64
+	GapRatings   int
+}
+
+// MinCorrelationMovies is how many movies two people must both rate before
+// the Taste Match shows the correlation of their scores instead of the
+// average gap between them.
+const MinCorrelationMovies = 5
+
+// TastePair is how closely two people's ratings agree on the movies they
+// have both rated.
+type TastePair struct {
+	PersonA      uuid.UUID
+	PersonB      uuid.UUID
+	SharedMovies int
+	// AvgGap is the mean absolute difference between their scores.
+	AvgGap float64
+	// Correlation is the Pearson correlation of their scores, or nil when it
+	// is undefined because one of them gave every shared movie the same score.
+	Correlation *float64
+}
+
+// UsesCorrelation reports whether the pair shares enough movies, with enough
+// variety, to compare them by correlation rather than by average gap.
+func (p *TastePair) UsesCorrelation() bool {
+	return p.SharedMovies >= MinCorrelationMovies && p.Correlation != nil
+}
+
+// AgreementClass returns the rating colour class for how well the pair
+// agrees: close or positively correlated scores are high, far apart or
+// opposite scores are low.
+func (p *TastePair) AgreementClass() string {
+	if p.UsesCorrelation() {
+		switch {
+		case *p.Correlation >= 0.5:
+			return "rating-high"
+		case *p.Correlation >= 0:
+			return "rating-mid"
+		default:
+			return "rating-low"
+		}
+	}
+	switch {
+	case p.AvgGap <= 1:
+		return "rating-high"
+	case p.AvgGap <= 2:
+		return "rating-mid"
+	default:
+		return "rating-low"
+	}
+}
+
+// TasteRow is one person's row of the Taste Match matrix. Cells[i] is their
+// pair with TasteMatch.Columns[i], or nil when the two share no rated movie.
+type TasteRow struct {
+	Person *Person
+	Cells  []*TastePair
+}
+
+// DivisiveMovie is the family-rated movie whose scores spread the widest.
+type DivisiveMovie struct {
+	EntryID   uuid.UUID
+	Title     string
+	LowScore  float64
+	HighScore float64
+}
+
+// TasteMatch holds the Trophy Room's rating-agreement stats. The matrix is
+// the lower triangle: each row's person against every column person before
+// them, so each pair appears once.
+type TasteMatch struct {
+	Columns      []*Person
+	Rows         []TasteRow
+	MostDivisive *DivisiveMovie
+	Contrarian   Trophy
 }
 
 // RankedMovie is a family-rated entry in the family's top-five list.
@@ -80,6 +160,7 @@ type StatsData struct {
 	Trophies        []Trophy
 	TopMovies       []RankedMovie
 	Genres          GenreSpotlight
+	TasteMatch      TasteMatch
 
 	TotalMoviesWatched    int
 	TotalWatchTimeMinutes int

@@ -83,19 +83,82 @@ func TestStatsPageRendersTrophiesAndRankedMovies(t *testing.T) {
 	if got := strings.Count(html, `class="trophy-winner person-mint"`); got != 4 {
 		t.Errorf("found %d person chips in Daniel's colour, want 4", got)
 	}
-	// Crowd Pleaser and all three genre cards share the trophy card layout,
-	// footer included, so their rows line up.
-	if got := strings.Count(html, `<article class="trophy-card">`); got != 4 {
-		t.Errorf("found %d trophy cards, want 4", got)
+	// Crowd Pleaser and all three genre and taste cards share the trophy card
+	// layout, footer included, so their rows line up.
+	if got := strings.Count(html, `<article class="trophy-card">`); got != 7 {
+		t.Errorf("found %d trophy cards, want 7", got)
 	}
-	if got := strings.Count(html, `<div class="trophy-card-value">`); got != 4 {
-		t.Errorf("found %d trophy card footers, want 4", got)
+	if got := strings.Count(html, `<div class="trophy-card-value">`); got != 7 {
+		t.Errorf("found %d trophy card footers, want 7", got)
 	}
 	if got := strings.Count(html, `class="trophy-winners trophy-winners-stacked"`); got != 1 {
 		t.Errorf("found %d stacked winner lists, want 1 for Go-To Genres", got)
 	}
 	if !strings.Contains(html, `<div class="top-movie-picker"><span class="sr-only">Picked by</span><span class="trophy-winner person-mint">`) {
 		t.Error("Top Five did not show the picker as a person chip")
+	}
+}
+
+func TestStatsPageRendersTasteMatch(t *testing.T) {
+	aiden := &model.Person{ID: uuid.New(), Initial: "A", Name: "Aiden", Color: "violet"}
+	caleb := &model.Person{ID: uuid.New(), Initial: "C", Name: "Caleb", Color: "amber"}
+	daniel := &model.Person{ID: uuid.New(), Initial: "D", Name: "Daniel", Color: "cyan"}
+	correlation := -0.25
+	divisive := &model.DivisiveMovie{EntryID: uuid.New(), Title: "Cube", LowScore: 2, HighScore: 9.5}
+	data := &model.StatsData{
+		TotalMoviesWatched: 3,
+		TasteMatch: model.TasteMatch{
+			Columns: []*model.Person{aiden, caleb},
+			Rows: []model.TasteRow{
+				{Person: caleb, Cells: []*model.TastePair{{SharedMovies: 1, AvgGap: 0.5}}},
+				{Person: daniel, Cells: []*model.TastePair{nil, {SharedMovies: 6, AvgGap: 2.5, Correlation: &correlation}}},
+			},
+			MostDivisive: divisive,
+			Contrarian: model.Trophy{
+				Title: "Contrarian", Icon: "chart-up",
+				Winners: []*model.Person{daniel}, Value: "2.1 points from the family, on average",
+			},
+		},
+	}
+
+	html := renderStatsPage(t, data)
+	for _, want := range []string{
+		"Taste Match",
+		"Who Rates Alike",
+		`<th scope="col"><span class="trophy-winner-badge person-violet" title="Aiden" aria-hidden="true">A</span> <span class="sr-only">Aiden</span></th>`,
+		`<th scope="row"><span class="trophy-winner-badge person-cyan" title="Daniel" aria-hidden="true">D</span>`,
+		// Caleb and Aiden share one movie, so they are compared by gap.
+		`<td class="taste-cell rating-high" title="1 shared movie, 0.5 points apart on average"><span class="taste-cell-value">±0.5</span></td>`,
+		// Daniel and Aiden share nothing yet.
+		`<td class="taste-cell taste-cell-empty" title="No shared movies yet">`,
+		// Daniel and Caleb share six, so they are compared by correlation.
+		`<td class="taste-cell rating-low" title="6 shared movies, 2.5 points apart on average"><span class="taste-cell-value">−0.25</span></td>`,
+		"Most Divisive Movie",
+		`href="/movies/` + divisive.EntryID.String() + `"`,
+		">Cube</a>",
+		"Scores from 2.0 to 9.5",
+		"Contrarian",
+		"2.1 points from the family, on average",
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("Taste Match did not contain %q", want)
+		}
+	}
+	// Caleb's row pads the column he does not pair with.
+	if got := strings.Count(html, "<td></td>"); got != 2 {
+		t.Errorf("found %d blank cells, want the corner and one above the diagonal", got)
+	}
+}
+
+func TestStatsPageWaitsForTasteMatch(t *testing.T) {
+	html := renderStatsPage(t, &model.StatsData{TotalMoviesWatched: 1})
+	for _, want := range []string{"Needs two people", "Waiting for a family-rated split"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("empty Taste Match did not contain %q", want)
+		}
+	}
+	if strings.Contains(html, `<table class="taste-matrix">`) {
+		t.Error("rendered a matrix without anyone to compare")
 	}
 }
 
