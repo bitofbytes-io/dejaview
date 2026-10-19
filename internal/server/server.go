@@ -112,7 +112,7 @@ func (s *Server) Router() http.Handler {
 		r.Use(middleware.Auth(sessionManager))
 
 		// Dashboard
-		dashboardHandler := handler.NewDashboardHandler(s.entryRepo, s.personRepo)
+		dashboardHandler := handler.NewDashboardHandler(s.entryRepo, s.personRepo, s.cfg.SecureCookies)
 		r.Get("/", dashboardHandler.DashboardPage)
 		r.Get("/dashboard-content", dashboardHandler.DashboardContent)
 

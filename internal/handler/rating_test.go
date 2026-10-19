@@ -54,12 +54,13 @@ func (s *stubEntryRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.Entry
 }
 
 type stubPersonRepo struct {
-	calls int
+	calls   int
+	persons []*model.Person
 }
 
 func (s *stubPersonRepo) GetAll(ctx context.Context) ([]*model.Person, error) {
 	s.calls++
-	return nil, nil
+	return s.persons, nil
 }
 
 func TestSaveRatings_EntryMissingAfterRefetch(t *testing.T) {

@@ -52,3 +52,25 @@ func (e *Entry) AverageRating() *float64 {
 func (e *Entry) RatingCount() int {
 	return len(e.Ratings)
 }
+
+// MissingRaters returns the persons, in the given order, who have not rated
+// this entry yet.
+func (e *Entry) MissingRaters(persons []*Person) []*Person {
+	var missing []*Person
+	for _, person := range persons {
+		if !e.RatedBy(person.ID) {
+			missing = append(missing, person)
+		}
+	}
+	return missing
+}
+
+// RatedBy reports whether the person has rated this entry.
+func (e *Entry) RatedBy(personID uuid.UUID) bool {
+	for _, r := range e.Ratings {
+		if r.PersonID == personID {
+			return true
+		}
+	}
+	return false
+}

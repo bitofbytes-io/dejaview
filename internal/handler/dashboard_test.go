@@ -96,6 +96,120 @@ func TestDashboardCurrentGroup(t *testing.T) {
 	}
 }
 
+func TestDashboardNeedsRatingFilter(t *testing.T) {
+	dan := &model.Person{ID: uuid.New(), Initial: "D", Name: "Dan", Color: "cyan"}
+	jen := &model.Person{ID: uuid.New(), Initial: "J", Name: "Jen", Color: "rose"}
+	cal := &model.Person{ID: uuid.New(), Initial: "C", Name: "Caleb", Color: "amber"}
+	rated := func(entry *model.Entry, persons ...*model.Person) *model.Entry {
+		for _, p := range persons {
+			entry.Ratings = append(entry.Ratings, &model.Rating{PersonID: p.ID, Person: p, Score: 7})
+		}
+		return entry
+	}
+	entries := []*model.Entry{
+		rated(dashboardEntry(2, "Heat"), dan, cal),
+		rated(dashboardEntry(2, "Alien"), cal),
+		rated(dashboardEntry(1, "Coco"), dan, jen, cal),
+	}
+	handler := &DashboardHandler{
+		entryRepo:  &stubDashboardEntries{entries: entries},
+		personRepo: &stubPersonRepo{persons: []*model.Person{cal, dan, jen}},
+	}
+
+	get := func(target string, cookies ...*http.Cookie) (string, *http.Cookie) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, target, nil)
+		for _, c := range cookies {
+			req.AddCookie(c)
+		}
+		recorder := httptest.NewRecorder()
+		handler.DashboardContent(recorder, req)
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("%s: status %d", target, recorder.Code)
+		}
+		var me *http.Cookie
+		for _, c := range recorder.Result().Cookies() {
+			if c.Name == meCookie {
+				me = c
+			}
+		}
+		return recorder.Body.String(), me
+	}
+	shows := func(t *testing.T, body string, want ...string) {
+		t.Helper()
+		for _, title := range []string{"Heat", "Alien", "Coco"} {
+			wanted := false
+			for _, w := range want {
+				wanted = wanted || w == title
+			}
+			if got := strings.Contains(body, title); got != wanted {
+				t.Errorf("shows %s = %v, want %v", title, got, wanted)
+			}
+		}
+	}
+
+	t.Run("unfiltered", func(t *testing.T) {
+		body, me := get("/dashboard-content")
+		shows(t, body, "Heat", "Alien", "Coco")
+		if me != nil {
+			t.Errorf("set %s without a needs parameter", meCookie)
+		}
+		// Caleb has rated everything, so only Dan (1) and Jen (2) wait.
+		for _, want := range []string{`href="/?needs=D"`, `<span class="nudge-count">1</span>`, `href="/?needs=J"`, `<span class="nudge-count">2</span>`} {
+			if !strings.Contains(body, want) {
+				t.Errorf("waiting line is missing %q", want)
+			}
+		}
+		if strings.Contains(body, `href="/?needs=C"`) {
+			t.Error("waiting line lists Caleb, who rated every movie")
+		}
+		// Posters say who has not rated.
+		if !strings.Contains(body, `title="Waiting on Jen"`) {
+			t.Error("posters do not show who is missing")
+		}
+	})
+
+	t.Run("needs sets the cookie", func(t *testing.T) {
+		body, me := get("/dashboard-content?needs=j")
+		shows(t, body, "Heat", "Alien")
+		if me == nil || me.Value != "J" || me.MaxAge <= 0 || !me.HttpOnly {
+			t.Fatalf("%s cookie = %+v, want a lasting J", meCookie, me)
+		}
+		if !strings.Contains(body, `<option value="J" selected>Jen</option>`) {
+			t.Error("filter does not select Jen")
+		}
+	})
+
+	t.Run("cookie is the default", func(t *testing.T) {
+		body, me := get("/dashboard-content", &http.Cookie{Name: meCookie, Value: "D"})
+		shows(t, body, "Alien")
+		if me != nil {
+			t.Errorf("rewrote %s without a needs parameter", meCookie)
+		}
+	})
+
+	t.Run("caught up", func(t *testing.T) {
+		body, _ := get("/dashboard-content?needs=C")
+		shows(t, body)
+		if !strings.Contains(body, "Caleb has rated every movie.") {
+			t.Error("missing the caught-up note")
+		}
+	})
+
+	for _, target := range []string{"/dashboard-content?needs=", "/dashboard-content?needs=Z"} {
+		t.Run("clears with "+target, func(t *testing.T) {
+			body, me := get(target, &http.Cookie{Name: meCookie, Value: "D"})
+			shows(t, body, "Heat", "Alien", "Coco")
+			if me == nil || me.MaxAge >= 0 {
+				t.Fatalf("%s cookie = %+v, want it cleared", meCookie, me)
+			}
+			if !strings.Contains(body, `<option value="" selected>Anyone</option>`) {
+				t.Error("filter does not fall back to Anyone")
+			}
+		})
+	}
+}
+
 func TestDashboardReturns500WhenEntriesFail(t *testing.T) {
 	handler := &DashboardHandler{entryRepo: &stubDashboardEntries{err: errors.New("db down")}, personRepo: &stubPersonRepo{}}
 	for path, serve := range map[string]http.HandlerFunc{

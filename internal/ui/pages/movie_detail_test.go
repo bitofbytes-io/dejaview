@@ -148,3 +148,16 @@ func TestMovieDetailPageHidesEntryControlsWhenLoggedOut(t *testing.T) {
 		t.Error("logged-in movie page has disabled controls")
 	}
 }
+
+func TestRatingsCardMutesPeopleWhoHaveNotRated(t *testing.T) {
+	entry, persons := ratedEntry()
+	for _, authed := range []bool{false, true} {
+		html := render(t, RatingsCard(entry, persons, authed))
+		if !strings.Contains(html, `class="rating-row person-mint rating-row-missing"`) {
+			t.Errorf("authenticated=%v: Ben's row is not muted:\n%s", authed, html)
+		}
+		if strings.Contains(html, "person-rose rating-row-missing") {
+			t.Errorf("authenticated=%v: Ana's row is muted after she rated:\n%s", authed, html)
+		}
+	}
+}
