@@ -21,35 +21,37 @@ templ TasteMatch(match model.TasteMatch) {
 templ TasteMatrixCard(match model.TasteMatch) {
 	@trophyCardLayout("target", "Who Rates Alike", "Each pair, compared on the movies both rated", tasteMatrixLegend, false) {
 		if len(match.Rows) > 0 {
-			<table class="taste-matrix">
-				<caption class="sr-only">Rating agreement between each pair of people</caption>
-				<thead>
-					<tr>
-						<td></td>
-						for _, person := range match.Columns {
-							<th scope="col">
-								@tasteBadge(person)
-							</th>
-						}
-					</tr>
-				</thead>
-				<tbody>
-					for _, row := range match.Rows {
+			<div class="taste-matrix-scroll">
+				<table class="taste-matrix">
+					<caption class="sr-only">Rating agreement between each pair of people</caption>
+					<thead>
 						<tr>
-							<th scope="row">
-								@tasteBadge(row.Person)
-							</th>
-							for i := range match.Columns {
-								if i < len(row.Cells) {
-									@tasteCell(row.Cells[i])
-								} else {
-									<td></td>
-								}
+							<td></td>
+							for _, person := range match.Columns {
+								<th scope="col">
+									@tasteBadge(person)
+								</th>
 							}
 						</tr>
-					}
-				</tbody>
-			</table>
+					</thead>
+					<tbody>
+						for _, row := range match.Rows {
+							<tr>
+								<th scope="row">
+									@tasteBadge(row.Person)
+								</th>
+								for i := range match.Columns {
+									if i < len(row.Cells) {
+										@tasteCell(row.Cells[i])
+									} else {
+										<td></td>
+									}
+								}
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
 		} else {
 			@pendingWinner("Needs two people")
 		}

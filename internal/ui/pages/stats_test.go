@@ -125,6 +125,8 @@ func TestStatsPageRendersTasteMatch(t *testing.T) {
 	for _, want := range []string{
 		"Taste Match",
 		"Who Rates Alike",
+		// Larger families scroll the matrix inside its card.
+		`<div class="taste-matrix-scroll"><table class="taste-matrix">`,
 		`<th scope="col"><span class="trophy-winner-badge person-violet" title="Aiden" aria-hidden="true">A</span> <span class="sr-only">Aiden</span></th>`,
 		`<th scope="row"><span class="trophy-winner-badge person-cyan" title="Daniel" aria-hidden="true">D</span>`,
 		// Caleb and Aiden share one movie, so they are compared by gap.
@@ -157,7 +159,7 @@ func TestStatsPageWaitsForTasteMatch(t *testing.T) {
 			t.Errorf("empty Taste Match did not contain %q", want)
 		}
 	}
-	if strings.Contains(html, `<table class="taste-matrix">`) {
+	if strings.Contains(html, `class="taste-matrix`) {
 		t.Error("rendered a matrix without anyone to compare")
 	}
 }
