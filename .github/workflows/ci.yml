@@ -37,6 +37,12 @@ jobs:
           sudo mv /tmp/tailwindcss /usr/local/bin/tailwindcss
       - run: make test build
       - run: go vet ./...
+      - name: Check Go vulnerabilities
+        # Install, then run it with the go.mod toolchain so standard-library findings match
+        # the version we ship.
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+          "$(go env GOPATH)/bin/govulncheck" ./...
       - run: go test -race ./internal/handler ./internal/repository
 
   build-and-trigger:
