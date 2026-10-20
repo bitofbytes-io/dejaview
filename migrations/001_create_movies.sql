@@ -42,7 +42,7 @@ DO $$
 DECLARE
     func_oid oid;
 BEGIN
-    func_oid := to_regproc('update_updated_at_column()');
+    func_oid := to_regprocedure('update_updated_at_column()');
     IF func_oid IS NOT NULL THEN
         IF NOT EXISTS (
             SELECT 1

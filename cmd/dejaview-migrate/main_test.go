@@ -6,6 +6,7 @@ import (
 	"maps"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -171,4 +172,111 @@ func personNames(ctx context.Context, t *testing.T, admin *pgx.Conn, schema stri
 		t.Fatal(err)
 	}
 	return people
+}
+
+// Exercises every Down section only inside a disposable schema. A successful
+// second Up must not conceal objects that the rollback failed to remove.
+func TestMigrationsRoundTrip(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	admin, schema, databaseURL := testSchema(ctx, t)
+	db, err := sql.Open("pgx", databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := db.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, migrations.FS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sources := provider.ListSources()
+	if len(sources) == 0 {
+		t.Fatal("no embedded migrations")
+	}
+	latest := sources[len(sources)-1].Version
+
+	assertVersion := func(want int64) {
+		t.Helper()
+		got, err := provider.GetDBVersion(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != want {
+			t.Fatalf("migration version=%d, want %d", got, want)
+		}
+	}
+	assertSchema := func(up bool) {
+		t.Helper()
+		var tables []string
+		if err := admin.QueryRow(ctx, `SELECT COALESCE(array_agg(tablename::text ORDER BY tablename), '{}'::text[])
+   FROM pg_tables WHERE schemaname = $1 AND tablename <> 'goose_db_version'`, schema).Scan(&tables); err != nil {
+			t.Fatal(err)
+		}
+		var want []string
+		if up {
+			want = []string{"entries", "movies", "persons", "ratings"}
+		}
+		if !slices.Equal(tables, want) {
+			t.Fatalf("up=%t: application tables=%v, want %v", up, tables, want)
+		}
+		var hasRoutine bool
+		if err := admin.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_proc p
+   JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname = $1 AND p.proname = 'update_updated_at_column' AND p.pronargs = 0)`, schema).Scan(&hasRoutine); err != nil {
+			t.Fatal(err)
+		}
+		if hasRoutine != up {
+			t.Fatalf("up=%t: update_updated_at_column() exists=%t", up, hasRoutine)
+		}
+	}
+	for pass := 1; pass <= 2; pass++ {
+		if _, err := provider.Up(ctx); err != nil {
+			t.Fatalf("Up pass %d: %v", pass, err)
+		}
+		assertVersion(latest)
+		assertSchema(true)
+		assertPickerDeleteSetsNull(ctx, t, admin, schema)
+		if pass == 1 {
+			if _, err := provider.DownTo(ctx, 0); err != nil {
+				t.Fatalf("DownTo(0): %v", err)
+			}
+			assertVersion(0)
+			assertSchema(false)
+		}
+	}
+}
+
+func assertPickerDeleteSetsNull(ctx context.Context, t *testing.T, admin *pgx.Conn, schema string) {
+	t.Helper()
+	identifier := pgx.Identifier{schema}.Sanitize()
+	var pickerID, movieID, entryID uuid.UUID
+	if err := admin.QueryRow(ctx, "INSERT INTO "+identifier+".persons (initial, name) VALUES ('X', 'Round-trip picker') RETURNING id").Scan(&pickerID); err != nil {
+		t.Fatal(err)
+	}
+	if err := admin.QueryRow(ctx, "INSERT INTO "+identifier+".movies (title) VALUES ('Round-trip movie') RETURNING id").Scan(&movieID); err != nil {
+		t.Fatal(err)
+	}
+	if err := admin.QueryRow(ctx, "INSERT INTO "+identifier+".entries (movie_id, group_number, position, picked_by_person_id) VALUES ($1, 1, 1, $2) RETURNING id", movieID, pickerID).Scan(&entryID); err != nil {
+		t.Fatal(err)
+	}
+	// No rating references this picker: deleting them must preserve their entry.
+	result, err := admin.Exec(ctx, "DELETE FROM "+identifier+".persons WHERE id = $1", pickerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.RowsAffected() != 1 {
+		t.Fatalf("deleted %d pickers, want 1", result.RowsAffected())
+	}
+	var remainingMovie uuid.UUID
+	var pickerIsNull bool
+	if err := admin.QueryRow(ctx, "SELECT movie_id, picked_by_person_id IS NULL FROM "+identifier+".entries WHERE id = $1", entryID).Scan(&remainingMovie, &pickerIsNull); err != nil {
+		t.Fatalf("entry did not survive picker deletion: %v", err)
+	}
+	if remainingMovie != movieID || !pickerIsNull {
+		t.Fatalf("entry changed after picker deletion: movie=%s pickerIsNull=%t", remainingMovie, pickerIsNull)
+	}
 }
