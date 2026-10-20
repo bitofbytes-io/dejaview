@@ -122,7 +122,9 @@ func (h *RatingHandler) SaveRatings(w http.ResponseWriter, r *http.Request) {
 	isAuthenticated := middleware.IsAuthenticated(r.Context())
 	slog.Info("ratings saved", "entry_id", entryID, "changes", len(changes))
 	w.Header().Set("HX-Trigger", `{"showToast": {"message": "Saved!", "type": "success"}}`)
-	pages.RatingsCard(entry, persons, isAuthenticated).Render(ctx, w)
+	if err := pages.RatingsCard(entry, persons, isAuthenticated).Render(ctx, w); err != nil {
+		slog.Error("failed to render ratings card", "error", err)
+	}
 }
 
 // parseRatingChanges validates the entire submission before any rating is written.
@@ -134,21 +136,21 @@ func parseRatingChanges(form url.Values) ([]model.RatingChange, error) {
 			continue
 		}
 		if !strings.HasSuffix(key, "]") || len(values) != 1 {
-			return nil, errors.New("Invalid or duplicate rating field")
+			return nil, errors.New("invalid or duplicate rating field")
 		}
 		personID, err := uuid.Parse(strings.TrimSuffix(strings.TrimPrefix(key, "rating["), "]"))
 		if err != nil || personID == uuid.Nil {
-			return nil, errors.New("Invalid person ID")
+			return nil, errors.New("invalid person ID")
 		}
 		if seen[personID] {
-			return nil, errors.New("Duplicate rating for person")
+			return nil, errors.New("duplicate rating for person")
 		}
 		seen[personID] = true
 		change := model.RatingChange{PersonID: personID}
 		if value := strings.TrimSpace(values[0]); value != "" {
 			score, err := strconv.ParseFloat(value, 64)
 			if err != nil || math.IsNaN(score) || math.IsInf(score, 0) || score < 0 || score > 10 {
-				return nil, errors.New("Ratings must be numbers from 0 to 10")
+				return nil, errors.New("ratings must be numbers from 0 to 10")
 			}
 			change.Score = &score
 		}

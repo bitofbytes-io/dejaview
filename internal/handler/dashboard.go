@@ -85,7 +85,9 @@ func (h *DashboardHandler) render(w http.ResponseWriter, r *http.Request, view d
 	needs := h.needsPerson(w, r, persons)
 	filter := newRatingFilter(entries, persons, needs)
 	isAuthenticated := middleware.IsAuthenticated(ctx)
-	view(groups, persons, currentGroup, filter, isAuthenticated).Render(ctx, w)
+	if err := view(groups, persons, currentGroup, filter, isAuthenticated).Render(ctx, w); err != nil {
+		slog.Error("failed to render dashboard", "error", err)
+	}
 }
 
 // needsPerson returns the person named by ?needs=, or by meCookie when the

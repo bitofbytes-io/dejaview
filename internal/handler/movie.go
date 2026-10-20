@@ -85,7 +85,9 @@ func (h *MovieHandler) MovieDetailPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	isAuthenticated := middleware.IsAuthenticated(r.Context())
-	pages.MovieDetailPage(entry, persons, isAuthenticated).Render(ctx, w)
+	if err := pages.MovieDetailPage(entry, persons, isAuthenticated).Render(ctx, w); err != nil {
+		slog.Error("failed to render movie detail page", "error", err)
+	}
 }
 
 // SearchTMDB handles TMDB movie search
@@ -94,7 +96,9 @@ func (h *MovieHandler) SearchTMDB(w http.ResponseWriter, r *http.Request) {
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 
 	if query == "" {
-		partials.SearchResults(nil).Render(ctx, w)
+		if err := partials.SearchResults(nil).Render(ctx, w); err != nil {
+			slog.Error("failed to render empty search results", "error", err)
+		}
 		return
 	}
 	if len(query) > 120 {
@@ -109,7 +113,9 @@ func (h *MovieHandler) SearchTMDB(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	partials.SearchResults(results.Results).Render(ctx, w)
+	if err := partials.SearchResults(results.Results).Render(ctx, w); err != nil {
+		slog.Error("failed to render search results", "error", err)
+	}
 }
 
 // AddFromTMDB adds a movie from TMDB to the library

@@ -53,7 +53,11 @@ func TestRunUpgradesExistingDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 	provider, err := goose.NewProvider(goose.DialectPostgres, db, migrations.FS)
 	if err != nil {
 		t.Fatal(err)
@@ -117,7 +121,11 @@ func testSchema(ctx context.Context, t *testing.T) (*pgx.Conn, string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { admin.Close(context.Background()) })
+	t.Cleanup(func() {
+		if err := admin.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+	})
 	schema := "migrate_test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
 	identifier := pgx.Identifier{schema}.Sanitize()
 	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+identifier); err != nil {

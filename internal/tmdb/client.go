@@ -55,24 +55,24 @@ type SearchResponse struct {
 
 // MovieDetails represents detailed movie information from TMDB
 type MovieDetails struct {
-	ID               int      `json:"id"`
-	Title            string   `json:"title"`
-	OriginalTitle    string   `json:"original_title"`
-	Overview         string   `json:"overview"`
-	ReleaseDate      string   `json:"release_date"`
-	PosterPath       *string  `json:"poster_path"`
-	BackdropPath     *string  `json:"backdrop_path"`
-	Runtime          int      `json:"runtime"`
-	VoteAverage      float64  `json:"vote_average"`
-	VoteCount        int      `json:"vote_count"`
-	Popularity       float64  `json:"popularity"`
-	IMDBId           *string  `json:"imdb_id"`
-	Tagline          string   `json:"tagline"`
-	Status           string   `json:"status"`
-	Genres           []Genre  `json:"genres"`
+	ID                  int                 `json:"id"`
+	Title               string              `json:"title"`
+	OriginalTitle       string              `json:"original_title"`
+	Overview            string              `json:"overview"`
+	ReleaseDate         string              `json:"release_date"`
+	PosterPath          *string             `json:"poster_path"`
+	BackdropPath        *string             `json:"backdrop_path"`
+	Runtime             int                 `json:"runtime"`
+	VoteAverage         float64             `json:"vote_average"`
+	VoteCount           int                 `json:"vote_count"`
+	Popularity          float64             `json:"popularity"`
+	IMDBId              *string             `json:"imdb_id"`
+	Tagline             string              `json:"tagline"`
+	Status              string              `json:"status"`
+	Genres              []Genre             `json:"genres"`
 	ProductionCompanies []ProductionCompany `json:"production_companies"`
-	Budget           int64    `json:"budget"`
-	Revenue          int64    `json:"revenue"`
+	Budget              int64               `json:"budget"`
+	Revenue             int64               `json:"revenue"`
 }
 
 // Genre represents a movie genre
@@ -108,7 +108,8 @@ func (c *Client) Search(ctx context.Context, query string) (*SearchResponse, err
 	if err != nil {
 		return nil, fmt.Errorf("execute request: %w", redactURLError(err))
 	}
-	defer resp.Body.Close()
+	// Closing the read-only response must not replace a decode or API error.
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -140,7 +141,8 @@ func (c *Client) GetMovie(ctx context.Context, tmdbID int) (*MovieDetails, error
 	if err != nil {
 		return nil, fmt.Errorf("execute request: %w", redactURLError(err))
 	}
-	defer resp.Body.Close()
+	// Closing the read-only response must not replace a decode or API error.
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, nil
@@ -219,4 +221,3 @@ func ReleaseYear(releaseDate string) *int {
 		int(releaseDate[3]-'0')
 	return &year
 }
-

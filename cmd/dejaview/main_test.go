@@ -15,7 +15,7 @@ func TestServeFailsFastWhenPortInUse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 
 	httpServer := &http.Server{Addr: ln.Addr().String(), Handler: http.NotFoundHandler()}
 	done := make(chan error, 1)
@@ -65,7 +65,7 @@ func TestServeShutsDownWhenContextDone(t *testing.T) {
 	for {
 		resp, err := client.Get(url)
 		if err == nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			if resp.StatusCode != http.StatusNoContent {
 				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
 			}
@@ -94,7 +94,7 @@ func TestServeShutsDownWhenContextDone(t *testing.T) {
 	}
 
 	if resp, err := client.Get(url); err == nil {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		t.Fatal("request succeeded after shutdown, want it to fail")
 	}
 }
@@ -118,7 +118,7 @@ func waitForStatus(t *testing.T, client *http.Client, url string, want int, done
 	for {
 		resp, err := client.Get(url)
 		if err == nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			if resp.StatusCode != want {
 				t.Fatalf("GET %s: status %d, want %d", url, resp.StatusCode, want)
 			}
@@ -174,7 +174,7 @@ func TestServeRunsMetricsServer(t *testing.T) {
 	waitForServe(t, done)
 
 	if resp, err := client.Get("http://" + metricsAddr + "/metrics"); err == nil {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		t.Fatal("metrics request succeeded after shutdown, want it to fail")
 	}
 }
@@ -211,7 +211,7 @@ func TestServeIgnoresMetricsBindFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	defer held.Close()
+	defer func() { _ = held.Close() }()
 
 	appAddr := freeAddr(t)
 	ctx, cancel := context.WithCancel(context.Background())

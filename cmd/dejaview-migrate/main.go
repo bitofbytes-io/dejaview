@@ -40,7 +40,11 @@ func run(ctx context.Context, databaseURL string) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Printf("close migration database: %v", err)
+		}
+	}()
 	// Serializes concurrent runs, such as a hook deploy and `make deploy-dejaview`.
 	locker, err := lock.NewPostgresSessionLocker()
 	if err != nil {
