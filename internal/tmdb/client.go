@@ -3,11 +3,11 @@ package tmdb
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -20,16 +20,18 @@ const (
 
 // Client is a TMDB API client
 type Client struct {
-	apiKey     string
-	httpClient *http.Client
+	readAccessToken string
+	httpClient      *http.Client
 }
 
 // NewClient creates a new TMDB client
-func NewClient(apiKey string) *Client {
+func NewClient(readAccessToken string) *Client {
 	return &Client{
-		apiKey: apiKey,
+		readAccessToken: readAccessToken,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
+			// Never forward the credential to a redirect target, even a subdomain.
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
 	}
 }
@@ -95,31 +97,29 @@ func (c *Client) Search(ctx context.Context, query string) (*SearchResponse, err
 		return &SearchResponse{}, nil
 	}
 
-	endpoint := fmt.Sprintf("%s/search/movie?api_key=%s&query=%s&include_adult=false",
-		baseURL,
-		c.apiKey,
-		url.QueryEscape(query),
-	)
+	params := url.Values{"query": {query}, "include_adult": {"false"}}
+	endpoint := baseURL + "/search/movie?" + params.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", redactURLError(err))
+		return nil, fmt.Errorf("create request: %w", c.credentialSafeError(err))
 	}
 
+	req.Header.Set("Authorization", "Bearer "+c.readAccessToken)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("execute request: %w", redactURLError(err))
+		return nil, fmt.Errorf("execute request: %w", c.credentialSafeError(err))
 	}
 	// Closing the read-only response must not replace a decode or API error.
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("TMDB API error: %d - %s", resp.StatusCode, errorBody(resp.Body))
+		return nil, fmt.Errorf("TMDB API error: %d - %s", resp.StatusCode, c.errorBody(resp.Body))
 	}
 
 	var result SearchResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
+		return nil, fmt.Errorf("decode response: %w", c.credentialSafeError(err))
 	}
 
 	return &result, nil
@@ -127,20 +127,17 @@ func (c *Client) Search(ctx context.Context, query string) (*SearchResponse, err
 
 // GetMovie fetches detailed movie information by TMDB ID
 func (c *Client) GetMovie(ctx context.Context, tmdbID int) (*MovieDetails, error) {
-	endpoint := fmt.Sprintf("%s/movie/%d?api_key=%s",
-		baseURL,
-		tmdbID,
-		c.apiKey,
-	)
+	endpoint := fmt.Sprintf("%s/movie/%d", baseURL, tmdbID)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", redactURLError(err))
+		return nil, fmt.Errorf("create request: %w", c.credentialSafeError(err))
 	}
 
+	req.Header.Set("Authorization", "Bearer "+c.readAccessToken)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("execute request: %w", redactURLError(err))
+		return nil, fmt.Errorf("execute request: %w", c.credentialSafeError(err))
 	}
 	// Closing the read-only response must not replace a decode or API error.
 	defer func() { _ = resp.Body.Close() }()
@@ -150,49 +147,59 @@ func (c *Client) GetMovie(ctx context.Context, tmdbID int) (*MovieDetails, error
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("TMDB API error: %d - %s", resp.StatusCode, errorBody(resp.Body))
+		return nil, fmt.Errorf("TMDB API error: %d - %s", resp.StatusCode, c.errorBody(resp.Body))
 	}
 
 	var result MovieDetails
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
+		return nil, fmt.Errorf("decode response: %w", c.credentialSafeError(err))
 	}
 
 	return &result, nil
 }
 
-func errorBody(r io.Reader) string {
-	body, _ := io.ReadAll(io.LimitReader(r, maxErrorBodyBytes+1))
-	if len(body) > maxErrorBodyBytes {
-		return string(body[:maxErrorBodyBytes]) + " [truncated]"
-	}
-	return string(body)
-}
-
-// redactURLError removes the api_key query parameter from the URL that
-// *url.Error embeds in its message, so transport failures never leak the key
-// into logs. Other errors are returned unchanged.
-func redactURLError(err error) error {
-	var urlErr *url.Error
-	if !errors.As(err, &urlErr) {
+// net/http can include an upstream Location header in an error before invoking
+// CheckRedirect. Redact the displayed message while retaining the original
+// error chain for errors.Is/As, including cancellation and timeout detection.
+func (c *Client) credentialSafeError(err error) error {
+	if c.readAccessToken == "" {
 		return err
 	}
-	redacted := *urlErr
-	redacted.URL = redactAPIKey(urlErr.URL)
-	return &redacted
+	message := strings.ReplaceAll(err.Error(), c.readAccessToken, "[REDACTED]")
+	return &credentialSafeError{message: message, cause: err}
 }
 
-func redactAPIKey(rawURL string) string {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return "[unparseable TMDB URL]"
+type credentialSafeError struct {
+	message string
+	cause   error
+}
+
+func (e *credentialSafeError) Error() string { return e.message }
+func (e *credentialSafeError) Unwrap() error { return e.cause }
+
+func (c *Client) errorBody(r io.Reader) string {
+	body, _ := io.ReadAll(io.LimitReader(r, maxErrorBodyBytes+1))
+	truncated := len(body) > maxErrorBodyBytes
+	if truncated {
+		body = body[:maxErrorBodyBytes]
 	}
-	query := u.Query()
-	if query.Has("api_key") {
-		query.Set("api_key", "REDACTED")
-		u.RawQuery = query.Encode()
+	diagnostic := string(body)
+	if c.readAccessToken != "" {
+		diagnostic = strings.ReplaceAll(diagnostic, c.readAccessToken, "[REDACTED]")
+		// A response cut off inside an echoed token must not expose its prefix.
+		if truncated {
+			for n := min(len(c.readAccessToken)-1, len(diagnostic)); n > 0; n-- {
+				if strings.HasSuffix(diagnostic, c.readAccessToken[:n]) {
+					diagnostic = diagnostic[:len(diagnostic)-n] + "[REDACTED]"
+					break
+				}
+			}
+		}
 	}
-	return u.String()
+	if truncated {
+		diagnostic += " [truncated]"
+	}
+	return diagnostic
 }
 
 // PosterURL constructs the full URL for a poster image

@@ -80,7 +80,7 @@ func run() error {
 	statsRepo := repository.NewStatsRepository(pool)
 
 	// Initialize TMDB client
-	tmdbClient := tmdb.NewClient(cfg.TMDBAPIKey)
+	tmdbClient := tmdb.NewClient(cfg.TMDBReadAccessToken)
 	slog.Info("TMDB client initialized")
 
 	assetsVersion, err := assets.Version(

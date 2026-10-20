@@ -11,12 +11,12 @@ import (
 
 // Config holds all application configuration
 type Config struct {
-	Port          string
-	DatabaseURL   string
-	APIToken      string
-	TMDBAPIKey    string
-	LogLevel      string
-	SecureCookies bool
+	Port                string
+	DatabaseURL         string
+	APIToken            string
+	TMDBReadAccessToken string
+	LogLevel            string
+	SecureCookies       bool
 	// TrustedProxies are the peers whose X-Forwarded-For header is trusted.
 	TrustedProxies []netip.Prefix
 	// SessionEpoch must match the epoch in a session cookie; raising it signs
@@ -42,7 +42,7 @@ func Load() (*Config, error) {
 	if cfg.APIToken, err = getEnvOrFile("API_TOKEN", "/run/secrets/dejaview_api_token"); err != nil {
 		return nil, err
 	}
-	if cfg.TMDBAPIKey, err = getEnvOrFile("TMDB_API_KEY", "/run/secrets/dejaview_tmdb_api_key"); err != nil {
+	if cfg.TMDBReadAccessToken, err = getEnvOrFile("TMDB_READ_ACCESS_TOKEN", "/run/secrets/dejaview_tmdb_read_access_token"); err != nil {
 		return nil, err
 	}
 	if cfg.LogLevel, err = getEnv("LOG_LEVEL", "info"); err != nil {
@@ -90,8 +90,15 @@ func Load() (*Config, error) {
 	if cfg.APIToken == "" {
 		return nil, fmt.Errorf("API_TOKEN is required")
 	}
-	if cfg.TMDBAPIKey == "" {
-		return nil, fmt.Errorf("TMDB_API_KEY is required")
+	cfg.TMDBReadAccessToken = strings.TrimSpace(cfg.TMDBReadAccessToken)
+	if cfg.TMDBReadAccessToken == "" {
+		return nil, fmt.Errorf("TMDB_READ_ACCESS_TOKEN is required")
+	}
+
+	for _, character := range cfg.TMDBReadAccessToken {
+		if character < 0x21 || character > 0x7e {
+			return nil, fmt.Errorf("TMDB_READ_ACCESS_TOKEN must contain only visible ASCII characters without spaces")
+		}
 	}
 
 	return cfg, nil
