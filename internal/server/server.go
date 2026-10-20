@@ -67,6 +67,7 @@ func (s *Server) Router() http.Handler {
 	r := chi.NewRouter()
 
 	// Middleware
+	r.Use(middleware.SecurityHeaders(s.cfg.SecureCookies))
 	r.Use(chimw.RequestID)
 	r.Use(middleware.RealIP(s.cfg.TrustedProxies))
 	// Outside Recoverer so panics count as 500s. /metrics is served only on
