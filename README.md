@@ -123,6 +123,8 @@ The Go runtime (`go_*`) and process (`process_*`) collectors are also included.
 
 For production, use HTTPS, set `SECURE_COOKIES=true`, restrict the TMDB key where supported, and load credentials through a secret manager.
 
+All application responses set `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, and `X-Frame-Options: DENY`. When `SECURE_COOKIES=true`, responses also set `Strict-Transport-Security: max-age=31536000` (one year, without subdomains or preload). HSTS follows this deployment setting, including behind an HTTPS proxy; request forwarding headers do not enable it. Set `SECURE_COOKIES=false` for local HTTP development.
+
 Form submissions (including login) and entry-reorder JSON accept request bodies up to 64 KiB; larger bodies receive HTTP 413 before any changes are saved. Reorder accepts a single JSON value with optional trailing whitespace. TMDB error diagnostics retain at most 4 KiB of the upstream body, followed by `[truncated]` when more data was returned.
 
 ## Development
