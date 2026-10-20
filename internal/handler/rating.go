@@ -58,7 +58,10 @@ func (h *RatingHandler) SaveRatings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseForm(); err != nil {
+	if err := parseLimitedForm(w, r); err != nil {
+		if requestBodyTooLarge(w, err) {
+			return
+		}
 		http.Error(w, "Invalid form data", http.StatusBadRequest)
 		return
 	}

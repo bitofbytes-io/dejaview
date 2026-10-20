@@ -14,6 +14,8 @@ import (
 const (
 	baseURL      = "https://api.themoviedb.org/3"
 	imageBaseURL = "https://image.tmdb.org/t/p"
+	// Keep upstream error diagnostics bounded, even for streaming responses.
+	maxErrorBodyBytes = 4 << 10
 )
 
 // Client is a TMDB API client
@@ -112,8 +114,7 @@ func (c *Client) Search(ctx context.Context, query string) (*SearchResponse, err
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("TMDB API error: %d - %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("TMDB API error: %d - %s", resp.StatusCode, errorBody(resp.Body))
 	}
 
 	var result SearchResponse
@@ -149,8 +150,7 @@ func (c *Client) GetMovie(ctx context.Context, tmdbID int) (*MovieDetails, error
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("TMDB API error: %d - %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("TMDB API error: %d - %s", resp.StatusCode, errorBody(resp.Body))
 	}
 
 	var result MovieDetails
@@ -159,6 +159,14 @@ func (c *Client) GetMovie(ctx context.Context, tmdbID int) (*MovieDetails, error
 	}
 
 	return &result, nil
+}
+
+func errorBody(r io.Reader) string {
+	body, _ := io.ReadAll(io.LimitReader(r, maxErrorBodyBytes+1))
+	if len(body) > maxErrorBodyBytes {
+		return string(body[:maxErrorBodyBytes]) + " [truncated]"
+	}
+	return string(body)
 }
 
 // redactURLError removes the api_key query parameter from the URL that

@@ -122,7 +122,10 @@ func (h *MovieHandler) SearchTMDB(w http.ResponseWriter, r *http.Request) {
 func (h *MovieHandler) AddFromTMDB(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if err := r.ParseForm(); err != nil {
+	if err := parseLimitedForm(w, r); err != nil {
+		if requestBodyTooLarge(w, err) {
+			return
+		}
 		http.Error(w, "Invalid form data", http.StatusBadRequest)
 		return
 	}

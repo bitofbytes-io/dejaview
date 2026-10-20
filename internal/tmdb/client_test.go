@@ -3,6 +3,7 @@ package tmdb
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -62,5 +63,65 @@ func TestRuntimeMinutesTreatsZeroAsUnknown(t *testing.T) {
 	}
 	if got := RuntimeMinutes(117); got == nil || *got != 117 {
 		t.Fatalf("RuntimeMinutes(117) = %v, want 117", got)
+	}
+}
+
+type countedResponseBody struct {
+	reader *strings.Reader
+	read   int
+	closed bool
+}
+
+func (b *countedResponseBody) Read(p []byte) (int, error) {
+	n, err := b.reader.Read(p)
+	b.read += n
+	return n, err
+}
+
+func (b *countedResponseBody) Close() error {
+	b.closed = true
+	return nil
+}
+
+func TestUpstreamErrorBodiesAreBoundedAndClosed(t *testing.T) {
+	for _, method := range []string{"Search", "GetMovie"} {
+		for _, size := range []int{32, maxErrorBodyBytes, maxErrorBodyBytes + 1, 10 * maxErrorBodyBytes} {
+			t.Run(fmt.Sprintf("%s/size=%d", method, size), func(t *testing.T) {
+				body := &countedResponseBody{reader: strings.NewReader(strings.Repeat("x", size))}
+				client := &Client{httpClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+					return &http.Response{StatusCode: http.StatusBadGateway, Body: body, ContentLength: -1}, nil
+				})}}
+				var err error
+				if method == "Search" {
+					_, err = client.Search(context.Background(), "alien")
+				} else {
+					_, err = client.GetMovie(context.Background(), 348)
+				}
+				if err == nil {
+					t.Fatal("expected upstream error")
+				}
+				want := "TMDB API error: 502 - " + strings.Repeat("x", min(size, maxErrorBodyBytes))
+				if size > maxErrorBodyBytes {
+					want += " [truncated]"
+				}
+				if err.Error() != want {
+					t.Fatalf("diagnostic length=%d want=%d; truncation=%t", len(err.Error()), len(want), strings.HasSuffix(err.Error(), " [truncated]"))
+				}
+				if body.read != min(size, maxErrorBodyBytes+1) || !body.closed {
+					t.Fatalf("upstream bytes read=%d closed=%t", body.read, body.closed)
+				}
+			})
+		}
+	}
+}
+
+func TestGetMovieNotFoundClosesWithoutReadingBody(t *testing.T) {
+	body := &countedResponseBody{reader: strings.NewReader(strings.Repeat("x", 10*maxErrorBodyBytes))}
+	client := &Client{httpClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusNotFound, Body: body}, nil
+	})}}
+	movie, err := client.GetMovie(context.Background(), 348)
+	if movie != nil || err != nil || !body.closed || body.read != 0 {
+		t.Fatalf("movie=%v err=%v closed=%t read=%d", movie, err, body.closed, body.read)
 	}
 }

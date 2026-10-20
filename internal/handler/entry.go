@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -45,7 +46,10 @@ func (h *EntryHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseForm(); err != nil {
+	if err := parseLimitedForm(w, r); err != nil {
+		if requestBodyTooLarge(w, err) {
+			return
+		}
 		http.Error(w, "Invalid form data", http.StatusBadRequest)
 		return
 	}
@@ -152,8 +156,15 @@ func (h *EntryHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRequestBodyBytes))
+	if err != nil {
+		if !requestBodyTooLarge(w, err) {
+			http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		}
+		return
+	}
 	var req ReorderRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.Unmarshal(body, &req); err != nil {
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
 	}
