@@ -6,7 +6,7 @@ Dejaview is a self-hosted movie tracker for maintaining a watch list, recording 
 
 - Docker 24+
 - PostgreSQL 15+
-- A [TMDB API key](https://developer.themoviedb.org/docs/getting-started)
+- A [TMDB API Read Access Token](https://developer.themoviedb.org/docs/authentication-application)
 - Go 1.26, [Templ](https://templ.guide/), the [Tailwind CSS CLI](https://github.com/tailwindlabs/tailwindcss/releases), and Goose when building from a fresh clone
 
 Generated Templ and CSS files are not committed, so prepare them before building the image:
@@ -30,7 +30,7 @@ Create an untracked `dejaview.env` file:
 ```dotenv
 DATABASE_URL=postgres://dejaview:change-me@db:5432/dejaview?sslmode=disable
 API_TOKEN=replace-with-generated-token
-TMDB_API_KEY=replace-with-your-tmdb-key
+TMDB_READ_ACCESS_TOKEN=replace-with-your-tmdb-read-access-token
 PORT=4600
 SECURE_COOKIES=false
 LOG_LEVEL=info
@@ -42,7 +42,7 @@ Do not commit this file.
 | --- | --- | --- |
 | `DATABASE_URL` | Yes | PostgreSQL connection string |
 | `API_TOKEN` | Yes | Shared login credential and session-signing key |
-| `TMDB_API_KEY` | Yes | Movie search and metadata |
+| `TMDB_READ_ACCESS_TOKEN` | Yes | TMDB API Read Access Token for movie search and metadata (Bearer authentication) |
 | `PORT` | No | HTTP port; defaults to `4600` |
 | `SECURE_COOKIES` | No | Set `false` for local HTTP; defaults to `true` |
 | `LOG_LEVEL` | No | Application log level; defaults to `info` |
@@ -51,6 +51,12 @@ Do not commit this file.
 | `METRICS_ADDR` | No | Listen address for the internal Prometheus metrics listener; defaults to `:9464`; set `off` to disable it |
 
 Required secrets support corresponding `*_FILE` variables and default Docker secret paths under `/run/secrets/dejaview_*`.
+
+TMDB uses its **API Read Access Token**, not the v3 API key. Set `TMDB_READ_ACCESS_TOKEN`, or `TMDB_READ_ACCESS_TOKEN_FILE` to a mounted file; the default file is `/run/secrets/dejaview_tmdb_read_access_token`. A nonempty environment value takes precedence over the explicit file, which takes precedence over the default path. The old `TMDB_API_KEY` and `dejaview_tmdb_api_key` secret are not fallback credentials.
+
+Before deploying this change, an operator must securely provision the actual read-access token and authorize its persistent mount into the application service at that path (or configure the new `_FILE` path). The ordinary image deployment hook does not add secret mounts. Deploy the new image only after the token and mount are ready; verify movie search and adding a movie after the coordinated release. Preserve the old image and its API-key secret for rollback until the new release is verified. Never put token values in Git, issue comments, or command-line arguments.
+
+TMDB requests keep credentials out of URLs and do not follow redirects, including redirects to the same host.
 
 Failed logins are limited to 10 per client IP and 50 from all clients together in a 15-minute window. Further attempts get HTTP 429 with `Retry-After` until the window ends, and a successful login clears the all-clients count. Counters are in memory per replica and reset on restart. The per-IP limit applies only when `TRUSTED_PROXY_CIDRS` is set: a peer outside those CIDRs is a direct client keyed by its TCP address, and a peer inside them is keyed by the rightmost `X-Forwarded-For` address that is not a trusted proxy. Otherwise only the all-clients limit applies, which anyone can use up to block new logins for 15 minutes; browsers that are already signed in are unaffected. Behind Traefik on a Docker Swarm overlay network, set `TRUSTED_PROXY_CIDRS` to that network's subnet, for example the output of `docker network inspect proxy --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'`.
 
@@ -121,7 +127,7 @@ Prometheus metrics are served at `GET /metrics` on a separate internal listener 
 
 The Go runtime (`go_*`) and process (`process_*`) collectors are also included.
 
-For production, use HTTPS, set `SECURE_COOKIES=true`, restrict the TMDB key where supported, and load credentials through a secret manager.
+For production, use HTTPS, set `SECURE_COOKIES=true`, and load credentials through a secret manager.
 
 All application responses set `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, and `X-Frame-Options: DENY`. When `SECURE_COOKIES=true`, responses also set `Strict-Transport-Security: max-age=31536000` (one year, without subdomains or preload). HSTS follows this deployment setting, including behind an HTTPS proxy; request forwarding headers do not enable it. Set `SECURE_COOKIES=false` for local HTTP development.
 

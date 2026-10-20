@@ -4,8 +4,8 @@
 export DATABASE_URL=postgres://user:password@localhost:5432/dejaview?sslmode=disable
 # Generate with: openssl rand -base64 32
 export API_TOKEN=your-secret-token-here
-# Get from https://www.themoviedb.org/settings/api
-export TMDB_API_KEY=your-tmdb-api-key
+# Use the API Read Access Token (not the API key) from https://www.themoviedb.org/settings/api
+export TMDB_READ_ACCESS_TOKEN=your-tmdb-read-access-token
 export PORT=4600
 export LOG_LEVEL=debug
 # Set to false for local HTTP dev, defaults to true for production HTTPS

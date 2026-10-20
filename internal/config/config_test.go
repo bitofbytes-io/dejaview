@@ -12,7 +12,7 @@ func setRequiredEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("DATABASE_URL", "postgres://localhost/dejaview")
 	t.Setenv("API_TOKEN", "test-token")
-	t.Setenv("TMDB_API_KEY", "test-key")
+	t.Setenv("TMDB_READ_ACCESS_TOKEN", "test-read-access-token")
 	t.Setenv("TRUSTED_PROXY_CIDRS", "")
 	t.Setenv("SESSION_EPOCH", "")
 	t.Setenv("METRICS_ADDR", "")
@@ -118,5 +118,74 @@ func TestLoadDatabaseURL(t *testing.T) {
 	t.Setenv("DATABASE_URL_FILE", filepath.Join(t.TempDir(), "missing"))
 	if _, err := LoadDatabaseURL(); err != nil {
 		t.Fatalf("LoadDatabaseURL with missing file = %v, want empty value for the caller to reject", err)
+	}
+}
+
+func TestTMDBReadAccessTokenConfiguration(t *testing.T) {
+	setRequiredEnv(t)
+	dir := t.TempDir()
+	tokenFile := filepath.Join(dir, "read-access-token")
+	if err := os.WriteFile(tokenFile, []byte("fake-file-token\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Explicit paths keep these tests isolated from any real default secret.
+	t.Setenv("TMDB_READ_ACCESS_TOKEN_FILE", tokenFile)
+	t.Setenv("TMDB_READ_ACCESS_TOKEN", "fake-env-token")
+	cfg, err := Load()
+	if err != nil || cfg.TMDBReadAccessToken != "fake-env-token" {
+		t.Fatalf("environment precedence failed: %v", err)
+	}
+	t.Setenv("TMDB_READ_ACCESS_TOKEN", "")
+	cfg, err = Load()
+	if err != nil || cfg.TMDBReadAccessToken != "fake-file-token" {
+		t.Fatalf("file token loading failed: %v", err)
+	}
+	t.Setenv("TMDB_READ_ACCESS_TOKEN_FILE", filepath.Join(dir, "missing"))
+	t.Setenv("TMDB_API_KEY", "fake-legacy-key")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "TMDB_READ_ACCESS_TOKEN is required") {
+		t.Fatalf("legacy API key must not satisfy token requirement: %v", err)
+	}
+	t.Setenv("TMDB_READ_ACCESS_TOKEN_FILE", tokenFile)
+	if err := os.WriteFile(tokenFile, []byte(" \n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "is empty") {
+		t.Fatalf("empty token file accepted: %v", err)
+	}
+	t.Setenv("TMDB_READ_ACCESS_TOKEN_FILE", dir)
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "reading TMDB_READ_ACCESS_TOKEN_FILE") {
+		t.Fatalf("unreadable token file accepted: %v", err)
+	}
+	for _, token := range []string{" ", "fake token", "fake\r\nInjected: secret", "faké-token"} {
+		t.Setenv("TMDB_READ_ACCESS_TOKEN", token)
+		if _, err := Load(); err == nil || (strings.TrimSpace(token) != "" && strings.Contains(err.Error(), token)) {
+			t.Fatalf("invalid token accepted or echoed: %v", err)
+		}
+	}
+}
+
+func TestReadAccessTokenDefaultFilePrecedence(t *testing.T) {
+	// Exercise the shared loader with fake default/explicit mounts; never read
+	// the actual /run/secrets/dejaview_tmdb_read_access_token path in tests.
+	dir := t.TempDir()
+	defaultFile := filepath.Join(dir, "default-read-token")
+	explicitFile := filepath.Join(dir, "explicit-read-token")
+	for path, token := range map[string]string{defaultFile: "fake-default", explicitFile: "fake-explicit"} {
+		if err := os.WriteFile(path, []byte(token), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tc := range []struct{ env, file, want string }{
+		{"fake-env", explicitFile, "fake-env"},
+		{"", explicitFile, "fake-explicit"},
+		{"", "", "fake-default"},
+		{"", filepath.Join(dir, "missing"), ""},
+	} {
+		t.Setenv("TMDB_READ_ACCESS_TOKEN", tc.env)
+		t.Setenv("TMDB_READ_ACCESS_TOKEN_FILE", tc.file)
+		token, err := getEnvOrFile("TMDB_READ_ACCESS_TOKEN", defaultFile)
+		if err != nil || token != tc.want {
+			t.Fatalf("credential source precedence failed: %v", err)
+		}
 	}
 }
