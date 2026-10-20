@@ -52,7 +52,10 @@ func (h *AuthHandler) LoginPage(w http.ResponseWriter, r *http.Request) {
 
 // Login handles the login form submission
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
+	if err := parseLimitedForm(w, r); err != nil {
+		if requestBodyTooLarge(w, err) {
+			return
+		}
 		slog.Info("login failed", "reason", "invalid_request")
 		h.metrics.LoginFailure("invalid_request")
 		http.Redirect(w, r, "/login?error=invalid_request", http.StatusSeeOther)
@@ -132,6 +135,12 @@ func isValidRedirect(rawURL string) bool {
 
 // Logout clears the session cookie
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	if err := parseLimitedForm(w, r); err != nil {
+		if !requestBodyTooLarge(w, err) {
+			http.Error(w, "Invalid form data", http.StatusBadRequest)
+		}
+		return
+	}
 	http.SetCookie(w, h.sessionManager.ClearCookie())
 
 	redirectTarget := logoutRedirectTarget(r)

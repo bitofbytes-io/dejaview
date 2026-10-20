@@ -16,11 +16,13 @@ import (
 )
 
 type stubEntryStore struct {
-	updateErr   error
-	updateCalls int
-	lastInput   model.UpdateEntryInput
-	reorderErr  error
-	deleteErr   error
+	updateErr    error
+	updateCalls  int
+	lastInput    model.UpdateEntryInput
+	reorderErr   error
+	reorderCalls int
+	deleteErr    error
+	deleteCalls  int
 }
 
 func (s *stubEntryStore) Update(ctx context.Context, id uuid.UUID, input model.UpdateEntryInput) error {
@@ -29,9 +31,13 @@ func (s *stubEntryStore) Update(ctx context.Context, id uuid.UUID, input model.U
 	return s.updateErr
 }
 
-func (s *stubEntryStore) Delete(ctx context.Context, id uuid.UUID) error { return s.deleteErr }
+func (s *stubEntryStore) Delete(ctx context.Context, id uuid.UUID) error {
+	s.deleteCalls++
+	return s.deleteErr
+}
 
 func (s *stubEntryStore) ReorderEntries(ctx context.Context, groupNumber int, entryIDs []uuid.UUID) error {
+	s.reorderCalls++
 	return s.reorderErr
 }
 

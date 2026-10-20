@@ -73,7 +73,10 @@ func (h *PeopleHandler) PeoplePage(w http.ResponseWriter, r *http.Request) {
 
 // Create adds a person.
 func (h *PeopleHandler) Create(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
+	if err := parseLimitedForm(w, r); err != nil {
+		if requestBodyTooLarge(w, err) {
+			return
+		}
 		redirectPeople(w, r, "invalid_request")
 		return
 	}
@@ -151,7 +154,10 @@ func (h *PeopleHandler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 		redirectPeople(w, r, code)
 	}
-	if err := r.ParseForm(); err != nil {
+	if err := parseLimitedForm(w, r); err != nil {
+		if requestBodyTooLarge(w, err) {
+			return
+		}
 		finish("invalid_request")
 		return
 	}
@@ -222,6 +228,13 @@ func (h *PeopleHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		http.Error(w, "Invalid person ID", http.StatusBadRequest)
+		return
+	}
+
+	if err := parseLimitedForm(w, r); err != nil {
+		if !requestBodyTooLarge(w, err) {
+			http.Error(w, "Invalid form data", http.StatusBadRequest)
+		}
 		return
 	}
 
