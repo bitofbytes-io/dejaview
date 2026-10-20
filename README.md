@@ -133,6 +133,13 @@ make test
 
 Database helpers are available as `make migrate`, `make migrate-status`, and `make migrate-down` when `DATABASE_URL` is configured.
 
+CI uses golangci-lint v2.15.0 for formatting, error handling, HTTP response cleanup, static analysis, and Go vet checks. With that version installed, run the same lint gate locally after generating the untracked assets:
+
+```bash
+make templ tail-prod
+golangci-lint run ./...
+```
+
 ## License
 
 Dejaview is available under the [MIT License](LICENSE).

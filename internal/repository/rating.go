@@ -27,7 +27,8 @@ func (r *RatingRepository) SaveBatch(ctx context.Context, entryID uuid.UUID, cha
 	if err != nil {
 		return fmt.Errorf("begin rating batch: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	// Rollback is a no-op after a successful commit.
+	defer func() { _ = tx.Rollback(ctx) }()
 	// Deleting a rating never checks the person foreign key, so check every
 	// person up front.
 	personIDs := make([]uuid.UUID, 0, len(changes))

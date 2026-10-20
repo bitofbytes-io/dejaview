@@ -45,7 +45,9 @@ func (h *AuthHandler) LoginPage(w http.ResponseWriter, r *http.Request) {
 
 	errorType := r.URL.Query().Get("error")
 	redirectURL := r.URL.Query().Get("redirect")
-	pages.LoginPage(errorType, redirectURL).Render(r.Context(), w)
+	if err := pages.LoginPage(errorType, redirectURL).Render(r.Context(), w); err != nil {
+		slog.Error("failed to render login page", "error", err)
+	}
 }
 
 // Login handles the login form submission
@@ -80,7 +82,9 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(wait.Seconds()))))
 		w.WriteHeader(http.StatusTooManyRequests)
-		pages.LoginPage("rate_limited", redirectURL).Render(r.Context(), w)
+		if err := pages.LoginPage("rate_limited", redirectURL).Render(r.Context(), w); err != nil {
+			slog.Error("failed to render rate-limited login page", "error", err)
+		}
 		return
 	}
 
