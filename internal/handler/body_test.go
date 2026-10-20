@@ -53,17 +53,24 @@ func TestFormHandlersRejectOversizedBodiesBeforeSideEffects(t *testing.T) {
 		"login":         auth.Login,
 		"entry":         (&EntryHandler{}).Update,
 		"movie":         (&MovieHandler{}).AddFromTMDB,
+		"logout":        auth.Logout,
+		"delete entry":  (&EntryHandler{}).Delete,
+		"delete person": (&PeopleHandler{}).Delete,
 		"create person": (&PeopleHandler{}).Create,
 		"update person": (&PeopleHandler{}).Update,
 		"ratings":       (&RatingHandler{}).SaveRatings,
 	}
 	for name, handler := range handlers {
 		for _, unknown := range []bool{false, true} {
-			for _, contentType := range []string{"application/x-www-form-urlencoded", "text/plain"} {
+			for _, contentType := range []string{"application/x-www-form-urlencoded", "text/plain", "multipart/form-data; boundary=body-limit"} {
 				t.Run(fmt.Sprintf("%s/unknown=%t/%s", name, unknown, contentType), func(t *testing.T) {
 					body := "api_key=secret&padding=" + strings.Repeat("x", maxRequestBodyBytes)
 					w := httptest.NewRecorder()
-					handler(w, bodyRequest(body, contentType, unknown))
+					r := bodyRequest(body, contentType, unknown)
+					if name == "delete entry" {
+						r.Method = http.MethodDelete
+					}
+					handler(w, r)
 					if w.Code != http.StatusRequestEntityTooLarge {
 						t.Fatalf("status=%d body=%q", w.Code, w.Body.String())
 					}
@@ -126,6 +133,61 @@ func TestReorderReadsCompleteBoundedJSONBeforeWriting(t *testing.T) {
 					t.Fatalf("status=%d writes=%d; want status=%d writes=%d", w.Code, store.reorderCalls, tc.status, tc.writes)
 				}
 			})
+		}
+	}
+}
+
+func TestLogoutKeepsBoundedRedirectsAndCookieClear(t *testing.T) {
+	h := NewAuthHandler("secret", session.NewManager("secret", time.Hour, false, 0), testLimiter(), nil)
+	for _, tc := range []struct{ name, body, contentType, target string }{
+		{"empty", "", "", "/login"},
+		{"urlencoded", "redirect=%2Fpeople", "application/x-www-form-urlencoded", "/login?redirect=%2Fpeople"},
+		{"multipart", "--normal\r\nContent-Disposition: form-data; name=\"redirect\"\r\n\r\n/people\r\n--normal--\r\n", "multipart/form-data; boundary=normal", "/login?redirect=%2Fpeople"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			h.Logout(w, bodyRequest(tc.body, tc.contentType, false))
+			if w.Code != http.StatusSeeOther || w.Header().Get("Location") != tc.target {
+				t.Fatalf("status=%d location=%q", w.Code, w.Header().Get("Location"))
+			}
+			cookies := w.Result().Cookies()
+			if len(cookies) != 1 || cookies[0].Name != session.CookieName || cookies[0].MaxAge >= 0 {
+				t.Fatalf("logout did not clear the session cookie: %v", cookies)
+			}
+		})
+	}
+}
+
+func TestOversizedMultipartLogoutDoesNotClearCookie(t *testing.T) {
+	h := NewAuthHandler("secret", session.NewManager("secret", time.Hour, false, 0), testLimiter(), nil)
+	for _, unknown := range []bool{false, true} {
+		body := "--upload\r\nContent-Disposition: form-data; name=\"redirect\"\r\n\r\n/people\r\n--upload\r\nContent-Disposition: form-data; name=\"file\"; filename=\"large.txt\"\r\nContent-Type: text/plain\r\n\r\n" + strings.Repeat("x", maxRequestBodyBytes+1) + "\r\n--upload--\r\n"
+		r := bodyRequest(body, "multipart/form-data; boundary=upload", unknown)
+		w := httptest.NewRecorder()
+		h.Logout(w, r)
+		if w.Code != http.StatusRequestEntityTooLarge || w.Header().Get("Set-Cookie") != "" || w.Header().Get("Location") != "" {
+			t.Fatalf("unknown=%t status=%d headers=%v", unknown, w.Code, w.Header())
+		}
+		if r.MultipartForm != nil {
+			t.Fatal("oversized multipart upload was accepted")
+		}
+	}
+}
+
+func TestDeleteBodiesAreBoundedBeforeRepositoryMutation(t *testing.T) {
+	for _, unknown := range []bool{false, true} {
+		people := &stubPeopleStore{}
+		entries := &stubEntryStore{}
+		for name, handler := range map[string]http.HandlerFunc{"person": (&PeopleHandler{personRepo: people}).Delete, "entry": (&EntryHandler{entryRepo: entries}).Delete} {
+			r := bodyRequest(strings.Repeat("x", maxRequestBodyBytes+1), "application/x-www-form-urlencoded", unknown)
+			if name == "entry" {
+				r.Method = http.MethodDelete
+			}
+			w := httptest.NewRecorder()
+			handler(w, r)
+			if w.Code != http.StatusRequestEntityTooLarge || people.deleteCalls != 0 || entries.deleteCalls != 0 {
+				t.Fatalf("%s unknown=%t status=%d person deletes=%d entry deletes=%d", name, unknown, w.Code, people.deleteCalls, entries.deleteCalls)
+			}
 		}
 	}
 }

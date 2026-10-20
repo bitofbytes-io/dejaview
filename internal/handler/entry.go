@@ -124,6 +124,13 @@ func (h *EntryHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := parseLimitedForm(w, r); err != nil {
+		if !requestBodyTooLarge(w, err) {
+			http.Error(w, "Invalid form data", http.StatusBadRequest)
+		}
+		return
+	}
+
 	err = h.entryRepo.Delete(ctx, entryID)
 	if errors.Is(err, repository.ErrEntryNotFound) {
 		http.Error(w, "Entry not found", http.StatusNotFound)

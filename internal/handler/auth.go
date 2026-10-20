@@ -135,6 +135,12 @@ func isValidRedirect(rawURL string) bool {
 
 // Logout clears the session cookie
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	if err := parseLimitedForm(w, r); err != nil {
+		if !requestBodyTooLarge(w, err) {
+			http.Error(w, "Invalid form data", http.StatusBadRequest)
+		}
+		return
+	}
 	http.SetCookie(w, h.sessionManager.ClearCookie())
 
 	redirectTarget := logoutRedirectTarget(r)

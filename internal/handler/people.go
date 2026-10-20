@@ -231,6 +231,13 @@ func (h *PeopleHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := parseLimitedForm(w, r); err != nil {
+		if !requestBodyTooLarge(w, err) {
+			http.Error(w, "Invalid form data", http.StatusBadRequest)
+		}
+		return
+	}
+
 	err = h.personRepo.Delete(r.Context(), id)
 	if errors.Is(err, repository.ErrPersonNotFound) {
 		redirectPeople(w, r, "not_found")
