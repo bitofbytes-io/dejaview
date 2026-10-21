@@ -30,7 +30,7 @@ type DashboardHandler struct {
 }
 
 type dashboardEntryRepository interface {
-	ListAll(ctx context.Context) ([]*model.Entry, error)
+	ListDashboard(ctx context.Context) ([]*model.Entry, model.EntryGroupState, error)
 }
 
 // NewDashboardHandler creates a new DashboardHandler
@@ -62,8 +62,21 @@ func (h *DashboardHandler) DashboardContent(w http.ResponseWriter, r *http.Reque
 // to movies that person has not rated and is remembered in meCookie; an
 // empty ?needs= shows everything again.
 func (h *DashboardHandler) render(w http.ResponseWriter, r *http.Request, view dashboardView) {
+	// Both representations depend on cookies, including an absent cookie.
+	w.Header().Set("Cache-Control", "private, no-store")
+	varyCookie := false
+	for _, value := range w.Header().Values("Vary") {
+		for _, token := range strings.Split(value, ",") {
+			if strings.EqualFold(strings.TrimSpace(token), "Cookie") {
+				varyCookie = true
+			}
+		}
+	}
+	if !varyCookie {
+		w.Header().Add("Vary", "Cookie")
+	}
 	ctx := r.Context()
-	entries, err := h.entryRepo.ListAll(ctx)
+	entries, state, err := h.entryRepo.ListDashboard(ctx)
 	if err != nil {
 		slog.Error("failed to get dashboard data", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -84,6 +97,7 @@ func (h *DashboardHandler) render(w http.ResponseWriter, r *http.Request, view d
 
 	needs := h.needsPerson(w, r, persons)
 	filter := newRatingFilter(entries, persons, needs)
+	filter.GroupState = state
 	isAuthenticated := middleware.IsAuthenticated(ctx)
 	if err := view(groups, persons, currentGroup, filter, isAuthenticated).Render(ctx, w); err != nil {
 		slog.Error("failed to render dashboard", "error", err)
@@ -96,14 +110,7 @@ func (h *DashboardHandler) render(w http.ResponseWriter, r *http.Request, view d
 func (h *DashboardHandler) needsPerson(w http.ResponseWriter, r *http.Request, persons []*model.Person) *model.Person {
 	if values, ok := r.URL.Query()["needs"]; ok {
 		person := personByInitial(persons, values[0])
-		cookie := &http.Cookie{
-			Name:     meCookie,
-			Path:     "/",
-			MaxAge:   -1,
-			HttpOnly: true,
-			Secure:   h.secureCookies,
-			SameSite: http.SameSiteLaxMode,
-		}
+		cookie := h.clearMeCookie()
 		if person != nil {
 			cookie.Value = url.QueryEscape(person.Initial)
 			cookie.MaxAge = meCookieMaxAge
@@ -114,13 +121,34 @@ func (h *DashboardHandler) needsPerson(w http.ResponseWriter, r *http.Request, p
 
 	cookie, err := r.Cookie(meCookie)
 	if err != nil {
+		// net/http skips syntactically malformed cookie values. Expire a
+		// named dv_me cookie even when its value could not be parsed.
+		for _, header := range r.Header.Values("Cookie") {
+			for _, part := range strings.Split(header, ";") {
+				name, _, _ := strings.Cut(strings.TrimSpace(part), "=")
+				if name == meCookie {
+					http.SetCookie(w, h.clearMeCookie())
+					return nil
+				}
+			}
+		}
 		return nil
 	}
 	initial, err := url.QueryUnescape(cookie.Value)
-	if err != nil {
-		return nil
+	if err == nil {
+		if person := personByInitial(persons, initial); person != nil {
+			return person
+		}
 	}
-	return personByInitial(persons, initial)
+	http.SetCookie(w, h.clearMeCookie())
+	return nil
+}
+
+func (h *DashboardHandler) clearMeCookie() *http.Cookie {
+	return &http.Cookie{
+		Name: meCookie, Path: "/", MaxAge: -1,
+		HttpOnly: true, Secure: h.secureCookies, SameSite: http.SameSiteLaxMode,
+	}
 }
 
 // personByInitial finds the person with the given initial, ignoring case and

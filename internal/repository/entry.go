@@ -85,6 +85,10 @@ func scanEntry(row pgx.Row) (*model.Entry, error) {
 // movie is already in the group. An uncertain commit returns an error wrapping
 // ErrCommitOutcomeUnknown and the original cause.
 func (r *EntryRepository) Create(ctx context.Context, input model.CreateEntryInput) (*model.Entry, error) {
+	version, err := r.groupVersion(ctx, input.GroupVersion)
+	if err != nil {
+		return nil, err
+	}
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("create entry begin tx: %w", err)
@@ -92,6 +96,14 @@ func (r *EntryRepository) Create(ctx context.Context, input model.CreateEntryInp
 	defer func() {
 		_ = tx.Rollback(ctx)
 	}()
+
+	if err := lockEntryGroups(ctx, tx); err != nil {
+		return nil, err
+	}
+
+	if err := checkGroupVersion(ctx, tx, version); err != nil {
+		return nil, err
+	}
 
 	// Serialize position assignment per group to avoid duplicate positions under concurrency.
 	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(1, $1)", input.GroupNumber); err != nil {
@@ -137,7 +149,7 @@ func (r *EntryRepository) Create(ctx context.Context, input model.CreateEntryInp
 }
 
 // CheckGroup returns ErrInvalidGroup unless group is an existing group or
-// the next new one. Create checks again under the group's lock; this lets a
+// the next new one. Create checks again under the global group lock; this lets a
 // caller reject a stale group before writing anything else.
 func (r *EntryRepository) CheckGroup(ctx context.Context, group int) error {
 	return checkGroup(ctx, r.pool, group)
@@ -175,6 +187,14 @@ func (r *EntryRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Ent
 // loadRatings sets each entry's ratings, with person information, ordered by
 // the person's initial.
 func (r *EntryRepository) loadRatings(ctx context.Context, entries []*model.Entry) error {
+	return loadEntryRatings(ctx, r.pool, entries)
+}
+
+type entryQuerier interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}
+
+func loadEntryRatings(ctx context.Context, db entryQuerier, entries []*model.Entry) error {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -193,7 +213,7 @@ func (r *EntryRepository) loadRatings(ctx context.Context, entries []*model.Entr
 		WHERE r.entry_id = ANY($1)
 		ORDER BY r.entry_id, p.initial`
 
-	rows, err := r.pool.Query(ctx, query, entryIDs)
+	rows, err := db.Query(ctx, query, entryIDs)
 	if err != nil {
 		return fmt.Errorf("get ratings for entries: %w", err)
 	}
@@ -229,7 +249,26 @@ func (r *EntryRepository) loadRatings(ctx context.Context, entries []*model.Entr
 // ListAll retrieves every entry with movie and ratings, newest group first
 // and, within a group, in display order (highest position first).
 func (r *EntryRepository) ListAll(ctx context.Context) ([]*model.Entry, error) {
-	rows, err := r.pool.Query(ctx, entrySelect+`
+	return r.listAll(ctx, r.pool)
+}
+
+// ListDashboard reads group state and displayed entries from the same snapshot.
+func (r *EntryRepository) ListDashboard(ctx context.Context) ([]*model.Entry, model.EntryGroupState, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return nil, model.EntryGroupState{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	state, err := readGroupState(ctx, tx)
+	if err != nil {
+		return nil, state, err
+	}
+	entries, err := r.listAll(ctx, tx)
+	return entries, state, err
+}
+
+func (r *EntryRepository) listAll(ctx context.Context, db entryQuerier) ([]*model.Entry, error) {
+	rows, err := db.Query(ctx, entrySelect+`
 		ORDER BY e.group_number DESC, e.position DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("list entries: %w", err)
@@ -248,13 +287,52 @@ func (r *EntryRepository) ListAll(ctx context.Context) ([]*model.Entry, error) {
 		return nil, fmt.Errorf("list entries rows: %w", err)
 	}
 
-	if err := r.loadRatings(ctx, entries); err != nil {
+	if err := loadEntryRatings(ctx, db, entries); err != nil {
 		return nil, err
 	}
 	return entries, nil
 }
 
+// GroupState reads the current numeric-selection generation without taking the
+// write lock, so callers can capture it before waiting on locks or remote APIs.
+func (r *EntryRepository) GroupState(ctx context.Context) (model.EntryGroupState, error) {
+	return readGroupState(ctx, r.pool)
+}
+
+func readGroupState(ctx context.Context, db interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}) (model.EntryGroupState, error) {
+	var state model.EntryGroupState
+	err := db.QueryRow(ctx, "SELECT version, first_group_capacity FROM entry_group_state WHERE singleton").Scan(&state.Version, &state.FirstGroupCapacity)
+	if err != nil {
+		return state, fmt.Errorf("read entry group state: %w", err)
+	}
+	return state, nil
+}
+
+func (r *EntryRepository) groupVersion(ctx context.Context, supplied *int64) (int64, error) {
+	if supplied != nil {
+		return *supplied, nil
+	}
+	state, err := r.GroupState(ctx)
+	return state.Version, err
+}
+
+func checkGroupVersion(ctx context.Context, tx pgx.Tx, expected int64) error {
+	state, err := readGroupState(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if state.Version != expected {
+		return ErrGroupNumberingChanged
+	}
+	return nil
+}
+
 var (
+	// ErrGroupNumberingChanged rejects a numeric target invalidated by deletion
+	// or compaction. Refresh the selection before retrying.
+	ErrGroupNumberingChanged = errors.New("group numbering changed; refresh and try again")
 	// ErrEntryNotFound is returned when the entry to update, delete, or rate
 	// does not exist.
 	ErrEntryNotFound = errors.New("entry not found")
@@ -287,11 +365,19 @@ func isForeignKeyViolation(err error, constraint string) bool {
 const maxMoveAttempts = 3
 
 // Update updates an existing entry. Changing the group moves the entry to the
-// end of the target group under the same per-group advisory locks used by
-// Create and ReorderEntries. It returns ErrEntryNotFound for a missing entry,
+// end of the target group under the global and per-group advisory locks
+// used by Create and ReorderEntries. Empty groups are compacted before commit.
+// It returns ErrEntryNotFound for a missing entry,
 // ErrInvalidGroup for a target group that is neither an existing group nor
 // the next new one, and ErrPersonNotFound for an unknown picker.
 func (r *EntryRepository) Update(ctx context.Context, id uuid.UUID, input model.UpdateEntryInput) error {
+	if input.GroupNumber != nil {
+		version, err := r.groupVersion(ctx, input.GroupVersion)
+		if err != nil {
+			return err
+		}
+		input.GroupVersion = &version
+	}
 	var err error
 	for attempt := 0; attempt < maxMoveAttempts; attempt++ {
 		err = r.update(ctx, id, input)
@@ -311,7 +397,14 @@ func (r *EntryRepository) update(ctx context.Context, id uuid.UUID, input model.
 		_ = tx.Rollback(ctx)
 	}()
 
+	if err := lockEntryGroups(ctx, tx); err != nil {
+		return err
+	}
+
 	if input.GroupNumber != nil {
+		if err := checkGroupVersion(ctx, tx, *input.GroupVersion); err != nil {
+			return err
+		}
 		if err := moveEntryToGroup(ctx, tx, id, *input.GroupNumber); err != nil {
 			return err
 		}
@@ -344,9 +437,12 @@ func (r *EntryRepository) update(ctx context.Context, id uuid.UUID, input model.
 }
 
 // moveEntryToGroup moves an entry to the end of targetGroup within tx. It
-// returns with the entry row locked, so the entry stays in targetGroup until
-// tx ends.
+// returns with the entry row locked and empty groups compacted. The target
+// group number shifts down if removing the source left a gap before it.
 func moveEntryToGroup(ctx context.Context, tx pgx.Tx, id uuid.UUID, targetGroup int) error {
+	if err := lockEntryGroups(ctx, tx); err != nil {
+		return err
+	}
 	var sourceGroup int
 	var movieID uuid.UUID
 	err := tx.QueryRow(ctx, "SELECT group_number, movie_id FROM entries WHERE id = $1", id).Scan(&sourceGroup, &movieID)
@@ -420,19 +516,80 @@ func moveEntryToGroup(ctx context.Context, tx pgx.Tx, id uuid.UUID, targetGroup 
 	); err != nil {
 		return fmt.Errorf("move entry: %w", err)
 	}
-	return nil
+	return compactEntryGroups(ctx, tx, sourceGroup)
 }
 
 // Delete removes an entry from the database. It returns ErrEntryNotFound when
 // the entry does not exist.
 func (r *EntryRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	query := `DELETE FROM entries WHERE id = $1`
-	tag, err := r.pool.Exec(ctx, query, id)
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("delete entry begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockEntryGroups(ctx, tx); err != nil {
+		return err
+	}
+	var sourceGroup int
+	err = tx.QueryRow(ctx, "DELETE FROM entries WHERE id = $1 RETURNING group_number", id).Scan(&sourceGroup)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrEntryNotFound
+	}
 	if err != nil {
 		return fmt.Errorf("delete entry: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return ErrEntryNotFound
+	if err := compactEntryGroups(ctx, tx, sourceGroup); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("delete entry commit: %w", err)
+	}
+	return nil
+}
+
+// lockEntryGroups reserves (1, 0) for all entry mutations, before any group
+// reads, per-group locks, or row locks. Group numbers start at 1. This keeps
+// inserts and reorders from racing with renumbering in another transaction.
+func lockEntryGroups(ctx context.Context, tx pgx.Tx) error {
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(1, 0)"); err != nil {
+		return fmt.Errorf("lock entry groups: %w", err)
+	}
+	return nil
+}
+
+// compactEntryGroups requires lockEntryGroups. Move groups in ascending order
+// into empty numbers: a single dense-rank UPDATE can violate the immediate
+// movie/group and group/position unique constraints before other rows move.
+// Only group numbers change; entry IDs, positions, ratings, and pickers survive.
+func compactEntryGroups(ctx context.Context, tx pgx.Tx, sourceGroup int) error {
+	var remains bool
+	if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM entries WHERE group_number=$1)", sourceGroup).Scan(&remains); err != nil {
+		return fmt.Errorf("check emptied entry group: %w", err)
+	}
+	if remains {
+		return nil
+	}
+	// Advance even when the last group disappears: its old number can be
+	// reused as the next new group, but it no longer identifies the same group.
+	if _, err := tx.Exec(ctx, `UPDATE entry_group_state SET version=version+1,
+		first_group_capacity=CASE WHEN $1=1 THEN 9 ELSE first_group_capacity END WHERE singleton`, sourceGroup); err != nil {
+		return fmt.Errorf("advance entry group state: %w", err)
+	}
+	rows, err := tx.Query(ctx, "SELECT DISTINCT group_number FROM entries ORDER BY group_number")
+	if err != nil {
+		return fmt.Errorf("read groups to compact: %w", err)
+	}
+	groups, err := pgx.CollectRows(rows, pgx.RowTo[int])
+	if err != nil {
+		return fmt.Errorf("scan groups to compact: %w", err)
+	}
+	for i, group := range groups {
+		if group == i+1 {
+			continue
+		}
+		if _, err := tx.Exec(ctx, "UPDATE entries SET group_number = $1 WHERE group_number = $2", i+1, group); err != nil {
+			return fmt.Errorf("compact entry group: %w", err)
+		}
 	}
 	return nil
 }
@@ -448,6 +605,10 @@ func (r *EntryRepository) ReorderEntries(ctx context.Context, groupNumber int, e
 	defer func() {
 		_ = tx.Rollback(ctx)
 	}()
+
+	if err := lockEntryGroups(ctx, tx); err != nil {
+		return err
+	}
 
 	// Serialize reorders per group to avoid conflicting position updates.
 	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(1, $1)", groupNumber); err != nil {

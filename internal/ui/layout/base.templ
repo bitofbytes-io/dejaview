@@ -165,7 +165,7 @@ templ Header(isAuthenticated bool, current string) {
 					</svg>
 					<span>Menu</span>
 				</summary>
-				<nav class="nav-menu-panel" aria-label="Main">
+				<nav class="nav-menu-panel" aria-label="Mobile">
 					@navLinks(isAuthenticated, current)
 				</nav>
 			</details>
@@ -175,8 +175,8 @@ templ Header(isAuthenticated bool, current string) {
 
 templ navLinks(isAuthenticated bool, current string) {
 	@navLink("/", "Movies", current == "movies")
-	@navLink("/stats", "Trophy room", current == "stats")
 	if isAuthenticated {
+		@navLink("/stats", "Trophy room", current == "stats")
 		@navLink("/people", "People", current == "people")
 		<form action="/logout" method="POST" class="nav-form">
 			<button type="submit" class="nav-link">Log out</button>

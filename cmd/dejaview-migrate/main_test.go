@@ -218,7 +218,7 @@ func TestMigrationsRoundTrip(t *testing.T) {
 		}
 		var want []string
 		if up {
-			want = []string{"entries", "movies", "persons", "ratings"}
+			want = []string{"entries", "entry_group_state", "movies", "persons", "ratings"}
 		}
 		if !slices.Equal(tables, want) {
 			t.Fatalf("up=%t: application tables=%v, want %v", up, tables, want)
