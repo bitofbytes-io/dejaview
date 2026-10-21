@@ -256,6 +256,8 @@ func TestAddFromTMDBErrors(t *testing.T) {
 	}
 }
 
+// TestEntryCreationMetrics counts only completed Create attempts and keeps
+// unknown commit outcomes separate from known failures.
 func TestEntryCreationMetrics(t *testing.T) {
 	for _, tc := range []struct {
 		name                         string
@@ -267,6 +269,7 @@ func TestEntryCreationMetrics(t *testing.T) {
 	}{
 		{name: "new movie", wantStatus: 200, wantCalls: 1, want: map[string]float64{`{result="success"}`: 1}},
 		{name: "cached movie", cached: true, wantStatus: 200, want: map[string]float64{`{result="success"}`: 1}},
+		{name: "unknown commit", cached: true, entryErr: errors.Join(repository.ErrCommitOutcomeUnknown, context.Canceled), wantStatus: 500, want: map[string]float64{`{result="unknown"}`: 1}},
 		{name: "duplicate", cached: true, entryErr: repository.ErrEntryExistsInGroup, wantStatus: 409, want: map[string]float64{`{result="failure"}`: 1}},
 		{name: "entry database failure after movie insert", entryErr: errors.New("db failure"), wantCalls: 1, wantStatus: 500, want: map[string]float64{`{result="failure"}`: 1}},
 		{name: "group became invalid", cached: true, entryErr: repository.ErrInvalidGroup, wantStatus: 400, want: map[string]float64{`{result="failure"}`: 1}},

@@ -336,6 +336,7 @@ func TestCredentialSafeErrorsKeepCancellationAndTimeoutSemantics(t *testing.T) {
 	}
 }
 
+// TestLookupMetrics verifies HTTP and decode outcomes without contacting TMDB.
 func TestLookupMetrics(t *testing.T) {
 	for _, operation := range []string{"search", "movie"} {
 		for _, tc := range []struct {
@@ -398,6 +399,7 @@ func TestLookupMetrics(t *testing.T) {
 	}
 }
 
+// lookupMetricSamples reads only TMDB counter samples from the private handler.
 func lookupMetricSamples(t *testing.T, m *metrics.Metrics) []string {
 	t.Helper()
 	rec := httptest.NewRecorder()
@@ -414,6 +416,7 @@ func lookupMetricSamples(t *testing.T, m *metrics.Metrics) []string {
 	return samples
 }
 
+// TestBlankSearchDoesNotRecordLookup keeps skipped HTTP calls out of the counter.
 func TestBlankSearchDoesNotRecordLookup(t *testing.T) {
 	m := metrics.New()
 	client := NewClient("fake-token").WithMetrics(m)

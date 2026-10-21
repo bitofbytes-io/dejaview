@@ -316,6 +316,8 @@ func TestParseRatingChangesBoundaries(t *testing.T) {
 	}
 }
 
+// TestRatingBatchMetrics checks score counts at the atomic batch boundary,
+// preserving no-op and cancellation behavior for every write outcome.
 func TestRatingBatchMetrics(t *testing.T) {
 	first, second, deleted := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	mixed := url.Values{"rating[" + first + "]": {"0"}, "rating[" + second + "]": {"10"}, "rating[" + deleted + "]": {""}}
@@ -327,12 +329,15 @@ func TestRatingBatchMetrics(t *testing.T) {
 		want                      map[string]float64
 	}{
 		{name: "committed mixed batch", form: mixed, wantStatus: 200, want: map[string]float64{`{result="success"}`: 2}},
-		{name: "rolled back batch", form: mixed, saveErr: errors.New("commit failed"), wantStatus: 500, want: map[string]float64{`{result="failure"}`: 2}},
+		{name: "unknown commit after cancellation", form: mixed, saveErr: errors.Join(repository.ErrCommitOutcomeUnknown, context.Canceled), wantStatus: 200, want: map[string]float64{`{result="unknown"}`: 2}},
+		{name: "unknown commit after lost connection", form: mixed, saveErr: errors.Join(repository.ErrCommitOutcomeUnknown, errors.New("connection lost")), wantStatus: 500, want: map[string]float64{`{result="unknown"}`: 2}},
+		{name: "rolled back batch", form: mixed, saveErr: errors.New("write rejected"), wantStatus: 500, want: map[string]float64{`{result="failure"}`: 2}},
 		{name: "unknown person", form: mixed, saveErr: repository.ErrPersonNotFound, wantStatus: 400, want: map[string]float64{`{result="failure"}`: 2}},
 		{name: "entry deleted", form: mixed, saveErr: repository.ErrEntryNotFound, wantStatus: 404, want: map[string]float64{`{result="failure"}`: 2}},
 		{name: "canceled batch", form: mixed, saveErr: context.Canceled, wantStatus: 200, want: map[string]float64{`{result="failure"}`: 2}},
 		{name: "refetch failure after commit", form: mixed, errorAfterCommit: errors.New("read failed"), wantStatus: 500, want: map[string]float64{`{result="success"}`: 2}},
 		{name: "deletion only", form: url.Values{"rating[" + deleted + "]": {""}}, wantStatus: 200, want: map[string]float64{}},
+		{name: "unknown deletion only", form: url.Values{"rating[" + deleted + "]": {""}}, saveErr: errors.Join(repository.ErrCommitOutcomeUnknown, context.Canceled), wantStatus: 200, want: map[string]float64{}},
 		{name: "failed deletion only", form: url.Values{"rating[" + deleted + "]": {""}}, saveErr: errors.New("db down"), wantStatus: 500, want: map[string]float64{}},
 		{name: "empty batch", form: url.Values{}, wantStatus: 200, want: map[string]float64{}},
 		{name: "omitted ratings", form: url.Values{"other": {"value"}}, wantStatus: 200, want: map[string]float64{}},

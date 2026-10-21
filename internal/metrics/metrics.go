@@ -50,11 +50,11 @@ func New() *Metrics {
 		}, []string{"method", "route", "status"}),
 		entriesAdded: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "dejaview_entries_added_total",
-			Help: "Entry creation attempts, by committed success or failure.",
+			Help: "Entry creation attempts, by confirmed success, failure or unknown commit outcome.",
 		}, []string{"result"}),
 		ratingsSaved: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "dejaview_ratings_saved_total",
-			Help: "Non-empty scores submitted to rating batches, by committed success or failure.",
+			Help: "Non-empty scores submitted to rating batches, by confirmed success, failure or unknown commit outcome.",
 		}, []string{"result"}),
 		tmdbLookups: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "dejaview_tmdb_lookups_total",
@@ -154,18 +154,19 @@ func normalizeMethod(method string) string {
 	return "OTHER"
 }
 
-// EntryAdded records the result of one entry repository Create call.
+// EntryAdded records one entry Create result: success, failure or unknown commit.
 func (m *Metrics) EntryAdded(result string) {
 	if m != nil {
-		m.entriesAdded.WithLabelValues(normalizeResult(result)).Inc()
+		m.entriesAdded.WithLabelValues(normalizeWriteResult(result)).Inc()
 	}
 }
 
-// RatingsSaved records non-nil scores after an atomic SaveBatch returns.
+// RatingsSaved records non-nil scores after an atomic SaveBatch returns,
+// distinguishing confirmed success, failure and unknown commit outcomes.
 // Deletions and empty batches do not create a series or increment a counter.
 func (m *Metrics) RatingsSaved(result string, count int) {
 	if m != nil && count > 0 {
-		m.ratingsSaved.WithLabelValues(normalizeResult(result)).Add(float64(count))
+		m.ratingsSaved.WithLabelValues(normalizeWriteResult(result)).Add(float64(count))
 	}
 }
 
@@ -181,6 +182,15 @@ func (m *Metrics) TMDBLookup(operation, result string) {
 	m.tmdbLookups.WithLabelValues(operation, result).Inc()
 }
 
+// normalizeWriteResult permits only the three bounded database write outcomes.
+func normalizeWriteResult(result string) string {
+	if result == "unknown" {
+		return result
+	}
+	return normalizeResult(result)
+}
+
+// normalizeResult maps unrecognized API outcomes to failure.
 func normalizeResult(result string) string {
 	if result == "success" {
 		return "success"

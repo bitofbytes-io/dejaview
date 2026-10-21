@@ -143,18 +143,23 @@ func TestPgxPoolCollector(t *testing.T) {
 	}
 }
 
+// TestDomainCountersBoundLabelsAndUsePrivateRegistry checks fixed outcomes and
+// registry isolation without exposing caller-provided strings as labels.
 func TestDomainCountersBoundLabelsAndUsePrivateRegistry(t *testing.T) {
 	m := New()
 	m.EntryAdded("success")
 	m.EntryAdded("failure")
 	m.EntryAdded("private-title")
+	m.EntryAdded("unknown")
 	m.RatingsSaved("success", 3)
 	m.RatingsSaved("failure", 2)
 	m.RatingsSaved("private-person", 1)
+	m.RatingsSaved("unknown", 2)
 	m.RatingsSaved("success", 0)
 	m.RatingsSaved("success", -1)
 	m.TMDBLookup("search", "success")
 	m.TMDBLookup("search", "not_found")
+	m.TMDBLookup("movie", "unknown")
 	m.TMDBLookup("movie", "not_found")
 	m.TMDBLookup("movie", "private-error")
 	m.TMDBLookup("private-query", "success")
@@ -162,12 +167,14 @@ func TestDomainCountersBoundLabelsAndUsePrivateRegistry(t *testing.T) {
 	for _, want := range []string{
 		`dejaview_entries_added_total{result="success"} 1`,
 		`dejaview_entries_added_total{result="failure"} 2`,
+		`dejaview_entries_added_total{result="unknown"} 1`,
 		`dejaview_ratings_saved_total{result="success"} 3`,
 		`dejaview_ratings_saved_total{result="failure"} 3`,
+		`dejaview_ratings_saved_total{result="unknown"} 2`,
 		`dejaview_tmdb_lookups_total{operation="search",result="success"} 1`,
 		`dejaview_tmdb_lookups_total{operation="search",result="failure"} 1`,
 		`dejaview_tmdb_lookups_total{operation="movie",result="not_found"} 1`,
-		`dejaview_tmdb_lookups_total{operation="movie",result="failure"} 1`,
+		`dejaview_tmdb_lookups_total{operation="movie",result="failure"} 2`,
 	} {
 		if !strings.Contains(body, want+"\n") {
 			t.Errorf("missing exact sample %s", want)

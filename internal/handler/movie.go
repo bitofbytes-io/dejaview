@@ -221,7 +221,9 @@ func (h *MovieHandler) AddFromTMDB(w http.ResponseWriter, r *http.Request) {
 		MovieID:     movie.ID,
 		GroupNumber: groupNumber,
 	})
-	if err != nil {
+	if errors.Is(err, repository.ErrCommitOutcomeUnknown) {
+		h.metrics.EntryAdded("unknown")
+	} else if err != nil {
 		h.metrics.EntryAdded("failure")
 	} else {
 		h.metrics.EntryAdded("success")

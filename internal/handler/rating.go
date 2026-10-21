@@ -94,7 +94,11 @@ func (h *RatingHandler) SaveRatings(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(changes) > 0 {
 		if err := h.ratingRepo.SaveBatch(ctx, entryID, changes); err != nil {
-			h.metrics.RatingsSaved("failure", scoreCount)
+			result := "failure"
+			if errors.Is(err, repository.ErrCommitOutcomeUnknown) {
+				result = "unknown"
+			}
+			h.metrics.RatingsSaved(result, scoreCount)
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return
 			}
