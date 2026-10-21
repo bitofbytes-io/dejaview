@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/drywaters/dejaview/internal/metrics"
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/drywaters/dejaview/internal/repository"
 	"github.com/drywaters/dejaview/internal/tmdb"
@@ -16,7 +17,7 @@ import (
 )
 
 func TestSearchTMDBRejectsOverlongQuery(t *testing.T) {
-	handler := NewMovieHandler(nil, nil, nil, nil)
+	handler := NewMovieHandler(nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/tmdb/search?q="+strings.Repeat("a", 121), nil)
 	recorder := httptest.NewRecorder()
@@ -30,6 +31,7 @@ func TestSearchTMDBRejectsOverlongQuery(t *testing.T) {
 
 type stubMovieRepo struct {
 	existing    *model.Movie
+	createErr   error
 	created     []model.CreateMovieInput
 	getByTMDBID []int
 }
@@ -41,13 +43,17 @@ func (s *stubMovieRepo) GetByTMDBId(ctx context.Context, tmdbID int) (*model.Mov
 
 func (s *stubMovieRepo) Create(ctx context.Context, input model.CreateMovieInput) (*model.Movie, error) {
 	s.created = append(s.created, input)
+	if s.createErr != nil {
+		return nil, s.createErr
+	}
 	return &model.Movie{ID: uuid.New(), Title: input.Title, TMDBId: input.TMDBId}, nil
 }
 
 type stubMovieEntryRepo struct {
-	checkErr  error
-	createErr error
-	created   []model.CreateEntryInput
+	beforeCreate func()
+	checkErr     error
+	createErr    error
+	created      []model.CreateEntryInput
 }
 
 func (s *stubMovieEntryRepo) CheckGroup(ctx context.Context, group int) error {
@@ -65,6 +71,9 @@ func (s *stubMovieEntryRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.
 }
 
 func (s *stubMovieEntryRepo) Create(ctx context.Context, input model.CreateEntryInput) (*model.Entry, error) {
+	if s.beforeCreate != nil {
+		s.beforeCreate()
+	}
 	s.created = append(s.created, input)
 	if s.createErr != nil {
 		return nil, s.createErr
@@ -243,6 +252,45 @@ func TestAddFromTMDBErrors(t *testing.T) {
 			if recorder.Header().Get("HX-Trigger") != "" {
 				t.Fatal("expected no success trigger")
 			}
+		})
+	}
+}
+
+func TestEntryCreationMetrics(t *testing.T) {
+	for _, tc := range []struct {
+		name                         string
+		cached                       bool
+		checkErr, movieErr, entryErr error
+		tmdbErr                      error
+		wantStatus, wantCalls        int
+		want                         map[string]float64
+	}{
+		{name: "new movie", wantStatus: 200, wantCalls: 1, want: map[string]float64{`{result="success"}`: 1}},
+		{name: "cached movie", cached: true, wantStatus: 200, want: map[string]float64{`{result="success"}`: 1}},
+		{name: "duplicate", cached: true, entryErr: repository.ErrEntryExistsInGroup, wantStatus: 409, want: map[string]float64{`{result="failure"}`: 1}},
+		{name: "entry database failure after movie insert", entryErr: errors.New("db failure"), wantCalls: 1, wantStatus: 500, want: map[string]float64{`{result="failure"}`: 1}},
+		{name: "group became invalid", cached: true, entryErr: repository.ErrInvalidGroup, wantStatus: 400, want: map[string]float64{`{result="failure"}`: 1}},
+		{name: "movie insert failure", movieErr: errors.New("movie db failure"), wantStatus: 500, wantCalls: 1, want: map[string]float64{}},
+		{name: "tmdb failure", tmdbErr: errors.New("tmdb failure"), wantStatus: 500, wantCalls: 1, want: map[string]float64{}},
+		{name: "invalid group before create", checkErr: repository.ErrInvalidGroup, wantStatus: 400, want: map[string]float64{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := metrics.New()
+			movies := &stubMovieRepo{createErr: tc.movieErr}
+			if tc.cached {
+				movies.existing = &model.Movie{ID: uuid.New()}
+			}
+			entries := &stubMovieEntryRepo{checkErr: tc.checkErr, createErr: tc.entryErr, beforeCreate: func() { assertDomainMetrics(t, m, "dejaview_entries_added_total", map[string]float64{}) }}
+			client := &stubTMDBClient{details: &tmdb.MovieDetails{ID: 348, Title: "Private title"}, err: tc.tmdbErr}
+			h := &MovieHandler{movieRepo: movies, entryRepo: entries, tmdbClient: client, metrics: m}
+			assertDomainMetrics(t, m, "dejaview_entries_added_total", map[string]float64{})
+			rec := postAddFromTMDB(h, url.Values{"tmdb_id": {"348"}, "group_number": {"1"}})
+			if rec.Code != tc.wantStatus || client.getCalls != tc.wantCalls {
+				t.Fatalf("status=%d calls=%d", rec.Code, client.getCalls)
+			}
+			assertDomainMetrics(t, m, "dejaview_entries_added_total", tc.want)
+			// Only the real TMDB client counts its own HTTP requests, never the handler.
+			assertDomainMetrics(t, m, "dejaview_tmdb_lookups_total", map[string]float64{})
 		})
 	}
 }

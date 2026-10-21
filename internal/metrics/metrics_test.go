@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 func scrape(t *testing.T, m *Metrics) string {
@@ -140,4 +141,56 @@ func TestPgxPoolCollector(t *testing.T) {
 			t.Errorf("metrics missing %q", want)
 		}
 	}
+}
+
+func TestDomainCountersBoundLabelsAndUsePrivateRegistry(t *testing.T) {
+	m := New()
+	m.EntryAdded("success")
+	m.EntryAdded("failure")
+	m.EntryAdded("private-title")
+	m.RatingsSaved("success", 3)
+	m.RatingsSaved("failure", 2)
+	m.RatingsSaved("private-person", 1)
+	m.RatingsSaved("success", 0)
+	m.RatingsSaved("success", -1)
+	m.TMDBLookup("search", "success")
+	m.TMDBLookup("search", "not_found")
+	m.TMDBLookup("movie", "not_found")
+	m.TMDBLookup("movie", "private-error")
+	m.TMDBLookup("private-query", "success")
+	body := scrape(t, m)
+	for _, want := range []string{
+		`dejaview_entries_added_total{result="success"} 1`,
+		`dejaview_entries_added_total{result="failure"} 2`,
+		`dejaview_ratings_saved_total{result="success"} 3`,
+		`dejaview_ratings_saved_total{result="failure"} 3`,
+		`dejaview_tmdb_lookups_total{operation="search",result="success"} 1`,
+		`dejaview_tmdb_lookups_total{operation="search",result="failure"} 1`,
+		`dejaview_tmdb_lookups_total{operation="movie",result="not_found"} 1`,
+		`dejaview_tmdb_lookups_total{operation="movie",result="failure"} 1`,
+	} {
+		if !strings.Contains(body, want+"\n") {
+			t.Errorf("missing exact sample %s", want)
+		}
+	}
+	if strings.Contains(body, "private-") {
+		t.Fatal("unbounded label leaked")
+	}
+	// Another Metrics instance and the default registry must not share counters.
+	if strings.Contains(scrape(t, New()), "dejaview_entries_added_total") {
+		t.Fatal("registry shared between instances")
+	}
+	families, err := prometheus.DefaultGatherer.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, family := range families {
+		if strings.HasPrefix(family.GetName(), "dejaview_") {
+			t.Fatalf("domain metric on global registry: %s", family.GetName())
+		}
+	}
+	var disabled *Metrics
+	disabled.EntryAdded("success")
+	disabled.RatingsSaved("success", 1)
+	disabled.TMDBLookup("movie", "success")
 }

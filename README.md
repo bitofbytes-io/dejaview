@@ -124,6 +124,11 @@ Prometheus metrics are served at `GET /metrics` on a separate internal listener 
 | `pgxpool_acquired_conns`, `pgxpool_idle_conns`, `pgxpool_constructing_conns`, `pgxpool_total_conns`, `pgxpool_max_conns` | | Database pool gauges |
 | `pgxpool_acquire_count_total`, `pgxpool_acquire_duration_seconds_total`, `pgxpool_empty_acquire_count_total`, `pgxpool_empty_acquire_wait_seconds_total`, `pgxpool_canceled_acquire_count_total` | | Database pool counters; empty acquires waited for a free connection |
 | `dejaview_login_failures_total` | `reason` | Failed logins: `invalid_key`, `missing_key`, `invalid_request` or `rate_limited` |
+| `dejaview_entries_added_total` | `result` | Entry creation calls: `success` after commit; `failure` on a repository error, including duplicates or a group becoming invalid. Movie metadata writes alone and requests rejected before entry creation do not count |
+| `dejaview_ratings_saved_total` | `result` | Number of non-empty scores in each atomic rating batch: `success` after commit; `failure` for attempted scores when the batch fails. Deletions, omitted scores and empty batches do not count; saving a score again counts as another save |
+| `dejaview_tmdb_lookups_total` | `operation`, `result` | Actual TMDB HTTP attempts. `operation` is `search` or `movie`; `result` is `success` after HTTP 200 and JSON decode, `failure` for transport/status/decode errors, or `not_found` for a movie-detail 404. Blank searches and cached movie reuse make no lookup and do not count |
+
+These counters use only the fixed labels above, never titles, queries, IDs, tokens or person names. They live in the same private registry on `:9464`; the public `/metrics` remains a 404. A committed write still counts if response rendering or a later read fails. They count operations for this process, not the current number of stored entries or ratings.
 
 The Go runtime (`go_*`) and process (`process_*`) collectors are also included.
 

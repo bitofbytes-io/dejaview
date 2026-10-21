@@ -29,6 +29,9 @@ type Metrics struct {
 	requests        *prometheus.CounterVec
 	requestDuration *prometheus.HistogramVec
 	loginFailures   *prometheus.CounterVec
+	entriesAdded    *prometheus.CounterVec
+	ratingsSaved    *prometheus.CounterVec
+	tmdbLookups     *prometheus.CounterVec
 }
 
 // New creates a registry with the Go runtime, process, HTTP and domain
@@ -45,6 +48,18 @@ func New() *Metrics {
 			Help:    "HTTP request latency, by method, route pattern and status code.",
 			Buckets: prometheus.DefBuckets,
 		}, []string{"method", "route", "status"}),
+		entriesAdded: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "dejaview_entries_added_total",
+			Help: "Entry creation attempts, by committed success or failure.",
+		}, []string{"result"}),
+		ratingsSaved: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "dejaview_ratings_saved_total",
+			Help: "Non-empty scores submitted to rating batches, by committed success or failure.",
+		}, []string{"result"}),
+		tmdbLookups: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "dejaview_tmdb_lookups_total",
+			Help: "TMDB HTTP lookups, by operation and result.",
+		}, []string{"operation", "result"}),
 		loginFailures: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "dejaview_login_failures_total",
 			Help: "Failed login attempts, by reason.",
@@ -56,6 +71,9 @@ func New() *Metrics {
 		m.requests,
 		m.requestDuration,
 		m.loginFailures,
+		m.entriesAdded,
+		m.ratingsSaved,
+		m.tmdbLookups,
 	)
 	return m
 }
@@ -134,4 +152,38 @@ func normalizeMethod(method string) string {
 		return method
 	}
 	return "OTHER"
+}
+
+// EntryAdded records the result of one entry repository Create call.
+func (m *Metrics) EntryAdded(result string) {
+	if m != nil {
+		m.entriesAdded.WithLabelValues(normalizeResult(result)).Inc()
+	}
+}
+
+// RatingsSaved records non-nil scores after an atomic SaveBatch returns.
+// Deletions and empty batches do not create a series or increment a counter.
+func (m *Metrics) RatingsSaved(result string, count int) {
+	if m != nil && count > 0 {
+		m.ratingsSaved.WithLabelValues(normalizeResult(result)).Add(float64(count))
+	}
+}
+
+// TMDBLookup records one HTTP attempt. Unknown operations are ignored so no
+// caller-controlled strings can become labels; unknown results mean failure.
+func (m *Metrics) TMDBLookup(operation, result string) {
+	if m == nil || (operation != "search" && operation != "movie") {
+		return
+	}
+	if operation != "movie" || result != "not_found" {
+		result = normalizeResult(result)
+	}
+	m.tmdbLookups.WithLabelValues(operation, result).Inc()
+}
+
+func normalizeResult(result string) string {
+	if result == "success" {
+		return "success"
+	}
+	return "failure"
 }

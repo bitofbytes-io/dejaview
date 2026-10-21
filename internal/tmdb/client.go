@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/drywaters/dejaview/internal/metrics"
 )
 
 const (
@@ -22,6 +24,7 @@ const (
 type Client struct {
 	readAccessToken string
 	httpClient      *http.Client
+	metrics         *metrics.Metrics
 }
 
 // NewClient creates a new TMDB client
@@ -34,6 +37,17 @@ func NewClient(readAccessToken string) *Client {
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
 	}
+}
+
+// WithMetrics returns a copy sharing the HTTP transport and recording to m.
+// It leaves the original client unchanged and accepts a nil client or metrics.
+func (c *Client) WithMetrics(m *metrics.Metrics) *Client {
+	if c == nil {
+		return nil
+	}
+	copy := *c
+	copy.metrics = m
+	return &copy
 }
 
 // SearchResult represents a movie search result from TMDB
@@ -93,7 +107,7 @@ type ProductionCompany struct {
 
 // Search searches for movies by title
 func (c *Client) Search(ctx context.Context, query string) (*SearchResponse, error) {
-	if query == "" {
+	if strings.TrimSpace(query) == "" {
 		return &SearchResponse{}, nil
 	}
 
@@ -106,6 +120,8 @@ func (c *Client) Search(ctx context.Context, query string) (*SearchResponse, err
 	}
 
 	req.Header.Set("Authorization", "Bearer "+c.readAccessToken)
+	resultLabel := "failure"
+	defer func() { c.metrics.TMDBLookup("search", resultLabel) }()
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("execute request: %w", c.credentialSafeError(err))
@@ -122,6 +138,7 @@ func (c *Client) Search(ctx context.Context, query string) (*SearchResponse, err
 		return nil, fmt.Errorf("decode response: %w", c.credentialSafeError(err))
 	}
 
+	resultLabel = "success"
 	return &result, nil
 }
 
@@ -135,6 +152,8 @@ func (c *Client) GetMovie(ctx context.Context, tmdbID int) (*MovieDetails, error
 	}
 
 	req.Header.Set("Authorization", "Bearer "+c.readAccessToken)
+	resultLabel := "failure"
+	defer func() { c.metrics.TMDBLookup("movie", resultLabel) }()
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("execute request: %w", c.credentialSafeError(err))
@@ -143,6 +162,7 @@ func (c *Client) GetMovie(ctx context.Context, tmdbID int) (*MovieDetails, error
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
+		resultLabel = "not_found"
 		return nil, nil
 	}
 
@@ -155,6 +175,7 @@ func (c *Client) GetMovie(ctx context.Context, tmdbID int) (*MovieDetails, error
 		return nil, fmt.Errorf("decode response: %w", c.credentialSafeError(err))
 	}
 
+	resultLabel = "success"
 	return &result, nil
 }
 

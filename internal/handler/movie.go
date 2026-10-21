@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/drywaters/dejaview/internal/metrics"
 	"github.com/drywaters/dejaview/internal/middleware"
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/drywaters/dejaview/internal/repository"
@@ -22,6 +23,7 @@ import (
 
 // MovieHandler handles movie-related requests
 type MovieHandler struct {
+	metrics    *metrics.Metrics
 	movieRepo  movieRepository
 	entryRepo  movieEntryRepository
 	personRepo personRepository
@@ -46,8 +48,9 @@ type tmdbClient interface {
 }
 
 // NewMovieHandler creates a new MovieHandler
-func NewMovieHandler(movieRepo *repository.MovieRepository, entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository, tmdbClient *tmdb.Client) *MovieHandler {
+func NewMovieHandler(movieRepo *repository.MovieRepository, entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository, tmdbClient *tmdb.Client, m *metrics.Metrics) *MovieHandler {
 	return &MovieHandler{
+		metrics:    m,
 		movieRepo:  movieRepo,
 		entryRepo:  entryRepo,
 		personRepo: personRepo,
@@ -218,6 +221,11 @@ func (h *MovieHandler) AddFromTMDB(w http.ResponseWriter, r *http.Request) {
 		MovieID:     movie.ID,
 		GroupNumber: groupNumber,
 	})
+	if err != nil {
+		h.metrics.EntryAdded("failure")
+	} else {
+		h.metrics.EntryAdded("success")
+	}
 	if errors.Is(err, repository.ErrInvalidGroup) {
 		rejectAddGroup(w)
 		return
