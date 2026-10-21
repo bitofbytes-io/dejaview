@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/drywaters/dejaview/internal/metrics"
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/drywaters/dejaview/internal/repository"
 	"github.com/go-chi/chi/v5"
@@ -16,12 +17,16 @@ import (
 )
 
 type stubRatingRepo struct {
+	beforeSave  func()
 	deleteCalls int
 	upsertCalls int
 	err         error
 }
 
 func (s *stubRatingRepo) SaveBatch(ctx context.Context, entryID uuid.UUID, changes []model.RatingChange) error {
+	if s.beforeSave != nil {
+		s.beforeSave()
+	}
 	if s.err != nil {
 		return s.err
 	}
@@ -308,5 +313,57 @@ func TestParseRatingChangesBoundaries(t *testing.T) {
 	changes, err := parseRatingChanges(url.Values{"rating[" + first + "]": {"0"}, "rating[" + second + "]": {"10"}})
 	if err != nil || len(changes) != 2 {
 		t.Fatalf("changes=%v err=%v", changes, err)
+	}
+}
+
+// TestRatingBatchMetrics checks score counts at the atomic batch boundary,
+// preserving no-op and cancellation behavior for every write outcome.
+func TestRatingBatchMetrics(t *testing.T) {
+	first, second, deleted := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	mixed := url.Values{"rating[" + first + "]": {"0"}, "rating[" + second + "]": {"10"}, "rating[" + deleted + "]": {""}}
+	for _, tc := range []struct {
+		name                      string
+		form                      url.Values
+		saveErr, errorAfterCommit error
+		wantStatus                int
+		want                      map[string]float64
+	}{
+		{name: "committed mixed batch", form: mixed, wantStatus: 200, want: map[string]float64{`{result="success"}`: 2}},
+		{name: "unknown commit after cancellation", form: mixed, saveErr: errors.Join(repository.ErrCommitOutcomeUnknown, context.Canceled), wantStatus: 200, want: map[string]float64{`{result="unknown"}`: 2}},
+		{name: "unknown commit after lost connection", form: mixed, saveErr: errors.Join(repository.ErrCommitOutcomeUnknown, errors.New("connection lost")), wantStatus: 500, want: map[string]float64{`{result="unknown"}`: 2}},
+		{name: "rolled back batch", form: mixed, saveErr: errors.New("write rejected"), wantStatus: 500, want: map[string]float64{`{result="failure"}`: 2}},
+		{name: "unknown person", form: mixed, saveErr: repository.ErrPersonNotFound, wantStatus: 400, want: map[string]float64{`{result="failure"}`: 2}},
+		{name: "entry deleted", form: mixed, saveErr: repository.ErrEntryNotFound, wantStatus: 404, want: map[string]float64{`{result="failure"}`: 2}},
+		{name: "canceled batch", form: mixed, saveErr: context.Canceled, wantStatus: 200, want: map[string]float64{`{result="failure"}`: 2}},
+		{name: "refetch failure after commit", form: mixed, errorAfterCommit: errors.New("read failed"), wantStatus: 500, want: map[string]float64{`{result="success"}`: 2}},
+		{name: "deletion only", form: url.Values{"rating[" + deleted + "]": {""}}, wantStatus: 200, want: map[string]float64{}},
+		{name: "unknown deletion only", form: url.Values{"rating[" + deleted + "]": {""}}, saveErr: errors.Join(repository.ErrCommitOutcomeUnknown, context.Canceled), wantStatus: 200, want: map[string]float64{}},
+		{name: "failed deletion only", form: url.Values{"rating[" + deleted + "]": {""}}, saveErr: errors.New("db down"), wantStatus: 500, want: map[string]float64{}},
+		{name: "empty batch", form: url.Values{}, wantStatus: 200, want: map[string]float64{}},
+		{name: "omitted ratings", form: url.Values{"other": {"value"}}, wantStatus: 200, want: map[string]float64{}},
+		{name: "invalid score", form: url.Values{"rating[" + first + "]": {"11"}}, wantStatus: 400, want: map[string]float64{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := metrics.New()
+			id := uuid.New()
+			ratings := &stubRatingRepo{err: tc.saveErr, beforeSave: func() { assertDomainMetrics(t, m, "dejaview_ratings_saved_total", map[string]float64{}) }}
+			entries := &stubEntryRepo{entries: []*model.Entry{{ID: id}, {ID: id}}, errs: []error{nil, tc.errorAfterCommit}}
+			h := &RatingHandler{ratingRepo: ratings, entryRepo: entries, personRepo: &stubPersonRepo{}, metrics: m}
+			assertDomainMetrics(t, m, "dejaview_ratings_saved_total", map[string]float64{})
+			req := httptest.NewRequest(http.MethodPut, "/api/entries/"+id.String()+"/ratings", strings.NewReader(tc.form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			route := chi.NewRouteContext()
+			route.URLParams.Add("id", id.String())
+			req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, route))
+			rec := httptest.NewRecorder()
+			h.SaveRatings(rec, req)
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("status %d, want %d", rec.Code, tc.wantStatus)
+			}
+			assertDomainMetrics(t, m, "dejaview_ratings_saved_total", tc.want)
+			if tc.saveErr != nil && (ratings.upsertCalls != 0 || ratings.deleteCalls != 0) {
+				t.Fatal("failed batch mutated ratings")
+			}
+		})
 	}
 }

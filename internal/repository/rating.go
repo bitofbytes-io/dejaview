@@ -21,7 +21,8 @@ func NewRatingRepository(pool *pgxpool.Pool) *RatingRepository {
 
 // SaveBatch applies a validated submission atomically. Omitted people are
 // unchanged. It returns ErrPersonNotFound when a score names an unknown person
-// and ErrEntryNotFound when the entry no longer exists.
+// and ErrEntryNotFound when the entry no longer exists. A lost commit response
+// returns an error wrapping ErrCommitOutcomeUnknown and the original cause.
 func (r *RatingRepository) SaveBatch(ctx context.Context, entryID uuid.UUID, changes []model.RatingChange) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -60,7 +61,7 @@ func (r *RatingRepository) SaveBatch(ctx context.Context, entryID uuid.UUID, cha
 			return fmt.Errorf("save rating batch: %w", err)
 		}
 	}
-	if err := tx.Commit(ctx); err != nil {
+	if err := commitWrite(ctx, tx); err != nil {
 		return fmt.Errorf("commit rating batch: %w", err)
 	}
 	return nil

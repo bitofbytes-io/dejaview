@@ -57,7 +57,7 @@ func New(
 		personRepo: personRepo,
 		ratingRepo: ratingRepo,
 		statsRepo:  statsRepo,
-		tmdbClient: tmdbClient,
+		tmdbClient: tmdbClient.WithMetrics(m),
 		metrics:    m,
 	}
 }
@@ -129,7 +129,7 @@ func (s *Server) Router() http.Handler {
 		r.Post("/people/{id}/delete", peopleHandler.Delete)
 
 		// Movie detail page
-		movieHandler := handler.NewMovieHandler(s.movieRepo, s.entryRepo, s.personRepo, s.tmdbClient)
+		movieHandler := handler.NewMovieHandler(s.movieRepo, s.entryRepo, s.personRepo, s.tmdbClient, s.metrics)
 		r.Get("/movies/{id}", movieHandler.MovieDetailPage)
 
 		// TMDB API endpoints
@@ -145,7 +145,7 @@ func (s *Server) Router() http.Handler {
 		r.Post("/api/groups/{num}/reorder", entryHandler.Reorder)
 
 		// Rating API endpoints
-		ratingHandler := handler.NewRatingHandler(s.ratingRepo, s.entryRepo, s.personRepo)
+		ratingHandler := handler.NewRatingHandler(s.ratingRepo, s.entryRepo, s.personRepo, s.metrics)
 		r.Put("/api/entries/{id}/ratings", ratingHandler.SaveRatings)
 	})
 
