@@ -166,15 +166,16 @@ func TestEntryUpdateConcurrentMovesPostgres(t *testing.T) {
 	defer cancel()
 	repo := NewEntryRepository(pool)
 
-	insertTestEntry(t, ctx, pool, insertTestMovie(t, ctx, pool, "Target resident"), 10)
+	insertTestEntry(t, ctx, pool, insertTestMovie(t, ctx, pool, "Target resident"), 9)
 	const movers = 8
 	ids := make([]uuid.UUID, movers)
 	for i := range ids {
 		// Each mover starts at position 1 of its own group, colliding with the target's position 1.
+		insertTestEntry(t, ctx, pool, insertTestMovie(t, ctx, pool, "Source resident"), i+1)
 		ids[i] = createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Mover"), i+1).ID
 	}
 
-	target := 10
+	target := 9
 	var wg sync.WaitGroup
 	errs := make(chan error, movers)
 	for _, id := range ids {
@@ -193,17 +194,17 @@ func TestEntryUpdateConcurrentMovesPostgres(t *testing.T) {
 	}
 
 	var count, distinct, maxPosition int
-	if err := pool.QueryRow(ctx, `SELECT COUNT(*), COUNT(DISTINCT position), MAX(position) FROM entries WHERE group_number = 10`).Scan(&count, &distinct, &maxPosition); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*), COUNT(DISTINCT position), MAX(position) FROM entries WHERE group_number = 9`).Scan(&count, &distinct, &maxPosition); err != nil {
 		t.Fatal(err)
 	}
 	if count != movers+1 || distinct != count || maxPosition != count {
-		t.Fatalf("group 10 has count=%d distinct positions=%d max=%d", count, distinct, maxPosition)
+		t.Fatalf("group 9 has count=%d distinct positions=%d max=%d", count, distinct, maxPosition)
 	}
 }
 
-// waitForBlockedMove waits until some session is waiting on a lock in this
-// database, which in these tests can only be the pending move. It fails if the
-// move finishes first.
+// waitForBlockedMove waits until this test schema's pending writer is blocked.
+// Each test uses a unique application_name so concurrent test processes cannot
+// make another schema's lock wait satisfy this check.
 func waitForBlockedMove(t *testing.T, ctx context.Context, pool *pgxpool.Pool, moved <-chan error) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -214,6 +215,7 @@ func waitForBlockedMove(t *testing.T, ctx context.Context, pool *pgxpool.Pool, m
 				SELECT 1 FROM pg_locks l
 				JOIN pg_stat_activity a ON a.pid = l.pid
 				WHERE NOT l.granted AND a.datname = current_database()
+				  AND a.application_name = current_setting('application_name')
 			)`).Scan(&waiting); err != nil {
 			t.Fatal(err)
 		}
@@ -263,18 +265,16 @@ func assertContiguousGroups(t *testing.T, ctx context.Context, pool *pgxpool.Poo
 	}
 }
 
-// TestEntryUpdateRetriesAfterCompetingMovePostgres deterministically exercises
-// the retry path: a competing transaction moves the same entry while a second
-// move is blocked on the source group's advisory lock, so the blocked move sees
-// a stale group on its locked recheck and must retry from the new group.
-func TestEntryUpdateRetriesAfterCompetingMovePostgres(t *testing.T) {
+// TestEntryUpdateSerializesCompetingMovePostgres verifies a second move waits
+// for the global lock before reading the entry's group, then uses the new group.
+func TestEntryUpdateSerializesCompetingMovePostgres(t *testing.T) {
 	pool := ratingTestPool(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	repo := NewEntryRepository(pool)
 
-	// Advisory locks are database-wide, so use groups no other test touches.
-	const source, competing, target = 101, 102, 103
+	// Each test uses its own schema; keep the fixture groups contiguous.
+	const source, competing, target = 1, 2, 3
 	for _, group := range []int{source, competing, target} {
 		insertTestEntry(t, ctx, pool, insertTestMovie(t, ctx, pool, "Resident"), group)
 		insertTestEntry(t, ctx, pool, insertTestMovie(t, ctx, pool, "Resident"), group)
@@ -291,8 +291,7 @@ func TestEntryUpdateRetriesAfterCompetingMovePostgres(t *testing.T) {
 		moved <- repo.Update(ctx, contested.ID, model.UpdateEntryInput{GroupNumber: &targetGroup})
 	}()
 
-	// Wait until the second move has read the (still committed) source group and
-	// is blocked on the source group's advisory lock.
+	// The second move must wait before reading any group numbers.
 	waitForBlockedMove(t, ctx, pool, moved)
 
 	if err := competingTx.Commit(ctx); err != nil {
@@ -322,8 +321,8 @@ func TestEntryUpdateSameGroupRechecksUnderLockPostgres(t *testing.T) {
 	defer cancel()
 	repo := NewEntryRepository(pool)
 
-	// Advisory locks are database-wide, so use groups no other test touches.
-	const home, competing = 111, 112
+	// Each test uses its own schema; keep the fixture groups contiguous.
+	const home, competing = 1, 2
 	for _, group := range []int{home, competing} {
 		insertTestEntry(t, ctx, pool, insertTestMovie(t, ctx, pool, "Resident"), group)
 		insertTestEntry(t, ctx, pool, insertTestMovie(t, ctx, pool, "Resident"), group)
@@ -342,7 +341,7 @@ func TestEntryUpdateSameGroupRechecksUnderLockPostgres(t *testing.T) {
 		moved <- repo.Update(ctx, contested.ID, model.UpdateEntryInput{GroupNumber: &homeGroup, PickedByPersonID: &picker})
 	}()
 
-	// The request reads the committed home group, then blocks behind the competing move.
+	// The request blocks behind the competing move before reading its group.
 	waitForBlockedMove(t, ctx, pool, moved)
 
 	if err := competingTx.Commit(ctx); err != nil {
@@ -680,5 +679,153 @@ func TestEntryListAllPostgres(t *testing.T) {
 	}
 	if got := initials(single); got != "ACD" || single.Movie.Title != "Two C" {
 		t.Fatalf("GetByID ratings by %q for %q, want ACD for Two C", got, single.Movie.Title)
+	}
+}
+
+func TestEntryCompactsGroupsPostgres(t *testing.T) {
+	for _, operation := range []string{"delete middle", "delete last", "move forward", "move backward", "rollback"} {
+		t.Run(operation, func(t *testing.T) {
+			pool := ratingTestPool(t)
+			ctx := context.Background()
+			repo := NewEntryRepository(pool)
+			shared := insertTestMovie(t, ctx, pool, "Repeated movie")
+			first := createTestEntry(t, ctx, repo, shared, 1)
+			middle := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Middle"), 2)
+			last := createTestEntry(t, ctx, repo, shared, 3)
+			fourth := createTestEntry(t, ctx, repo, shared, 4)
+			var picker uuid.UUID
+			if err := pool.QueryRow(ctx, "SELECT id FROM persons LIMIT 1").Scan(&picker); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := pool.Exec(ctx, "UPDATE entries SET picked_by_person_id=$1 WHERE id=$2", picker, last.ID); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := pool.Exec(ctx, "INSERT INTO ratings(person_id,entry_id,score) VALUES($1,$2,8)", picker, last.ID); err != nil {
+				t.Fatal(err)
+			}
+			want := map[uuid.UUID][2]int{first.ID: {1, 1}, middle.ID: {2, 1}, last.ID: {3, 1}, fourth.ID: {4, 1}}
+			switch operation {
+			case "delete middle":
+				if err := repo.Delete(ctx, middle.ID); err != nil {
+					t.Fatal(err)
+				}
+				delete(want, middle.ID)
+				want[last.ID] = [2]int{2, 1}
+				want[fourth.ID] = [2]int{3, 1}
+			case "delete last":
+				if err := repo.Delete(ctx, fourth.ID); err != nil {
+					t.Fatal(err)
+				}
+				delete(want, fourth.ID)
+			case "move forward", "move backward", "rollback":
+				target := 4
+				if operation == "move backward" {
+					target = 1
+				}
+				input := model.UpdateEntryInput{GroupNumber: &target}
+				if operation == "rollback" {
+					unknown := uuid.New()
+					input.PickedByPersonID = &unknown
+				}
+				err := repo.Update(ctx, middle.ID, input)
+				if operation == "rollback" {
+					if !errors.Is(err, ErrPersonNotFound) {
+						t.Fatal(err)
+					}
+					break
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				want[last.ID] = [2]int{2, 1}
+				want[fourth.ID] = [2]int{3, 1}
+				want[middle.ID] = [2]int{3, 2}
+				if operation == "move backward" {
+					want[middle.ID] = [2]int{1, 2}
+				}
+			}
+			for id, expected := range want {
+				group, pos := entryGroupAndPosition(t, ctx, pool, id)
+				if [2]int{group, pos} != expected {
+					t.Fatalf("%s at %d/%d, want %v", id, group, pos, expected)
+				}
+			}
+			got, err := repo.GetByID(ctx, last.ID)
+			if err != nil || got.PickedByPersonID == nil || *got.PickedByPersonID != picker || len(got.Ratings) != 1 || got.Ratings[0].Score != 8 {
+				t.Fatalf("lost references: %+v, %v", got, err)
+			}
+			if _, err := pool.Exec(ctx, "DELETE FROM ratings WHERE person_id=$1", picker); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := pool.Exec(ctx, "DELETE FROM persons WHERE id=$1", picker); err != nil {
+				t.Fatal(err)
+			}
+			got, err = repo.GetByID(ctx, last.ID)
+			if err != nil || got.PickedByPersonID != nil {
+				t.Fatalf("picker SET NULL lost: %+v %v", got, err)
+			}
+		})
+	}
+}
+
+// Hold a compaction uncommitted and verify every writer waits before reading
+// group numbers. A stale create is rejected; reorder cannot touch a new group.
+func TestEntryCompactionSerializesWritersPostgres(t *testing.T) {
+	for _, operation := range []string{"create", "delete", "reorder", "move"} {
+		t.Run(operation, func(t *testing.T) {
+			pool := ratingTestPool(t)
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			repo := NewEntryRepository(pool)
+			createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "First"), 1)
+			middle := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Middle"), 2)
+			last := createTestEntry(t, ctx, repo, insertTestMovie(t, ctx, pool, "Last"), 3)
+			movie := insertTestMovie(t, ctx, pool, "New")
+			tx, err := pool.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = tx.Rollback(context.Background()) }()
+			if err := lockEntryGroups(ctx, tx); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := tx.Exec(ctx, "DELETE FROM entries WHERE id=$1", middle.ID); err != nil {
+				t.Fatal(err)
+			}
+			if err := compactEntryGroups(ctx, tx, 2); err != nil {
+				t.Fatal(err)
+			}
+			done := make(chan error, 1)
+			go func() {
+				switch operation {
+				case "create":
+					_, err := repo.Create(ctx, model.CreateEntryInput{MovieID: movie, GroupNumber: 4})
+					done <- err
+				case "delete":
+					done <- repo.Delete(ctx, last.ID)
+				case "reorder":
+					done <- repo.ReorderEntries(ctx, 3, []uuid.UUID{last.ID})
+				case "move":
+					target := 1
+					done <- repo.Update(ctx, last.ID, model.UpdateEntryInput{GroupNumber: &target})
+				}
+			}()
+			waitForBlockedMove(t, ctx, pool, done)
+			if err := tx.Commit(ctx); err != nil {
+				t.Fatal(err)
+			}
+			err = <-done
+			wantErr := map[string]error{"create": ErrGroupNumberingChanged, "move": ErrGroupNumberingChanged, "reorder": ErrReorderMismatch}[operation]
+			if !errors.Is(err, wantErr) {
+				t.Fatalf("writer error %v, want %v", err, wantErr)
+			}
+			var maxGroup, groups int
+			if err := pool.QueryRow(ctx, "SELECT COALESCE(MAX(group_number),0), COUNT(DISTINCT group_number) FROM entries").Scan(&maxGroup, &groups); err != nil {
+				t.Fatal(err)
+			}
+			if maxGroup != groups {
+				t.Fatalf("groups have gap: max=%d count=%d", maxGroup, groups)
+			}
+		})
 	}
 }

@@ -44,9 +44,18 @@ func TestHeaderForVisitorsOffersLogIn(t *testing.T) {
 	if got := strings.Count(html, `href="/login"`); got != 2 {
 		t.Errorf("want a log in link in the inline nav and the phone menu, got %d:\n%s", got, html)
 	}
-	for _, unwanted := range []string{`href="/people"`, `action="/logout"`} {
+	for _, unwanted := range []string{`href="/people"`, `href="/stats"`, `action="/logout"`} {
 		if strings.Contains(html, unwanted) {
 			t.Errorf("visitor header contains %q:\n%s", unwanted, html)
+		}
+	}
+}
+
+func TestHeaderNavigationLabelsAreDistinct(t *testing.T) {
+	html := renderHeader(t, true, "movies")
+	for _, label := range []string{"Main", "Mobile"} {
+		if got := strings.Count(html, `aria-label="`+label+`"`); got != 1 {
+			t.Errorf("navigation label %s occurs %d times, want 1", label, got)
 		}
 	}
 }

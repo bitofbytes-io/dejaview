@@ -2,6 +2,7 @@ package pages
 
 import (
 	"net/url"
+	"strconv"
 
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/drywaters/dejaview/internal/ui/components"
@@ -24,6 +25,7 @@ type Waiting struct {
 // RatingFilter drives the dashboard's "Waiting on" line and its
 // needs-rating filter.
 type RatingFilter struct {
+	GroupState model.EntryGroupState
 	// Waiting lists the people with movies left to rate, in persons order.
 	Waiting []Waiting
 	// Needs, when set, limits the groups to the movies this person has not
@@ -94,7 +96,7 @@ templ DashboardContent(groups []GroupData, persons []*model.Person, currentGroup
 				</div>
 				<div class="sm:w-56">
 					<label for="add-group-select" class="field-label">Add to</label>
-					<select name="group_number" id="add-group-select" class="input-field">
+					<select name="group_number" id="add-group-select" class="input-field" data-group-version={ strconv.FormatInt(filter.GroupState.Version, 10) }>
 						if len(groups) == 0 {
 							<option value="1" selected>Group 1 (new)</option>
 						} else {
@@ -135,7 +137,7 @@ templ DashboardContent(groups []GroupData, persons []*model.Person, currentGroup
 		}
 		for _, group := range groups {
 			if shown := filter.Shown(group.Entries); len(shown) > 0 {
-				@GroupSection(group.Number, len(group.Entries), shown, persons, isAuthenticated && filter.Needs == nil, group.Number == currentGroup)
+				@GroupSection(group.Number, len(group.Entries), filter.GroupState.Capacity(group.Number), shown, persons, isAuthenticated && filter.Needs == nil, group.Number == currentGroup)
 			}
 		}
 	}
@@ -180,14 +182,14 @@ templ ratingNudge(persons []*model.Person, filter RatingFilter) {
 // GroupSection renders one group. count is how many movies the group holds;
 // entries are the ones shown, which the rating filter may limit. A filtered
 // group is partial, so it is never sortable: a reorder must list every entry.
-templ GroupSection(groupNum int, count int, entries []*model.Entry, persons []*model.Person, sortable bool, isCurrent bool) {
+templ GroupSection(groupNum int, count int, capacity int, entries []*model.Entry, persons []*model.Person, sortable bool, isCurrent bool) {
 	<section class={ "group-section", templ.KV("is-current", isCurrent) } id={ "group-" + ui.IntToStr(groupNum) }>
 		<div class="group-head">
 			<h2 class="group-title">
 				<span>Group { ui.IntToStr(groupNum) }</span>
 			</h2>
 			<span class="group-count">
-				{ ui.IntToStr(count) } out of { ui.IntToStr(groupTotal(groupNum)) }
+				{ ui.IntToStr(count) } out of { ui.IntToStr(capacity) }
 			</span>
 		</div>
 
@@ -205,13 +207,4 @@ templ GroupSection(groupNum int, count int, entries []*model.Entry, persons []*m
 			</div>
 		}
 	</section>
-}
-
-// groupTotal is how many movies a group holds once every pick is made. A full
-// group is 9 picks; group 1 has 8 because its third pick round never happened.
-func groupTotal(groupNum int) int {
-	if groupNum == 1 {
-		return 8
-	}
-	return 9
 }

@@ -51,7 +51,7 @@ templ SearchResultCard(result tmdb.SearchResult) {
 			}
 		</div>
 		
-		<form hx-post="/api/tmdb/add" hx-swap="none" class="search-result-actions" hx-vals="js:{group_number: document.getElementById('add-group-select').value}">
+		<form hx-post="/api/tmdb/add" hx-swap="none" class="search-result-actions" hx-vals="js:{group_number: document.getElementById('add-group-select').value, group_version: document.getElementById('add-group-select').dataset.groupVersion}">
 			<input type="hidden" name="tmdb_id" value={ ui.IntToStr(result.ID) }/>
 			<button type="submit" class="btn-primary">Add</button>
 		</form>
