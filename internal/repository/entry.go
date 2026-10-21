@@ -82,7 +82,8 @@ func scanEntry(row pgx.Row) (*model.Entry, error) {
 // Create adds a movie to the end of a group. The group must be an existing
 // group or the next new one (1 through the highest group + 1); otherwise
 // Create returns ErrInvalidGroup. It returns ErrEntryExistsInGroup when the
-// movie is already in the group.
+// movie is already in the group. An uncertain commit returns an error wrapping
+// ErrCommitOutcomeUnknown and the original cause.
 func (r *EntryRepository) Create(ctx context.Context, input model.CreateEntryInput) (*model.Entry, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
@@ -132,7 +133,7 @@ func (r *EntryRepository) Create(ctx context.Context, input model.CreateEntryInp
 		return nil, fmt.Errorf("create entry: %w", err)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
+	if err := commitWrite(ctx, tx); err != nil {
 		return nil, fmt.Errorf("create entry commit: %w", err)
 	}
 

@@ -48,6 +48,9 @@ func TestPeopleRoutesRequireLogin(t *testing.T) {
 // that the public router does not serve /metrics.
 func TestRouterRecordsMetrics(t *testing.T) {
 	m := metrics.New()
+	m.EntryAdded("success")
+	m.RatingsSaved("success", 2)
+	m.TMDBLookup("movie", "not_found")
 	db := pingerFunc(func(context.Context) error { return nil })
 	router := New(&config.Config{APIToken: "api-token"}, db, nil, nil, nil, nil, nil, nil, m).Router()
 
@@ -86,6 +89,9 @@ func TestRouterRecordsMetrics(t *testing.T) {
 		`http_requests_total{method="POST",route="/login",status="303"} 1`,
 		`http_requests_total{method="GET",route="unmatched",status="404"} 1`,
 		`dejaview_login_failures_total{reason="invalid_key"} 1`,
+		`dejaview_entries_added_total{result="success"} 1`,
+		`dejaview_ratings_saved_total{result="success"} 2`,
+		`dejaview_tmdb_lookups_total{operation="movie",result="not_found"} 1`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("metrics missing %q", want)

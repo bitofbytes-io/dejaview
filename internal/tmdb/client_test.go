@@ -7,10 +7,13 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/drywaters/dejaview/internal/metrics"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -330,5 +333,105 @@ func TestCredentialSafeErrorsKeepCancellationAndTimeoutSemantics(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// TestLookupMetrics verifies HTTP and decode outcomes without contacting TMDB.
+func TestLookupMetrics(t *testing.T) {
+	for _, operation := range []string{"search", "movie"} {
+		for _, tc := range []struct {
+			name         string
+			status       int
+			body         string
+			transportErr error
+			want         string
+		}{
+			{name: "success", status: 200, body: `{"id":348,"results":[]}`, want: "success"},
+			{name: "not found", status: 404, body: `{}`, want: "not_found"},
+			{name: "server failure", status: 500, body: `upstream failure`, want: "failure"},
+			{name: "malformed JSON", status: 200, body: `{"id":`, want: "failure"},
+			{name: "transport failure", transportErr: errors.New("dial failed"), want: "failure"},
+		} {
+			t.Run(operation+"/"+tc.name, func(t *testing.T) {
+				m := metrics.New()
+				original := NewClient("fake-private-token")
+				client := original.WithMetrics(m)
+				if original.metrics != nil {
+					t.Fatal("WithMetrics changed original client")
+				}
+				calls := 0
+				client.httpClient.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					calls++
+					if got := lookupMetricSamples(t, m); len(got) != 0 {
+						t.Fatalf("counter advanced before API result: %v", got)
+					}
+					if req.Header.Get("Authorization") != "Bearer fake-private-token" {
+						t.Fatal("Bearer header changed")
+					}
+					if tc.transportErr != nil {
+						return nil, tc.transportErr
+					}
+					return &http.Response{StatusCode: tc.status, Body: io.NopCloser(strings.NewReader(tc.body))}, nil
+				})
+				var err error
+				if operation == "search" {
+					_, err = client.Search(context.Background(), "private query")
+				} else {
+					_, err = client.GetMovie(context.Background(), 348)
+				}
+				want := tc.want
+				if operation == "search" && want == "not_found" {
+					want = "failure"
+				}
+				if (err != nil) != (want == "failure") {
+					t.Fatalf("result=%s err=%v", want, err)
+				}
+				if calls != 1 {
+					t.Fatalf("calls=%d", calls)
+				}
+				samples := lookupMetricSamples(t, m)
+				expected := fmt.Sprintf(`dejaview_tmdb_lookups_total{operation="%s",result="%s"} 1`, operation, want)
+				if len(samples) != 1 || samples[0] != expected {
+					t.Fatalf("samples=%v, want %s", samples, expected)
+				}
+			})
+		}
+	}
+}
+
+// lookupMetricSamples reads only TMDB counter samples from the private handler.
+func lookupMetricSamples(t *testing.T, m *metrics.Metrics) []string {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	m.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("scrape status %d", rec.Code)
+	}
+	var samples []string
+	for _, line := range strings.Split(rec.Body.String(), "\n") {
+		if strings.HasPrefix(line, "dejaview_tmdb_lookups_total{") {
+			samples = append(samples, line)
+		}
+	}
+	return samples
+}
+
+// TestBlankSearchDoesNotRecordLookup keeps skipped HTTP calls out of the counter.
+func TestBlankSearchDoesNotRecordLookup(t *testing.T) {
+	m := metrics.New()
+	client := NewClient("fake-token").WithMetrics(m)
+	client.httpClient.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) { t.Fatal("blank query made an HTTP call"); return nil, nil })
+	for _, query := range []string{"", " ", "\t\n"} {
+		result, err := client.Search(context.Background(), query)
+		if err != nil || result == nil || len(result.Results) != 0 {
+			t.Fatalf("result=%v err=%v", result, err)
+		}
+	}
+	if samples := lookupMetricSamples(t, m); len(samples) != 0 {
+		t.Fatalf("blank search counter: %v", samples)
+	}
+	var absent *Client
+	if absent.WithMetrics(m) != nil {
+		t.Fatal("nil client became non-nil")
 	}
 }

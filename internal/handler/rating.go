@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/drywaters/dejaview/internal/metrics"
 	"github.com/drywaters/dejaview/internal/middleware"
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/drywaters/dejaview/internal/repository"
@@ -21,6 +22,7 @@ import (
 
 // RatingHandler handles rating-related requests
 type RatingHandler struct {
+	metrics    *metrics.Metrics
 	ratingRepo ratingRepository
 	entryRepo  entryRepository
 	personRepo personRepository
@@ -39,8 +41,9 @@ type personRepository interface {
 }
 
 // NewRatingHandler creates a new RatingHandler
-func NewRatingHandler(ratingRepo *repository.RatingRepository, entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository) *RatingHandler {
+func NewRatingHandler(ratingRepo *repository.RatingRepository, entryRepo *repository.EntryRepository, personRepo *repository.PersonRepository, m *metrics.Metrics) *RatingHandler {
 	return &RatingHandler{
+		metrics:    m,
 		ratingRepo: ratingRepo,
 		entryRepo:  entryRepo,
 		personRepo: personRepo,
@@ -83,8 +86,19 @@ func (h *RatingHandler) SaveRatings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	scoreCount := 0
+	for _, change := range changes {
+		if change.Score != nil {
+			scoreCount++
+		}
+	}
 	if len(changes) > 0 {
 		if err := h.ratingRepo.SaveBatch(ctx, entryID, changes); err != nil {
+			result := "failure"
+			if errors.Is(err, repository.ErrCommitOutcomeUnknown) {
+				result = "unknown"
+			}
+			h.metrics.RatingsSaved(result, scoreCount)
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return
 			}
@@ -100,6 +114,7 @@ func (h *RatingHandler) SaveRatings(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
+		h.metrics.RatingsSaved("success", scoreCount)
 	}
 
 	// Fetch updated entry and persons for response
