@@ -77,10 +77,13 @@ func Load() (*Config, error) {
 	if cfg.MetricsAddr, err = getEnv("METRICS_ADDR", defaultMetricsAddr); err != nil {
 		return nil, err
 	}
-	switch cfg.MetricsAddr = strings.TrimSpace(cfg.MetricsAddr); {
-	case cfg.MetricsAddr == "":
+	if cfg.MetricsAddr = strings.TrimSpace(cfg.MetricsAddr); cfg.MetricsAddr == "" {
 		cfg.MetricsAddr = defaultMetricsAddr
-	case strings.EqualFold(cfg.MetricsAddr, "off"):
+	}
+	if cfg.MetricsAddr, err = validateMetricsAddr(cfg.MetricsAddr); err != nil {
+		return nil, err
+	}
+	if cfg.MetricsAddr == "off" {
 		cfg.MetricsAddr = ""
 	}
 

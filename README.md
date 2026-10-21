@@ -115,6 +115,8 @@ Open <http://localhost:4600> and sign in with the value configured as `API_TOKEN
 
 ### Metrics
 
+`METRICS_ADDR` is trimmed and `off` is case-insensitive. Other values must be a valid IP address or hostname plus a numeric port from 0 to 65535 (IPv6 addresses need brackets). Invalid syntax stops startup; validation does not resolve hostnames. Keep the metrics port private and never publish it through Docker or the public proxy.
+
 Prometheus metrics are served at `GET /metrics` on a separate internal listener (`METRICS_ADDR`, default `:9464`), never on the public port, so a reverse proxy routing the app port can't expose them. Scrape it over a private network only, and don't publish the port. `METRICS_ADDR=off` disables the listener. If the address can't be bound, the app logs the error and keeps running without it.
 
 | Metric | Labels | Meaning |
