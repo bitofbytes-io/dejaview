@@ -202,9 +202,9 @@ func TestEntryUpdateConcurrentMovesPostgres(t *testing.T) {
 	}
 }
 
-// waitForBlockedMove waits until some session is waiting on a lock in this
-// database, which in these tests can only be the pending move. It fails if the
-// move finishes first.
+// waitForBlockedMove waits until this test schema's pending writer is blocked.
+// Each test uses a unique application_name so concurrent test processes cannot
+// make another schema's lock wait satisfy this check.
 func waitForBlockedMove(t *testing.T, ctx context.Context, pool *pgxpool.Pool, moved <-chan error) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -215,6 +215,7 @@ func waitForBlockedMove(t *testing.T, ctx context.Context, pool *pgxpool.Pool, m
 				SELECT 1 FROM pg_locks l
 				JOIN pg_stat_activity a ON a.pid = l.pid
 				WHERE NOT l.granted AND a.datname = current_database()
+				  AND a.application_name = current_setting('application_name')
 			)`).Scan(&waiting); err != nil {
 			t.Fatal(err)
 		}
@@ -791,7 +792,7 @@ func TestEntryCompactionSerializesWritersPostgres(t *testing.T) {
 			if _, err := tx.Exec(ctx, "DELETE FROM entries WHERE id=$1", middle.ID); err != nil {
 				t.Fatal(err)
 			}
-			if err := compactEntryGroups(ctx, tx); err != nil {
+			if err := compactEntryGroups(ctx, tx, 2); err != nil {
 				t.Fatal(err)
 			}
 			done := make(chan error, 1)
@@ -814,7 +815,7 @@ func TestEntryCompactionSerializesWritersPostgres(t *testing.T) {
 				t.Fatal(err)
 			}
 			err = <-done
-			wantErr := map[string]error{"create": ErrInvalidGroup, "reorder": ErrReorderMismatch}[operation]
+			wantErr := map[string]error{"create": ErrGroupNumberingChanged, "move": ErrGroupNumberingChanged, "reorder": ErrReorderMismatch}[operation]
 			if !errors.Is(err, wantErr) {
 				t.Fatalf("writer error %v, want %v", err, wantErr)
 			}

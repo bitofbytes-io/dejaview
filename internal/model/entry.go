@@ -21,16 +21,32 @@ type Entry struct {
 	PickedByPerson *Person   `json:"picked_by_person,omitempty"`
 }
 
+// EntryGroupState tracks mutable group numbering and the historical first group.
+type EntryGroupState struct {
+	Version            int64
+	FirstGroupCapacity int
+}
+
+// Capacity follows the historical group rather than a compacted display number.
+func (s EntryGroupState) Capacity(group int) int {
+	if group == 1 && s.FirstGroupCapacity != 9 {
+		return 8
+	}
+	return 9
+}
+
 // CreateEntryInput represents the input for creating an entry
 type CreateEntryInput struct {
 	MovieID          uuid.UUID  `json:"movie_id"`
 	GroupNumber      int        `json:"group_number"`
+	GroupVersion     *int64     `json:"group_version,omitempty"`
 	PickedByPersonID *uuid.UUID `json:"picked_by_person_id,omitempty"`
 }
 
 // UpdateEntryInput represents the input for updating an entry
 type UpdateEntryInput struct {
 	GroupNumber      *int       `json:"group_number,omitempty"`
+	GroupVersion     *int64     `json:"group_version,omitempty"`
 	PickedByPersonID *uuid.UUID `json:"picked_by_person_id,omitempty"`
 }
 

@@ -110,3 +110,18 @@ func TestDashboardFilteredGroupsAreNotSortable(t *testing.T) {
 		t.Errorf("unfiltered dashboard lost reordering:\n%s", html)
 	}
 }
+
+func TestDashboardCompactedFirstGroupCapacity(t *testing.T) {
+	entries := make([]*model.Entry, 9)
+	for i := range entries {
+		entries[i] = &model.Entry{ID: uuid.New(), GroupNumber: 1, Movie: &model.Movie{Title: "Normal pick"}}
+	}
+	filter := RatingFilter{GroupState: model.EntryGroupState{Version: 42, FirstGroupCapacity: 9}}
+	html := render(t, DashboardContent([]GroupData{{Number: 1, Entries: entries}}, nil, 1, filter, true))
+	if !strings.Contains(html, "9 out of 9") || strings.Contains(html, "9 out of 8") {
+		t.Fatalf("incorrect compacted capacity: %s", html)
+	}
+	if !strings.Contains(html, `data-group-version="42"`) {
+		t.Fatalf("missing numeric-selection version: %s", html)
+	}
+}

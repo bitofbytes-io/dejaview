@@ -38,6 +38,7 @@ type movieRepository interface {
 type movieEntryRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*model.Entry, error)
 	CheckGroup(ctx context.Context, group int) error
+	GroupState(ctx context.Context) (model.EntryGroupState, error)
 	Create(ctx context.Context, input model.CreateEntryInput) (*model.Entry, error)
 }
 
@@ -149,6 +150,25 @@ func (h *MovieHandler) AddFromTMDB(w http.ResponseWriter, r *http.Request) {
 		rejectAddGroup(w)
 		return
 	}
+	state, err := h.entryRepo.GroupState(ctx)
+	if err != nil {
+		slog.Error("failed to read group state", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	version := state.Version
+	if supplied := r.FormValue("group_version"); supplied != "" {
+		parsed, err := strconv.ParseInt(supplied, 10, 64)
+		if err != nil || parsed < 0 {
+			http.Error(w, "Invalid group_version", http.StatusBadRequest)
+			return
+		}
+		if parsed != version {
+			rejectChangedGroup(w)
+			return
+		}
+		version = parsed
+	}
 	if err := h.entryRepo.CheckGroup(ctx, groupNumber); errors.Is(err, repository.ErrInvalidGroup) {
 		rejectAddGroup(w)
 		return
@@ -218,8 +238,9 @@ func (h *MovieHandler) AddFromTMDB(w http.ResponseWriter, r *http.Request) {
 
 	// Create entry for this movie
 	entry, err := h.entryRepo.Create(ctx, model.CreateEntryInput{
-		MovieID:     movie.ID,
-		GroupNumber: groupNumber,
+		MovieID:      movie.ID,
+		GroupNumber:  groupNumber,
+		GroupVersion: &version,
 	})
 	if errors.Is(err, repository.ErrCommitOutcomeUnknown) {
 		h.metrics.EntryAdded("unknown")
@@ -227,6 +248,10 @@ func (h *MovieHandler) AddFromTMDB(w http.ResponseWriter, r *http.Request) {
 		h.metrics.EntryAdded("failure")
 	} else {
 		h.metrics.EntryAdded("success")
+	}
+	if errors.Is(err, repository.ErrGroupNumberingChanged) {
+		rejectChangedGroup(w)
+		return
 	}
 	if errors.Is(err, repository.ErrInvalidGroup) {
 		rejectAddGroup(w)

@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -50,10 +51,16 @@ func (s *stubMovieRepo) Create(ctx context.Context, input model.CreateMovieInput
 }
 
 type stubMovieEntryRepo struct {
+	state        model.EntryGroupState
+	checkVersion bool
 	beforeCreate func()
 	checkErr     error
 	createErr    error
 	created      []model.CreateEntryInput
+}
+
+func (s *stubMovieEntryRepo) GroupState(ctx context.Context) (model.EntryGroupState, error) {
+	return s.state, nil
 }
 
 func (s *stubMovieEntryRepo) CheckGroup(ctx context.Context, group int) error {
@@ -75,6 +82,9 @@ func (s *stubMovieEntryRepo) Create(ctx context.Context, input model.CreateEntry
 		s.beforeCreate()
 	}
 	s.created = append(s.created, input)
+	if s.checkVersion && (input.GroupVersion == nil || *input.GroupVersion != s.state.Version) {
+		return nil, repository.ErrGroupNumberingChanged
+	}
 	if s.createErr != nil {
 		return nil, s.createErr
 	}
@@ -82,9 +92,10 @@ func (s *stubMovieEntryRepo) Create(ctx context.Context, input model.CreateEntry
 }
 
 type stubTMDBClient struct {
-	details  *tmdb.MovieDetails
-	err      error
-	getCalls int
+	beforeGet func()
+	details   *tmdb.MovieDetails
+	err       error
+	getCalls  int
 }
 
 func (s *stubTMDBClient) Search(ctx context.Context, query string) (*tmdb.SearchResponse, error) {
@@ -93,6 +104,9 @@ func (s *stubTMDBClient) Search(ctx context.Context, query string) (*tmdb.Search
 
 func (s *stubTMDBClient) GetMovie(ctx context.Context, tmdbID int) (*tmdb.MovieDetails, error) {
 	s.getCalls++
+	if s.beforeGet != nil {
+		s.beforeGet()
+	}
 	return s.details, s.err
 }
 
@@ -294,6 +308,48 @@ func TestEntryCreationMetrics(t *testing.T) {
 			assertDomainMetrics(t, m, "dejaview_entries_added_total", tc.want)
 			// Only the real TMDB client counts its own HTTP requests, never the handler.
 			assertDomainMetrics(t, m, "dejaview_tmdb_lookups_total", map[string]float64{})
+		})
+	}
+}
+
+func TestAddFromTMDBPreservesGroupVersionAcrossLookup(t *testing.T) {
+	for _, supplied := range []bool{false, true} {
+		t.Run(fmt.Sprint(supplied), func(t *testing.T) {
+			entries := &stubMovieEntryRepo{checkVersion: true}
+			movies := &stubMovieRepo{}
+			client := &stubTMDBClient{details: &tmdb.MovieDetails{Title: "Slow lookup"}, beforeGet: func() { entries.state.Version++ }}
+			handler := &MovieHandler{movieRepo: movies, entryRepo: entries, tmdbClient: client}
+			form := url.Values{"tmdb_id": {"1"}, "group_number": {"3"}}
+			if supplied {
+				form.Set("group_version", "0")
+			}
+			rec := postAddFromTMDB(handler, form)
+			if rec.Code != http.StatusConflict || !strings.Contains(rec.Header().Get("HX-Trigger"), "refreshGroups") {
+				t.Fatalf("stale add status=%d trigger=%s", rec.Code, rec.Header().Get("HX-Trigger"))
+			}
+			if len(entries.created) != 1 || entries.created[0].GroupVersion == nil || *entries.created[0].GroupVersion != 0 {
+				t.Fatalf("lost original group version: %+v", entries.created)
+			}
+			if strings.Contains(rec.Header().Get("HX-Trigger"), "Movie added!") {
+				t.Fatal("stale add reported success")
+			}
+		})
+	}
+}
+
+func TestAddFromTMDBRejectsStaleOrInvalidGroupVersionBeforeLookup(t *testing.T) {
+	for _, tc := range []struct {
+		version string
+		want    int
+	}{{"0", http.StatusConflict}, {"-1", http.StatusBadRequest}, {"abc", http.StatusBadRequest}, {"9223372036854775808", http.StatusBadRequest}} {
+		t.Run(tc.version, func(t *testing.T) {
+			entries := &stubMovieEntryRepo{state: model.EntryGroupState{Version: 1}}
+			movies := &stubMovieRepo{}
+			client := &stubTMDBClient{}
+			rec := postAddFromTMDB(&MovieHandler{movieRepo: movies, entryRepo: entries, tmdbClient: client}, url.Values{"tmdb_id": {"1"}, "group_number": {"3"}, "group_version": {tc.version}})
+			if rec.Code != tc.want || client.getCalls != 0 || len(movies.getByTMDBID) != 0 || len(entries.created) != 0 {
+				t.Fatalf("status=%d calls=%d movies=%d entries=%d", rec.Code, client.getCalls, len(movies.getByTMDBID), len(entries.created))
+			}
 		})
 	}
 }

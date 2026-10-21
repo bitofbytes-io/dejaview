@@ -30,7 +30,7 @@ type DashboardHandler struct {
 }
 
 type dashboardEntryRepository interface {
-	ListAll(ctx context.Context) ([]*model.Entry, error)
+	ListDashboard(ctx context.Context) ([]*model.Entry, model.EntryGroupState, error)
 }
 
 // NewDashboardHandler creates a new DashboardHandler
@@ -76,7 +76,7 @@ func (h *DashboardHandler) render(w http.ResponseWriter, r *http.Request, view d
 		w.Header().Add("Vary", "Cookie")
 	}
 	ctx := r.Context()
-	entries, err := h.entryRepo.ListAll(ctx)
+	entries, state, err := h.entryRepo.ListDashboard(ctx)
 	if err != nil {
 		slog.Error("failed to get dashboard data", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -97,6 +97,7 @@ func (h *DashboardHandler) render(w http.ResponseWriter, r *http.Request, view d
 
 	needs := h.needsPerson(w, r, persons)
 	filter := newRatingFilter(entries, persons, needs)
+	filter.GroupState = state
 	isAuthenticated := middleware.IsAuthenticated(ctx)
 	if err := view(groups, persons, currentGroup, filter, isAuthenticated).Render(ctx, w); err != nil {
 		slog.Error("failed to render dashboard", "error", err)

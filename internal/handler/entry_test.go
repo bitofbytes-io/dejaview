@@ -80,6 +80,7 @@ func TestUpdateEntryMapsRepositoryErrors(t *testing.T) {
 		{"moved", nil, http.StatusOK},
 		{"duplicate in target group", repository.ErrEntryExistsInGroup, http.StatusConflict},
 		{"moved concurrently", repository.ErrEntryGroupChanged, http.StatusConflict},
+		{"numbering changed", repository.ErrGroupNumberingChanged, http.StatusConflict},
 		{"missing entry", repository.ErrEntryNotFound, http.StatusNotFound},
 		{"invalid target group", repository.ErrInvalidGroup, http.StatusBadRequest},
 		{"unknown picker", repository.ErrPersonNotFound, http.StatusBadRequest},
@@ -157,6 +158,28 @@ func TestReorderMapsRepositoryErrors(t *testing.T) {
 			handler.Reorder(recorder, req)
 			if recorder.Code != tc.want {
 				t.Fatalf("expected status %d, got %d", tc.want, recorder.Code)
+			}
+		})
+	}
+}
+
+func TestUpdateEntryGroupVersion(t *testing.T) {
+	for _, tc := range []struct {
+		version string
+		want    int
+	}{{"7", http.StatusOK}, {"-1", http.StatusBadRequest}, {"abc", http.StatusBadRequest}} {
+		t.Run(tc.version, func(t *testing.T) {
+			store := &stubEntryStore{}
+			rec := putEntry(&EntryHandler{entryRepo: store}, uuid.NewString(), url.Values{"group_number": {"3"}, "group_version": {tc.version}})
+			if rec.Code != tc.want {
+				t.Fatalf("status=%d want=%d", rec.Code, tc.want)
+			}
+			if tc.want == http.StatusOK {
+				if store.lastInput.GroupVersion == nil || *store.lastInput.GroupVersion != 7 {
+					t.Fatalf("lost version: %+v", store.lastInput)
+				}
+			} else if store.updateCalls != 0 {
+				t.Fatal("invalid version reached repository")
 			}
 		})
 	}

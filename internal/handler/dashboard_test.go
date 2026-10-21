@@ -17,11 +17,12 @@ import (
 
 type stubDashboardEntries struct {
 	entries []*model.Entry
+	state   model.EntryGroupState
 	err     error
 }
 
-func (s *stubDashboardEntries) ListAll(ctx context.Context) ([]*model.Entry, error) {
-	return s.entries, s.err
+func (s *stubDashboardEntries) ListDashboard(ctx context.Context) ([]*model.Entry, model.EntryGroupState, error) {
+	return s.entries, s.state, s.err
 }
 
 func dashboardEntry(group int, title string) *model.Entry {
@@ -280,6 +281,33 @@ func TestDashboardCookiePrivacy(t *testing.T) {
 					}
 				})
 			}
+		}
+	}
+}
+
+func TestDashboardRendersPersistedGroupState(t *testing.T) {
+	entries := make([]*model.Entry, 9)
+	for i := range entries {
+		entries[i] = dashboardEntry(1, "Compacted normal pick")
+	}
+	h := &DashboardHandler{entryRepo: &stubDashboardEntries{entries: entries, state: model.EntryGroupState{Version: 7, FirstGroupCapacity: 9}}, personRepo: &stubPersonRepo{}}
+	manager := session.NewManager("fixture-only", time.Hour, false, 0)
+	cookie, err := manager.NewCookie()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/", "/dashboard-content"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		view := h.DashboardContent
+		if path == "/" {
+			view = h.DashboardPage
+		}
+		middleware.Auth(manager)(http.HandlerFunc(view)).ServeHTTP(rec, req)
+		body := rec.Body.String()
+		if rec.Code != http.StatusOK || !strings.Contains(body, "9 out of 9") || strings.Contains(body, "9 out of 8") || !strings.Contains(body, `data-group-version="7"`) {
+			t.Fatalf("%s: status=%d missing persisted state: %s", path, rec.Code, body)
 		}
 	}
 }

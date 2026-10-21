@@ -94,6 +94,8 @@ Manage people in the app at `/people` (the **People** link in the header; sign i
 
 Migration 003 seeds four example people (D, J, C and A) with the colours cyan, rose, amber and violet. On a new install, add your own people on the People page, then remove the examples before anyone picks or rates a movie. A movie counts in the Trophy Room (rating trophies, Genre Spotlight ratings, Family Top Five and the family-rated total) once all but one person has rated it, and always at least one: 3 of 4 people, or 1 of 2. Its score is the average of the ratings it has.
 
+Deleting or moving the last movie out of a group compacts later group numbers in the same transaction. Dashboard add requests carry `group_version`; an invalidated selection returns HTTP 409 and refreshes the groups. Numeric callers may omit the version to target the current numbering at request start; repository writes also reject numbering changes while waiting for the write lock. Reorders identify every entry by UUID and reject a changed group. The historical first group retains its eight-pick total until it disappears; a later group renumbered to 1 keeps the normal nine-pick total. Migration 015 persists this state independently of group numbers.
+
 The dashboard nudges people to rate: each poster shows a dashed initial for everyone who hasn't rated it yet, a **Waiting on** line above the groups counts each person's unrated movies, and the **Needs rating from** dropdown (or `/?needs=<initial>`) shows only one person's unrated movies. The choice is remembered in a `dv_me` cookie, which is just a default for the filter, not a login; choose **Anyone** (`/?needs=`) to see every movie again.
 
 No configuration is needed beyond running migration 013, which adds `persons.color`.

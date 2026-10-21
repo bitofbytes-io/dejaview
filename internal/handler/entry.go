@@ -63,6 +63,14 @@ func (h *EntryHandler) Update(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		input.GroupNumber = &groupNumber
+		if supplied := r.FormValue("group_version"); supplied != "" {
+			version, err := strconv.ParseInt(supplied, 10, 64)
+			if err != nil || version < 0 {
+				http.Error(w, "Invalid group_version", http.StatusBadRequest)
+				return
+			}
+			input.GroupVersion = &version
+		}
 	}
 
 	if _, ok := r.Form["picked_by_person_id"]; ok {
@@ -84,6 +92,10 @@ func (h *EntryHandler) Update(w http.ResponseWriter, r *http.Request) {
 	err = h.entryRepo.Update(ctx, entryID, input)
 	if errors.Is(err, repository.ErrEntryNotFound) {
 		http.Error(w, "Entry not found", http.StatusNotFound)
+		return
+	}
+	if errors.Is(err, repository.ErrGroupNumberingChanged) {
+		rejectChangedGroup(w)
 		return
 	}
 	if errors.Is(err, repository.ErrInvalidGroup) {
@@ -202,4 +214,10 @@ func (h *EntryHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("entries reordered", "group_number", groupNum, "entry_count", len(entryIDs))
 	w.WriteHeader(http.StatusOK)
+}
+
+// rejectChangedGroup asks the client to reload its numeric group selection.
+func rejectChangedGroup(w http.ResponseWriter) {
+	w.Header().Set("HX-Trigger", `{"showToast": {"message": "Groups changed; refresh and try again", "type": "error"}, "refreshGroups": true}`)
+	http.Error(w, "Groups changed; refresh and try again", http.StatusConflict)
 }
