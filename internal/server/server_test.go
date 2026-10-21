@@ -156,3 +156,15 @@ func TestPreviousReleaseSessionStaysValid(t *testing.T) {
 		}
 	}
 }
+
+func TestRatingsPutRequiresLogin(t *testing.T) {
+	router := New(&config.Config{APIToken: "api-token"}, nil, nil, nil, nil, nil, nil, nil, nil).Router()
+	req := httptest.NewRequest(http.MethodPut, "/api/entries/0b0a8f5e-2d86-4a46-8f0c-5e0d3f2f6f11/ratings", strings.NewReader(`{"ratings":[]}`))
+	req.Header.Set("Origin", "http://example.com")
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("logged-out PUT ratings: status %d, want 401", recorder.Code)
+	}
+}

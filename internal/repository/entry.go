@@ -92,6 +92,10 @@ func (r *EntryRepository) Create(ctx context.Context, input model.CreateEntryInp
 		_ = tx.Rollback(ctx)
 	}()
 
+	if err := lockEntryGroups(ctx, tx); err != nil {
+		return nil, err
+	}
+
 	// Serialize position assignment per group to avoid duplicate positions under concurrency.
 	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(1, $1)", input.GroupNumber); err != nil {
 		return nil, fmt.Errorf("create entry lock group: %w", err)
@@ -136,7 +140,7 @@ func (r *EntryRepository) Create(ctx context.Context, input model.CreateEntryInp
 }
 
 // CheckGroup returns ErrInvalidGroup unless group is an existing group or
-// the next new one. Create checks again under the group's lock; this lets a
+// the next new one. Create checks again under the global group lock; this lets a
 // caller reject a stale group before writing anything else.
 func (r *EntryRepository) CheckGroup(ctx context.Context, group int) error {
 	return checkGroup(ctx, r.pool, group)
@@ -286,8 +290,9 @@ func isForeignKeyViolation(err error, constraint string) bool {
 const maxMoveAttempts = 3
 
 // Update updates an existing entry. Changing the group moves the entry to the
-// end of the target group under the same per-group advisory locks used by
-// Create and ReorderEntries. It returns ErrEntryNotFound for a missing entry,
+// end of the target group under the global and per-group advisory locks
+// used by Create and ReorderEntries. Empty groups are compacted before commit.
+// It returns ErrEntryNotFound for a missing entry,
 // ErrInvalidGroup for a target group that is neither an existing group nor
 // the next new one, and ErrPersonNotFound for an unknown picker.
 func (r *EntryRepository) Update(ctx context.Context, id uuid.UUID, input model.UpdateEntryInput) error {
@@ -309,6 +314,10 @@ func (r *EntryRepository) update(ctx context.Context, id uuid.UUID, input model.
 	defer func() {
 		_ = tx.Rollback(ctx)
 	}()
+
+	if err := lockEntryGroups(ctx, tx); err != nil {
+		return err
+	}
 
 	if input.GroupNumber != nil {
 		if err := moveEntryToGroup(ctx, tx, id, *input.GroupNumber); err != nil {
@@ -343,9 +352,12 @@ func (r *EntryRepository) update(ctx context.Context, id uuid.UUID, input model.
 }
 
 // moveEntryToGroup moves an entry to the end of targetGroup within tx. It
-// returns with the entry row locked, so the entry stays in targetGroup until
-// tx ends.
+// returns with the entry row locked and empty groups compacted. The target
+// group number shifts down if removing the source left a gap before it.
 func moveEntryToGroup(ctx context.Context, tx pgx.Tx, id uuid.UUID, targetGroup int) error {
+	if err := lockEntryGroups(ctx, tx); err != nil {
+		return err
+	}
 	var sourceGroup int
 	var movieID uuid.UUID
 	err := tx.QueryRow(ctx, "SELECT group_number, movie_id FROM entries WHERE id = $1", id).Scan(&sourceGroup, &movieID)
@@ -419,19 +431,66 @@ func moveEntryToGroup(ctx context.Context, tx pgx.Tx, id uuid.UUID, targetGroup 
 	); err != nil {
 		return fmt.Errorf("move entry: %w", err)
 	}
-	return nil
+	return compactEntryGroups(ctx, tx)
 }
 
 // Delete removes an entry from the database. It returns ErrEntryNotFound when
 // the entry does not exist.
 func (r *EntryRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	query := `DELETE FROM entries WHERE id = $1`
-	tag, err := r.pool.Exec(ctx, query, id)
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("delete entry begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockEntryGroups(ctx, tx); err != nil {
+		return err
+	}
+	tag, err := tx.Exec(ctx, "DELETE FROM entries WHERE id = $1", id)
 	if err != nil {
 		return fmt.Errorf("delete entry: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrEntryNotFound
+	}
+	if err := compactEntryGroups(ctx, tx); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("delete entry commit: %w", err)
+	}
+	return nil
+}
+
+// lockEntryGroups reserves (1, 0) for all entry mutations, before any group
+// reads, per-group locks, or row locks. Group numbers start at 1. This keeps
+// inserts and reorders from racing with renumbering in another transaction.
+func lockEntryGroups(ctx context.Context, tx pgx.Tx) error {
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(1, 0)"); err != nil {
+		return fmt.Errorf("lock entry groups: %w", err)
+	}
+	return nil
+}
+
+// compactEntryGroups requires lockEntryGroups. Move groups in ascending order
+// into empty numbers: a single dense-rank UPDATE can violate the immediate
+// movie/group and group/position unique constraints before other rows move.
+// Only group numbers change; entry IDs, positions, ratings, and pickers survive.
+func compactEntryGroups(ctx context.Context, tx pgx.Tx) error {
+	rows, err := tx.Query(ctx, "SELECT DISTINCT group_number FROM entries ORDER BY group_number")
+	if err != nil {
+		return fmt.Errorf("read groups to compact: %w", err)
+	}
+	groups, err := pgx.CollectRows(rows, pgx.RowTo[int])
+	if err != nil {
+		return fmt.Errorf("scan groups to compact: %w", err)
+	}
+	for i, group := range groups {
+		if group == i+1 {
+			continue
+		}
+		if _, err := tx.Exec(ctx, "UPDATE entries SET group_number = $1 WHERE group_number = $2", i+1, group); err != nil {
+			return fmt.Errorf("compact entry group: %w", err)
+		}
 	}
 	return nil
 }
@@ -447,6 +506,10 @@ func (r *EntryRepository) ReorderEntries(ctx context.Context, groupNumber int, e
 	defer func() {
 		_ = tx.Rollback(ctx)
 	}()
+
+	if err := lockEntryGroups(ctx, tx); err != nil {
+		return err
+	}
 
 	// Serialize reorders per group to avoid conflicting position updates.
 	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(1, $1)", groupNumber); err != nil {

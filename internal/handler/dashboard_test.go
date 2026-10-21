@@ -226,3 +226,60 @@ func TestDashboardReturns500WhenEntriesFail(t *testing.T) {
 		}
 	}
 }
+
+func TestDashboardCookiePrivacy(t *testing.T) {
+	person := &model.Person{ID: uuid.New(), Initial: "A", Name: "Viewer", Color: "cyan"}
+	for _, secure := range []bool{false, true} {
+		h := &DashboardHandler{entryRepo: &stubDashboardEntries{}, personRepo: &stubPersonRepo{persons: []*model.Person{person}}, secureCookies: secure}
+		for path, serve := range map[string]http.HandlerFunc{"/": h.DashboardPage, "/dashboard-content": h.DashboardContent} {
+			for _, tc := range []struct{ name, query, cookie, want string }{
+				{"absent", "", "", "none"},
+				{"set", "?needs=A", "", "set"},
+				{"read", "", "A", "none"},
+				{"clear query", "?needs=", "A", "clear"},
+				{"invalid escape", "", "%ZZ", "clear"},
+				{"invalid syntax", "", "\"unterminated", "clear"},
+				{"unknown or deleted person", "", "Z", "clear"},
+				{"blank", "", "%20", "clear"},
+			} {
+				t.Run(path+tc.name+map[bool]string{false: "http", true: "https"}[secure], func(t *testing.T) {
+					req := httptest.NewRequest(http.MethodGet, path+tc.query, nil)
+					if tc.cookie != "" {
+						req.Header.Set("Cookie", meCookie+"="+tc.cookie)
+					}
+					rec := httptest.NewRecorder()
+					rec.Header().Add("Vary", "Accept-Encoding")
+					rec.Header().Set("X-Preserved", "yes")
+					serve(rec, req)
+					if rec.Header().Get("Cache-Control") != "private, no-store" {
+						t.Fatal("missing private cache policy")
+					}
+					vary := strings.Join(rec.Header().Values("Vary"), ",")
+					if !strings.Contains(vary, "Cookie") || !strings.Contains(vary, "Accept-Encoding") || rec.Header().Get("X-Preserved") != "yes" {
+						t.Fatalf("headers not preserved: %v", rec.Header())
+					}
+					cookies := rec.Result().Cookies()
+					if tc.want == "none" {
+						if len(cookies) != 0 {
+							t.Fatalf("unexpected cookie: %v", cookies)
+						}
+						return
+					}
+					if len(cookies) != 1 {
+						t.Fatalf("cookies = %v", cookies)
+					}
+					c := cookies[0]
+					if c.Name != meCookie || c.Path != "/" || !c.HttpOnly || c.Secure != secure || c.SameSite != http.SameSiteLaxMode {
+						t.Fatalf("cookie flags: %+v", c)
+					}
+					if tc.want == "clear" && (c.Value != "" || c.MaxAge != -1) {
+						t.Fatalf("not cleared: %+v", c)
+					}
+					if tc.want == "set" && (c.Value != "A" || c.MaxAge != meCookieMaxAge) {
+						t.Fatalf("not set: %+v", c)
+					}
+				})
+			}
+		}
+	}
+}

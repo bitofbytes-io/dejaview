@@ -421,8 +421,8 @@ func TestAdvantageHolderEdgesPostgres(t *testing.T) {
 	if err != nil || group != 1 || holder == nil || *holder != picker {
 		t.Fatalf("advantage holder=%+v group=%d err=%v, want %s in group 1", holder, group, err, picker.Initial)
 	}
-	add("Dune", 2)
-	check(2) // group 2's last entry has no picker
+	add("Dune", 3) // the original group 3 was compacted to group 2
+	check(2)       // group 2's last entry has no picker
 }
 
 // TestGenrePickStatsPostgres covers reading genres from saved TMDB metadata:
