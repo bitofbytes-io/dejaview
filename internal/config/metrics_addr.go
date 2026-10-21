@@ -45,11 +45,9 @@ func validMetricsHost(host string, bracketed bool) bool {
 		if err != nil || !ip.Is6() {
 			return false
 		}
-		for _, c := range []byte(ip.Zone()) {
-			if !alnum(c) && c != '.' && c != '_' && c != '-' {
-				return false
-			}
-		}
+		// ParseAddr rejects an explicitly empty zone. Leave other zone strings
+		// to the platform: interface names may contain spaces, Unicode, and
+		// punctuation (for example, Windows' "Local Area Connection").
 		return true
 	}
 	if host == "" {

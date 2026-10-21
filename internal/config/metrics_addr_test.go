@@ -44,6 +44,10 @@ func TestMetricsAddrHostSyntax(t *testing.T) {
 		"1carma.internal:9464", "xn--caf-dma.invalid:9464", "127.0.0.1:9464", "0.0.0.0:9464", "255.255.255.255:9464",
 		"[::]:9464", "[2001:db8::1]:9464", "[::ffff:192.0.2.1]:9464", "[fe80::1%lo0]:9464",
 		"[fe80::1%12]:9464", "[fe80::1%eth0.1]:9464", "[fe80::1%en_test-0]:9464",
+		// Zones are platform interface identifiers, not DNS labels or URL paths.
+		"[fe80::1%Local Area Connection]:9464", "[fe80::1%Loopback Pseudo-Interface 1]:9464",
+		"[fe80::1%Connexion réseau]:9464", "[fe80::1%vEthernet (Default Switch)]:9464",
+		"[fe80::1%#]:9464", "[fe80::1%&]:9464",
 		longest + ":9464", longest + ".:9464",
 	}
 	invalid := []string{
@@ -51,7 +55,7 @@ func TestMetricsAddrHostSyntax(t *testing.T) {
 		"127.1:9464", "127.0.0.1.:9464", "host\tname:9464", "host\nname:9464", "foo\\bar:9464",
 		"user@host:9464", "host_name:9464", "-host:9464", "host-:9464", "host..name:9464", ".host:9464", "host..:9464", ".:9464",
 		"[localhost]:9464", "[127.0.0.1]:9464", "[]:9464", "[gggg::1]:9464", "[::ffff:999.1.1.1]:9464",
-		"[fe80::1%]:9464", "[fe80::1%bad zone]:9464", "[fe80::1%bad/zone]:9464", "[fe80::1%bad%zone]:9464",
+		"[fe80::1%]:9464", "[gggg::1%Local Area Connection]:9464",
 		"127.0.0.1%lo0:9464", "café.invalid:9464", strings.Repeat("a", 64) + ".invalid:9464", longest + "e:9464",
 	}
 	for _, addr := range valid {
