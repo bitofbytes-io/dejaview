@@ -58,10 +58,14 @@ jobs:
           go mod tidy
           make templ
           go mod tidy
-          git add -A -- go.mod go.sum
-          git add -A -- ':(glob)**/*_templ.go'
+          # Generated *_templ.go files are gitignored. A pathspec that matches
+          # none of them makes git add exit 128, so the empty-diff path never
+          # records changed=false. Stage the module files only and leave the
+          # generated output untracked.
+          git add -- go.mod go.sum
           if git diff --cached --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No go.mod or go.sum changes."
             exit 0
           fi
           mkdir -p "${RUNNER_TEMP}/templ-update"

@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
-# Reject a staged diff unless every entry is a regular-file add, modification,
-# or deletion of go.mod, go.sum, or *_templ.go.
+# Reject a staged diff unless every entry is a regular-file add or
+# modification of go.mod or go.sum.
+#
+# Generated *_templ.go files are gitignored and must not be committed.
+# Deletions are rejected too: this job only refreshes module checksums.
 #
 # git apply --numstat is not enough: a rename is reported only under its
 # destination, and a symlink keeps the same path. Inspect the index after
-# apply, with rename detection off, and reject non-regular modes.
+# apply, with rename detection off, and reject non-regular modes. Do not
+# unquote paths. A quoted name, or one containing a newline, tab, or
+# backslash, is rejected even when the text inside looks like go.mod.
 
 set -euo pipefail
 
 allowed_path() {
   case "$1" in
-    go.mod|go.sum|*_templ.go) return 0 ;;
+    go.mod|go.sum) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -19,6 +24,15 @@ regular_mode() {
   case "$1" in
     100644|100755) return 0 ;;
     *) return 1 ;;
+  esac
+}
+
+reject_unusual_path() {
+  case "$1" in
+    *'"'*|*'\'*|*$'\n'*|*$'\t'*)
+      echo "Staged diff path is quoted or contains an unusual character: ${1}" >&2
+      exit 1
+      ;;
   esac
 }
 
@@ -34,10 +48,11 @@ while IFS=$'\t' read -r status path extra; do
     echo "Staged diff has a rename, copy, or unexpected path: ${status} ${path} ${extra:-}" >&2
     exit 1
   fi
+  reject_unusual_path "${path}"
   case "${status}" in
-    A|M|D) ;;
+    A|M) ;;
     *)
-      echo "Staged diff status ${status} is not an add, modification, or deletion (${path})" >&2
+      echo "Staged diff status ${status} is not an add or modification (${path})" >&2
       exit 1
       ;;
   esac
@@ -62,11 +77,12 @@ while IFS=$'\t' read -r meta path extra; do
     echo "Staged diff has a rename, copy, or unexpected path: ${meta} ${path} ${extra:-}" >&2
     exit 1
   fi
+  reject_unusual_path "${path}"
   IFS=' ' read -r oldmode newmode _oldsha _newsha status <<< "${meta#:}"
   case "${status}" in
-    A|M|D) ;;
+    A|M) ;;
     *)
-      echo "Staged diff status ${status} is not an add, modification, or deletion (${path})" >&2
+      echo "Staged diff status ${status} is not an add or modification (${path})" >&2
       exit 1
       ;;
   esac
@@ -84,12 +100,6 @@ while IFS=$'\t' read -r meta path extra; do
     A)
       if [ "${oldmode}" != "000000" ] || ! regular_mode "${newmode}"; then
         echo "Staged addition of ${path} is not a regular file (${oldmode} -> ${newmode})" >&2
-        exit 1
-      fi
-      ;;
-    D)
-      if [ "${newmode}" != "000000" ] || ! regular_mode "${oldmode}"; then
-        echo "Staged deletion of ${path} is not a regular file (${oldmode} -> ${newmode})" >&2
         exit 1
       fi
       ;;
