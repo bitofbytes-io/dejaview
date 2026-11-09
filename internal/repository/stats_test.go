@@ -534,3 +534,93 @@ func TestGenrePickStatsPostgres(t *testing.T) {
 		}
 	}
 }
+
+// TestDecadeStatsPostgres covers grouping watched movies by release decade:
+// every entry counts toward its decade's total, only family-rated entries feed
+// the average, and movies without a release year are counted apart.
+func TestDecadeStatsPostgres(t *testing.T) {
+	pool := ratingTestPool(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	entries := NewEntryRepository(pool)
+	stats := NewStatsRepository(pool)
+
+	people := map[string]uuid.UUID{}
+	rows, err := pool.Query(ctx, `SELECT initial, id FROM persons`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var initial string
+		var id uuid.UUID
+		if err := rows.Scan(&initial, &id); err != nil {
+			t.Fatal(err)
+		}
+		people[initial] = id
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	addEntry := func(title string, year *int) uuid.UUID {
+		t.Helper()
+		var movieID uuid.UUID
+		if err := pool.QueryRow(ctx, `INSERT INTO movies(title, release_year) VALUES ($1, $2) RETURNING id`, title, year).Scan(&movieID); err != nil {
+			t.Fatal(err)
+		}
+		entry, err := entries.Create(ctx, model.CreateEntryInput{MovieID: movieID, GroupNumber: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return entry.ID
+	}
+	rate := func(entryID uuid.UUID, scores map[string]float64) {
+		t.Helper()
+		for initial, score := range scores {
+			if _, err := pool.Exec(ctx, `INSERT INTO ratings(person_id, entry_id, score) VALUES ($1, $2, $3)`, people[initial], entryID, score); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	year := func(y int) *int { return &y }
+
+	got, err := stats.GetDecadeStats(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Decades) != 0 || got.UnknownYear != 0 {
+		t.Fatalf("empty library: got %+v, want no decades", got)
+	}
+
+	rate(addEntry("Alien", year(1979)), map[string]float64{"D": 8, "J": 6, "C": 7, "A": 9}) // avg 7.5
+	rate(addEntry("Blade Runner", year(1982)), map[string]float64{"D": 9, "J": 9, "C": 9, "A": 9})
+	addEntry("Cube", year(1999))                                                         // unrated
+	rate(addEntry("Dune", year(1984)), map[string]float64{"D": 10})                      // 1 of 4: does not count
+	rate(addEntry("Eraserhead", year(1977)), map[string]float64{"D": 4, "J": 4, "C": 4}) // 3 of 4 counts
+	rate(addEntry("Fargo", year(2000)), map[string]float64{"D": 6, "J": 6, "C": 6, "A": 6})
+	addEntry("Gattaca", nil)
+	rate(addEntry("Heat", nil), map[string]float64{"D": 10, "J": 10, "C": 10, "A": 10}) // rated, but no decade to join
+
+	got, err = stats.GetDecadeStats(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []model.DecadeStat{
+		{Decade: 1970, Movies: 2, RatedMovies: 2, AverageRating: (7.5 + 4) / 2},
+		{Decade: 1980, Movies: 2, RatedMovies: 1, AverageRating: 9},
+		{Decade: 1990, Movies: 1},
+		{Decade: 2000, Movies: 1, RatedMovies: 1, AverageRating: 6},
+	}
+	if len(got.Decades) != len(want) {
+		t.Fatalf("got %d decades, want %d: %+v", len(got.Decades), len(want), got.Decades)
+	}
+	for i, w := range want {
+		g := got.Decades[i]
+		if g.Decade != w.Decade || g.Movies != w.Movies || g.RatedMovies != w.RatedMovies || math.Abs(g.AverageRating-w.AverageRating) > 1e-9 {
+			t.Errorf("decade %d: got %+v, want %+v", w.Decade, g, w)
+		}
+	}
+	if got.UnknownYear != 2 {
+		t.Errorf("got %d movies without a release year, want 2", got.UnknownYear)
+	}
+}
