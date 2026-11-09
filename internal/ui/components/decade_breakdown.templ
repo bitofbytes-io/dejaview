@@ -16,7 +16,7 @@ templ DecadeBreakdown(decades model.DecadeBreakdown) {
 			for _, decade := range decades.Decades {
 				<li class="decade-row">
 					<span class="decade-label">{ decadeLabel(decade.Decade) }</span>
-					<progress class="decade-bar" max={ ui.IntToStr(decades.MostMovies()) } value={ ui.IntToStr(decade.Movies) }>
+					<progress class="decade-bar" max={ ui.IntToStr(decades.MostMovies()) } value={ ui.IntToStr(decade.Movies) } aria-label={ decadeBarLabel(decade) }>
 						{ decadeMovies(decade.Movies) }
 					</progress>
 					<span class="decade-count">{ decadeMovies(decade.Movies) }</span>
@@ -63,6 +63,11 @@ func decadeRatedTitle(decade model.DecadeStat) string {
 		return "Family average over 1 family-rated movie"
 	}
 	return fmt.Sprintf("Family average over %d family-rated movies", decade.RatedMovies)
+}
+
+
+func decadeBarLabel(decade model.DecadeStat) string {
+	return fmt.Sprintf("%s, %s", decadeLabel(decade.Decade), decadeMovies(decade.Movies))
 }
 
 func decadeUnknown(movies int) string {

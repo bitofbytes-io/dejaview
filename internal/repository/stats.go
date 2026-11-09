@@ -305,7 +305,7 @@ func (r *StatsRepository) GetDecadeStats(ctx context.Context) (model.DecadeBreak
 			GROUP BY entry_id
 			` + fullyRated + `
 		)
-		SELECT m.release_year / 10 * 10, COUNT(*),
+		SELECT CASE WHEN m.release_year <= 0 THEN NULL ELSE m.release_year / 10 * 10 END, COUNT(*),
 			COUNT(es.average_rating), COALESCE(AVG(es.average_rating), 0)
 		FROM entries e
 		JOIN movies m ON m.id = e.movie_id
