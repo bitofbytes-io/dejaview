@@ -600,7 +600,7 @@ func TestDecadeStatsPostgres(t *testing.T) {
 	rate(addEntry("Fargo", year(2000)), map[string]float64{"D": 6, "J": 6, "C": 6, "A": 6})
 	addEntry("Gattaca", nil)
 	rate(addEntry("Heat", nil), map[string]float64{"D": 10, "J": 10, "C": 10, "A": 10}) // rated, but no decade to join
-	addEntry("Year Zero", year(0)) // nonpositive year counts as unknown
+	addEntry("Year Zero", year(0))                                                      // nonpositive year counts as unknown
 
 	got, err = stats.GetDecadeStats(ctx)
 	if err != nil {
