@@ -1,0 +1,78 @@
+package components
+
+import (
+	"fmt"
+
+	"github.com/drywaters/dejaview/internal/model"
+	"github.com/drywaters/dejaview/internal/ui"
+)
+
+// DecadeBreakdown renders a bar per decade, scaled by how many movies came out
+// in it, with the family's average rating beside it. Movies with no release
+// year are counted in a footnote.
+templ DecadeBreakdown(decades model.DecadeBreakdown) {
+	if len(decades.Decades) > 0 {
+		<ol class="decade-list">
+			for _, decade := range decades.Decades {
+				<li class="decade-row">
+					<span class="decade-label">{ decadeLabel(decade.Decade) }</span>
+					<progress class="decade-bar" max={ ui.IntToStr(decades.MostMovies()) } value={ ui.IntToStr(decade.Movies) } aria-label={ decadeBarLabel(decade) }>
+						{ decadeMovies(decade.Movies) }
+					</progress>
+					<span class="decade-count">{ decadeMovies(decade.Movies) }</span>
+					if decade.RatedMovies > 0 {
+						<span class={ "rating-badge", model.ScoreColorClass(decade.AverageRating) } title={ decadeRatedTitle(decade) }>
+							{ fmt.Sprintf("%.1f", decade.AverageRating) }
+						</span>
+					} else {
+						<span class="rating-badge rating-empty" title="No family-rated movies yet">
+							<span aria-hidden="true">—</span>
+							<span class="sr-only">No family-rated movies yet</span>
+						</span>
+					}
+				</li>
+			}
+		</ol>
+	} else {
+		<div class="top-movies-empty">
+			@Icon("film-reel", "")
+			<div>
+				<h3>No release years yet</h3>
+				<p>Movies added from TMDB bring their release year along.</p>
+			</div>
+		</div>
+	}
+	if decades.UnknownYear > 0 {
+		<p class="decade-footnote">{ decadeUnknown(decades.UnknownYear) }</p>
+	}
+}
+
+func decadeLabel(decade int) string {
+	return fmt.Sprintf("%ds", decade)
+}
+
+func decadeMovies(movies int) string {
+	if movies == 1 {
+		return "1 movie"
+	}
+	return fmt.Sprintf("%d movies", movies)
+}
+
+func decadeRatedTitle(decade model.DecadeStat) string {
+	if decade.RatedMovies == 1 {
+		return "Family average over 1 family-rated movie"
+	}
+	return fmt.Sprintf("Family average over %d family-rated movies", decade.RatedMovies)
+}
+
+
+func decadeBarLabel(decade model.DecadeStat) string {
+	return fmt.Sprintf("%s, %s", decadeLabel(decade.Decade), decadeMovies(decade.Movies))
+}
+
+func decadeUnknown(movies int) string {
+	if movies == 1 {
+		return "1 movie has no release year and is not counted above."
+	}
+	return fmt.Sprintf("%d movies have no release year and are not counted above.", movies)
+}

@@ -762,6 +762,23 @@ body.dv-crt::before { position: fixed; }
 .top-movie-meta span + span::before { content: ""; display: inline-block; width: 3px; height: 3px; margin: 0 8px; border-radius: 50%; background: currentColor; vertical-align: middle; }
 @media (max-width: 639px) { .top-movie-meta span:nth-child(n + 3) { display: none; } }
 
+/* Decade breakdown: a native progress bar per decade, no inline styles. */
+.decade-list { list-style: none; margin: 0; padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); }
+.decade-row { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; align-items: center; gap: var(--space-1) var(--space-3); }
+.decade-label { font-family: var(--font-mono); font-size: 14px; line-height: 20px; font-weight: 600; color: var(--ink); }
+.decade-bar { grid-column: 2; width: 100%; height: 12px; appearance: none; border: 0; border-radius: var(--radius-pill); overflow: hidden; background: var(--surface-sunken); color: var(--neon-cyan); }
+.decade-bar::-webkit-progress-bar { background: var(--surface-sunken); }
+.decade-bar::-webkit-progress-value { background: var(--neon-cyan); border-radius: var(--radius-pill); }
+.decade-bar::-moz-progress-bar { background: var(--neon-cyan); border-radius: var(--radius-pill); }
+.decade-count { grid-column: 2; grid-row: 2; font-family: var(--font-mono); font-size: 13px; line-height: 18px; color: var(--ink-muted); }
+.decade-row .rating-badge { grid-column: 3; grid-row: 1 / span 2; }
+.decade-footnote { margin: calc(var(--space-2) * -1) 0 0; font-size: 13px; line-height: 18px; color: var(--ink-muted); }
+@media (min-width: 640px) {
+  .decade-row { grid-template-columns: 56px minmax(0, 1fr) 88px auto; }
+  .decade-count { grid-column: 3; grid-row: 1; text-align: right; }
+  .decade-row .rating-badge { grid-column: 4; grid-row: 1; }
+}
+
 /* Login */
 .login-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: var(--space-4); }
 .login-error { margin-bottom: var(--space-6); padding: var(--space-3) var(--space-4); border: 1px solid var(--signal-error); border-radius: var(--radius-md); background: var(--surface-sunken); color: var(--ink); font-size: 14px; line-height: 20px; }

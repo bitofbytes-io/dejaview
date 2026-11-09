@@ -78,6 +78,17 @@ templ StatsPage(data *model.StatsData, isAuthenticated bool) {
 				<section class="trophy-room-section">
 					<div class="trophy-room-heading">
 						<h2 class="trophy-room-section-title">
+							@components.Icon("bar-chart", "")
+							<span>Decades We Watch</span>
+						</h2>
+						<p>Which eras we pick, and how we rate them.</p>
+					</div>
+					@components.DecadeBreakdown(data.Decades)
+				</section>
+
+				<section class="trophy-room-section">
+					<div class="trophy-room-heading">
+						<h2 class="trophy-room-section-title">
 							@components.Icon("target", "")
 							<span>Taste Match</span>
 						</h2>

@@ -153,6 +153,36 @@ type GenreSpotlight struct {
 	Loyalist       Trophy
 }
 
+// DecadeStat is how many watched movies came out in one decade and how the
+// family rated them. Decade is the first year, such as 1990 for the 1990s.
+type DecadeStat struct {
+	Decade int
+	Movies int
+	// RatedMovies counts the Movies rated by enough people to count (see
+	// TrophyRatingThreshold), and AverageRating is the mean of their family
+	// averages. It is zero while RatedMovies is zero.
+	RatedMovies   int
+	AverageRating float64
+}
+
+// DecadeBreakdown holds the Trophy Room's decade stats, oldest decade first.
+type DecadeBreakdown struct {
+	Decades []DecadeStat
+	// UnknownYear counts the watched movies with no release year, which no
+	// decade includes.
+	UnknownYear int
+}
+
+// MostMovies returns the largest Movies count among the decades, which the
+// bars are scaled against.
+func (b DecadeBreakdown) MostMovies() int {
+	most := 0
+	for _, decade := range b.Decades {
+		most = max(most, decade.Movies)
+	}
+	return most
+}
+
 // StatsData holds the streamlined data rendered by the Trophy Room.
 type StatsData struct {
 	AdvantageHolder *Person
@@ -161,6 +191,7 @@ type StatsData struct {
 	TopMovies       []RankedMovie
 	Genres          GenreSpotlight
 	TasteMatch      TasteMatch
+	Decades         DecadeBreakdown
 
 	TotalMoviesWatched    int
 	TotalWatchTimeMinutes int

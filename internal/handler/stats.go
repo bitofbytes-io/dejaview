@@ -75,6 +75,11 @@ func (h *StatsHandler) buildStatsData(ctx context.Context) (*model.StatsData, er
 		return nil, fmt.Errorf("get genre pick stats: %w", err)
 	}
 
+	decades, err := h.statsRepo.GetDecadeStats(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get decade stats: %w", err)
+	}
+
 	tastePairs, err := h.statsRepo.GetTastePairs(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get taste pairs: %w", err)
@@ -97,6 +102,7 @@ func (h *StatsHandler) buildStatsData(ctx context.Context) (*model.StatsData, er
 		TopMovies:             topMovies,
 		Genres:                calculateGenreSpotlight(genreStats),
 		TasteMatch:            calculateTasteMatch(trophyStats, tastePairs, mostDivisive),
+		Decades:               decades,
 		TotalMoviesWatched:    totalWatched,
 		TotalWatchTimeMinutes: totalRuntime,
 		FullyRatedMovies:      fullyRated,

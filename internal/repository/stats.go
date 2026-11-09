@@ -292,6 +292,51 @@ func (r *StatsRepository) GetGenrePickStats(ctx context.Context) ([]model.GenreP
 	return stats, rows.Err()
 }
 
+// GetDecadeStats returns, for each decade of release year, how many watched
+// movies came out in it and how the family rated them, oldest decade first,
+// and how many watched movies have no release year. Every entry counts toward
+// the movie total, and only family-rated entries (see fullyRated) count toward
+// the average.
+func (r *StatsRepository) GetDecadeStats(ctx context.Context) (model.DecadeBreakdown, error) {
+	query := `
+		WITH entry_scores AS (
+			SELECT entry_id, AVG(score) AS average_rating
+			FROM ratings
+			GROUP BY entry_id
+			` + fullyRated + `
+		)
+		SELECT CASE WHEN m.release_year <= 0 THEN NULL ELSE m.release_year / 10 * 10 END, COUNT(*),
+			COUNT(es.average_rating), COALESCE(AVG(es.average_rating), 0)
+		FROM entries e
+		JOIN movies m ON m.id = e.movie_id
+		LEFT JOIN entry_scores es ON es.entry_id = e.id
+		GROUP BY 1
+		ORDER BY 1`
+
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return model.DecadeBreakdown{}, fmt.Errorf("get decade stats: %w", err)
+	}
+	defer rows.Close()
+
+	var breakdown model.DecadeBreakdown
+	for rows.Next() {
+		var decade *int
+		var stat model.DecadeStat
+		if err := rows.Scan(&decade, &stat.Movies, &stat.RatedMovies, &stat.AverageRating); err != nil {
+			return model.DecadeBreakdown{}, fmt.Errorf("scan decade stat: %w", err)
+		}
+		if decade == nil {
+			breakdown.UnknownYear = stat.Movies
+			continue
+		}
+		stat.Decade = *decade
+		breakdown.Decades = append(breakdown.Decades, stat)
+	}
+
+	return breakdown, rows.Err()
+}
+
 // GetTastePairs returns, for each pair of people who have rated at least one
 // movie in common, how many movies they share, the mean absolute difference
 // between their scores, and the correlation of their scores. Every shared

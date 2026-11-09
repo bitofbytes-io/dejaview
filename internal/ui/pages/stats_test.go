@@ -164,6 +164,46 @@ func TestStatsPageWaitsForTasteMatch(t *testing.T) {
 	}
 }
 
+func TestStatsPageRendersDecades(t *testing.T) {
+	html := renderStatsPage(t, &model.StatsData{
+		TotalMoviesWatched: 7,
+		Decades: model.DecadeBreakdown{
+			Decades: []model.DecadeStat{
+				{Decade: 1980, Movies: 4, RatedMovies: 2, AverageRating: 8.3},
+				{Decade: 1990, Movies: 1},
+			},
+			UnknownYear: 2,
+		},
+	})
+	for _, want := range []string{
+		"Decades We Watch",
+		`<span class="decade-label">1980s</span>`,
+		`<progress class="decade-bar" max="4" value="4" aria-label="1980s, 4 movies">`,
+		`<span class="decade-count">4 movies</span>`,
+		">8.3</span>",
+		`title="Family average over 2 family-rated movies"`,
+		`<span class="decade-label">1990s</span>`,
+		`<progress class="decade-bar" max="4" value="1" aria-label="1990s, 1 movie">`,
+		`<span class="decade-count">1 movie</span>`,
+		"No family-rated movies yet",
+		"2 movies have no release year and are not counted above.",
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("decade breakdown did not contain %q", want)
+		}
+	}
+
+	html = renderStatsPage(t, &model.StatsData{TotalMoviesWatched: 1, Decades: model.DecadeBreakdown{UnknownYear: 1}})
+	for _, want := range []string{"No release years yet", "1 movie has no release year and is not counted above."} {
+		if !strings.Contains(html, want) {
+			t.Errorf("empty decade breakdown did not contain %q", want)
+		}
+	}
+	if strings.Contains(html, `class="decade-list"`) {
+		t.Error("rendered a decade list without any decades")
+	}
+}
+
 func renderStatsPage(t *testing.T, data *model.StatsData) string {
 	t.Helper()
 	var output bytes.Buffer
