@@ -38,4 +38,6 @@ if [ -n "${PORT_FILE:-}" ]; then
 fi
 
 # -Y off: ignore proxy env, the probe targets loopback.
-exec wget -q -Y off -O /dev/null "http://127.0.0.1:${port}/health"
+# HEALTHCHECK_WGET is a test seam: busybox sh prefers its built-in wget applet over
+# PATH, so tests cannot shadow wget via PATH. It is never set in the image.
+exec "${HEALTHCHECK_WGET:-wget}" -q -Y off -O /dev/null "http://127.0.0.1:${port}/health"

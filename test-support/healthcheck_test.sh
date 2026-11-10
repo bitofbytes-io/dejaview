@@ -35,7 +35,10 @@ probe() {
   shift
   rm -f "${work}/args"
   # shellcheck disable=SC2086
-  env -i PATH="${work}/bin:${PATH}" WGET_ARGS="${work}/args" "$@" ${shell} "${script}"
+  # The fake is passed by absolute path via HEALTHCHECK_WGET: busybox sh runs its own
+  # wget applet in preference to anything on PATH, so shadowing wget via PATH is not
+  # hermetic. The script under test is otherwise run unmodified.
+  env -i PATH="${PATH}" HEALTHCHECK_WGET="${work}/bin/wget" WGET_ARGS="${work}/args" "$@" ${shell} "${script}"
 }
 
 expect_url() {
@@ -94,6 +97,9 @@ grep -Eq '^HEALTHCHECK .*\\$' "${root}/Dockerfile" || fail "Dockerfile HEALTHCHE
 grep -Fq 'CMD ["/app/healthcheck.sh"]' "${root}/Dockerfile" || fail "HEALTHCHECK does not run /app/healthcheck.sh"
 grep -Eq '^COPY --chmod=0555 docker/healthcheck\.sh \./healthcheck\.sh$' "${root}/Dockerfile" || fail "Dockerfile does not install healthcheck.sh"
 grep -Fq 'http://127.0.0.1:${port}/health"' "${script}" || fail "script must probe /health"
+# Without the test seam the script must run plain wget from PATH.
+grep -Fq 'exec "${HEALTHCHECK_WGET:-wget}" -q -Y off' "${script}" || fail "script must default to wget -q -Y off"
+grep -Fq 'HEALTHCHECK_WGET' "${root}/Dockerfile" && fail "Dockerfile must not set HEALTHCHECK_WGET"
 ! grep -Fq '/ready' <(grep -v '^#' "${script}") || fail "script must not probe /ready"
 
 echo "healthcheck tests passed"
