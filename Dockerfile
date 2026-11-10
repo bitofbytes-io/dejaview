@@ -44,4 +44,9 @@ ENV LOG_LEVEL=${LOG_LEVEL}
 USER dejaview
 
 EXPOSE 4600
+# /health only reports that the process answers; /ready also pings the database,
+# which would mark the container unhealthy (and restart it) on a database outage.
+# Shell form so a PORT override is honoured.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -q -O /dev/null "http://127.0.0.1:${PORT:-4600}/health" || exit 1
 CMD ["./dejaview"]
