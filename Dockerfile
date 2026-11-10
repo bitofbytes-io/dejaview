@@ -49,5 +49,5 @@ EXPOSE 4600
 # Shell form so the port matches the app's: PORT_FILE wins over PORT, as in config.Load.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD port="${PORT:-4600}"; [ -z "$PORT_FILE" ] || port="$(tr -d '[:space:]' < "$PORT_FILE")"; \
-      wget -q -O /dev/null "http://127.0.0.1:${port}/health" || exit 1
+      wget -q -Y off -O /dev/null "http://127.0.0.1:${port}/health" || exit 1
 CMD ["./dejaview"]
