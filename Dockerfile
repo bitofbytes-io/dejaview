@@ -44,4 +44,7 @@ ENV LOG_LEVEL=${LOG_LEVEL}
 USER dejaview
 
 EXPOSE 4600
+# Liveness only. /health does not ping the database, so a database blip
+# does not flap the container, and a wedged process still fails this check.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD wget -q -O - http://127.0.0.1:4600/health || exit 1
 CMD ["./dejaview"]
