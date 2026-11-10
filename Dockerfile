@@ -45,8 +45,8 @@ ENV LOG_LEVEL=${LOG_LEVEL}
 USER dejaview
 
 EXPOSE 4600
-# Probes /health, not /ready (which pings the database and would restart the container
-# on a database outage). The script resolves the port like config.Load; see its header.
+# Probes /health, not /ready (which pings the database and would mark the container
+# unhealthy on a database outage, so Swarm could replace it needlessly). The script resolves the port like config.Load; see its header.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD ["/app/healthcheck.sh"]
 CMD ["./dejaview"]

@@ -1,7 +1,8 @@
 #!/bin/sh
 # Container HEALTHCHECK probe: GET /health on the port the app listens on.
 # /health only reports that the process answers; /ready also pings the database,
-# which would mark the container unhealthy (and restart it) on a database outage.
+# which would mark the container unhealthy on a database outage, and let an
+# orchestrator such as Swarm replace it even though that can't fix the database.
 #
 # Port precedence matches config.Load: PORT_FILE (trimmed) wins over PORT, default 4600.
 # getEnv trims PORT_FILE with strings.TrimSpace, which strips leading/trailing Unicode
