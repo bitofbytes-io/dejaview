@@ -115,7 +115,7 @@ docker run --rm --name dejaview --network dejaview \
 
 Open <http://localhost:4600> and sign in with the value configured as `API_TOKEN`. Two endpoints need no sign-in. <http://localhost:4600/health> returns `ok` whenever the process is up. <http://localhost:4600/ready> pings the database (2 s timeout) and returns `{"status":"ok","db":"ok"}`, or HTTP 503 with `{"status":"degraded","db":"error"}` when the database is unreachable. Neither needs any configuration.
 
-The image declares a Docker `HEALTHCHECK` that requests `/health` on `127.0.0.1:$PORT` (default 4600) every 30 s with a 5 s timeout, a 10 s start period and 3 retries, so `docker ps` and Swarm report the container as `healthy` or `unhealthy`. It deliberately uses `/health` rather than `/ready`, so a database outage doesn't get the container restarted. It needs no configuration.
+The image declares a Docker `HEALTHCHECK` that requests `/health` on `127.0.0.1` at the port the app listens on (`PORT_FILE`, else `PORT`, default 4600) every 30 s with a 5 s timeout, a 10 s start period and 3 retries, so `docker ps` and Swarm report the container as `healthy` or `unhealthy`. It deliberately uses `/health` rather than `/ready`, so a database outage doesn't get the container restarted. It needs no configuration.
 
 ### Metrics
 
