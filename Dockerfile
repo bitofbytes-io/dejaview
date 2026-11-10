@@ -28,6 +28,7 @@ COPY --from=builder /out/dejaview ./dejaview
 COPY --from=builder /out/dejaview-migrate ./dejaview-migrate
 COPY --from=builder /src/static ./static
 COPY migrations ./migrations
+COPY --chmod=0555 docker/healthcheck.sh ./healthcheck.sh
 
 RUN addgroup -S dejaview \
     && adduser -S -G dejaview dejaview \
@@ -44,10 +45,8 @@ ENV LOG_LEVEL=${LOG_LEVEL}
 USER dejaview
 
 EXPOSE 4600
-# /health only reports that the process answers; /ready also pings the database,
-# which would mark the container unhealthy (and restart it) on a database outage.
-# Shell form so the port matches the app's: PORT_FILE wins over PORT, as in config.Load.
+# Probes /health, not /ready (which pings the database and would restart the container
+# on a database outage). The script resolves the port like config.Load; see its header.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD port="${PORT:-4600}"; [ -z "$PORT_FILE" ] || port="$(tr -d '[:space:]' < "$PORT_FILE")"; \
-      wget -q -Y off -O /dev/null "http://127.0.0.1:${port}/health" || exit 1
+  CMD ["/app/healthcheck.sh"]
 CMD ["./dejaview"]
