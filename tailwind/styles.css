@@ -772,6 +772,32 @@ body.dv-crt::before { position: fixed; }
 .decade-bar::-moz-progress-bar { background: var(--neon-cyan); border-radius: var(--radius-pill); }
 .decade-count { grid-column: 2; grid-row: 2; font-family: var(--font-mono); font-size: 13px; line-height: 18px; color: var(--ink-muted); }
 .decade-row .rating-badge { grid-column: 3; grid-row: 1 / span 2; }
+/* Rating distributions: one histogram per person in their colour. Bar heights
+   come from stepped classes (4px a step), so no inline styles. */
+.distribution-list { list-style: none; margin: 0; padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); }
+.distribution-row { display: flex; flex-direction: column; gap: var(--space-2); }
+.distribution-row + .distribution-row { padding-top: var(--space-4); border-top: 1px solid var(--line); }
+.distribution-head { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.distribution-head .trophy-winner { flex-shrink: 1; }
+.distribution-meta { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 13px; line-height: 18px; color: var(--ink-muted); text-align: right; }
+.distribution-chart { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 2px; align-items: end; }
+.distribution-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 2px; height: 84px; min-width: 0; }
+.distribution-count { font-family: var(--font-mono); font-size: 11px; line-height: 14px; min-height: 14px; color: var(--ink); }
+.distribution-bar { display: block; width: 100%; min-height: 2px; border-radius: 3px 3px 0 0; background: var(--person, var(--neon-cyan)); }
+.distribution-tick { font-family: var(--font-mono); font-size: 11px; line-height: 14px; color: var(--ink-muted); }
+.distribution-bar-0 { height: 2px; opacity: 0.25; }
+.distribution-bar-1 { height: 4px; }
+.distribution-bar-2 { height: 8px; }
+.distribution-bar-3 { height: 12px; }
+.distribution-bar-4 { height: 16px; }
+.distribution-bar-5 { height: 20px; }
+.distribution-bar-6 { height: 24px; }
+.distribution-bar-7 { height: 28px; }
+.distribution-bar-8 { height: 32px; }
+.distribution-bar-9 { height: 36px; }
+.distribution-bar-10 { height: 40px; }
+.distribution-bar-11 { height: 44px; }
+.distribution-bar-12 { height: 48px; }
 .decade-footnote { margin: calc(var(--space-2) * -1) 0 0; font-size: 13px; line-height: 18px; color: var(--ink-muted); }
 @media (min-width: 640px) {
   .decade-row { grid-template-columns: 56px minmax(0, 1fr) 88px auto; }
