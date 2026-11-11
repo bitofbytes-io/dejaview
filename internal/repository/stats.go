@@ -337,6 +337,55 @@ func (r *StatsRepository) GetDecadeStats(ctx context.Context) (model.DecadeBreak
 	return breakdown, rows.Err()
 }
 
+// GetRatingDistributions returns, for each person who has rated at least one
+// movie, a histogram of their scores rounded to whole points, the mean of
+// their exact scores and how many scores they have given, ordered by name.
+// Every rating counts, not only family-rated movies, since the picture is of
+// how that person rates. People with no ratings are left out.
+func (r *StatsRepository) GetRatingDistributions(ctx context.Context) ([]model.RatingDistribution, error) {
+	query := `
+		WITH given AS (
+			SELECT person_id, COUNT(*) AS rating_count, AVG(score) AS mean
+			FROM ratings
+			GROUP BY person_id
+		),
+		buckets AS (
+			SELECT person_id, ROUND(score)::int AS bucket, COUNT(*) AS rating_count
+			FROM ratings
+			GROUP BY person_id, ROUND(score)
+		)
+		SELECT p.id, p.initial, p.name, p.color, g.rating_count, g.mean, b.bucket, b.rating_count
+		FROM given g
+		JOIN persons p ON p.id = g.person_id
+		JOIN buckets b ON b.person_id = g.person_id
+		ORDER BY p.name, p.id, b.bucket`
+
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("get rating distributions: %w", err)
+	}
+	defer rows.Close()
+
+	var distributions []model.RatingDistribution
+	for rows.Next() {
+		person := &model.Person{}
+		var count, bucket, inBucket int
+		var mean float64
+		if err := rows.Scan(&person.ID, &person.Initial, &person.Name, &person.Color, &count, &mean, &bucket, &inBucket); err != nil {
+			return nil, fmt.Errorf("scan rating distribution: %w", err)
+		}
+		if bucket < 0 || bucket >= model.RatingBuckets {
+			return nil, fmt.Errorf("scan rating distribution: bucket %d out of range", bucket)
+		}
+		if n := len(distributions); n == 0 || distributions[n-1].Person.ID != person.ID {
+			distributions = append(distributions, model.RatingDistribution{Person: person, Count: count, Mean: mean})
+		}
+		distributions[len(distributions)-1].Buckets[bucket] = inBucket
+	}
+
+	return distributions, rows.Err()
+}
+
 // GetTastePairs returns, for each pair of people who have rated at least one
 // movie in common, how many movies they share, the mean absolute difference
 // between their scores, and the correlation of their scores. Every shared

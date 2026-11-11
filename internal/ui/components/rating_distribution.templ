@@ -1,0 +1,78 @@
+package components
+
+import (
+	"fmt"
+
+	"github.com/drywaters/dejaview/internal/model"
+	"github.com/drywaters/dejaview/internal/ui"
+)
+
+// distributionBarSteps is how many height steps a histogram bar scales to;
+// each has a matching .distribution-bar-<n> class in tailwind/styles.css.
+const distributionBarSteps = 12
+
+// RatingDistributions renders one histogram row per person: how often they
+// give each whole-point score, with their mean and rating count. People with
+// no ratings are not in the list.
+templ RatingDistributions(distributions []model.RatingDistribution) {
+	if len(distributions) > 0 {
+		<ul class="distribution-list">
+			for _, dist := range distributions {
+				<li class={ "distribution-row", dist.Person.ColorClass() }>
+					<div class="distribution-head">
+						@PersonPill(dist.Person)
+						<span class="distribution-meta">{ distributionMeta(dist) }</span>
+						<span class={ "rating-badge", model.ScoreColorClass(dist.Mean) } title="Average score given">
+							{ fmt.Sprintf("%.1f", dist.Mean) }
+						</span>
+					</div>
+					<ol class="distribution-chart" aria-label={ distributionLabel(dist) }>
+						for score, count := range dist.Buckets {
+							<li class="distribution-col" title={ distributionBucketTitle(score, count) }>
+								<span class={ "distribution-bar", distributionBarClass(count, dist.MostInBucket()) }></span>
+								<span class="distribution-tick" aria-hidden="true">{ ui.IntToStr(score) }</span>
+							</li>
+						}
+					</ol>
+				</li>
+			}
+		</ul>
+	} else {
+		<div class="top-movies-empty">
+			@Icon("star", "")
+			<div>
+				<h3>No ratings yet</h3>
+				<p>Rate a movie to see how everyone scores.</p>
+			</div>
+		</div>
+	}
+}
+
+func distributionMeta(dist model.RatingDistribution) string {
+	ratings := "ratings"
+	if dist.Count == 1 {
+		ratings = "rating"
+	}
+	return fmt.Sprintf("%d %s · most often %d", dist.Count, ratings, dist.MostCommon())
+}
+
+func distributionLabel(dist model.RatingDistribution) string {
+	return fmt.Sprintf("%s's scores: %s", dist.Person.Name, distributionMeta(dist))
+}
+
+func distributionBucketTitle(score, count int) string {
+	if count == 1 {
+		return fmt.Sprintf("1 rating of %d", score)
+	}
+	return fmt.Sprintf("%d ratings of %d", count, score)
+}
+
+// distributionBarClass scales count against the fullest bucket into one of
+// distributionBarSteps heights. Any non-empty bucket gets at least step 1.
+func distributionBarClass(count, most int) string {
+	step := 0
+	if count > 0 && most > 0 {
+		step = max(1, (count*distributionBarSteps+most/2)/most)
+	}
+	return fmt.Sprintf("distribution-bar-%d", step)
+}

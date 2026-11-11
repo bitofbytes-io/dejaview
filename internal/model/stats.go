@@ -183,6 +183,43 @@ func (b DecadeBreakdown) MostMovies() int {
 	return most
 }
 
+// RatingBuckets is how many whole-point buckets, 0 through 10, a rating
+// distribution groups scores into.
+const RatingBuckets = 11
+
+// RatingDistribution is how one person scores movies overall: a histogram of
+// their scores rounded to whole points (halves round up), plus the mean of
+// their exact scores and how many scores they have given.
+type RatingDistribution struct {
+	Person *Person
+	Count  int
+	Mean   float64
+	// Buckets[i] counts the scores that round to i.
+	Buckets [RatingBuckets]int
+}
+
+// MostCommon returns the whole-point score given most often. Ties go to the
+// higher score. It is zero when there are no scores.
+func (d RatingDistribution) MostCommon() int {
+	best := 0
+	for score, n := range d.Buckets {
+		if n > 0 && n >= d.Buckets[best] {
+			best = score
+		}
+	}
+	return best
+}
+
+// MostInBucket returns the size of the fullest bucket, which the histogram
+// bars are scaled against.
+func (d RatingDistribution) MostInBucket() int {
+	most := 0
+	for _, n := range d.Buckets {
+		most = max(most, n)
+	}
+	return most
+}
+
 // StatsData holds the streamlined data rendered by the Trophy Room.
 type StatsData struct {
 	AdvantageHolder *Person
@@ -192,6 +229,7 @@ type StatsData struct {
 	Genres          GenreSpotlight
 	TasteMatch      TasteMatch
 	Decades         DecadeBreakdown
+	Distributions   []RatingDistribution
 
 	TotalMoviesWatched    int
 	TotalWatchTimeMinutes int
