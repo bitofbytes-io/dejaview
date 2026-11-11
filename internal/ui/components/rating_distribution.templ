@@ -12,8 +12,8 @@ import (
 const distributionBarSteps = 12
 
 // RatingDistributions renders one histogram row per person: how often they
-// give each whole-point score, with their mean and rating count. People with
-// no ratings are not in the list.
+// give each whole-point score from 0 to 10 (the count shows above each bar),
+// with their mean and rating count. People with no ratings are not in the list.
 templ RatingDistributions(distributions []model.RatingDistribution) {
 	if len(distributions) > 0 {
 		<ul class="distribution-list">
@@ -28,13 +28,16 @@ templ RatingDistributions(distributions []model.RatingDistribution) {
 					</div>
 					<ol class="distribution-chart" aria-label={ distributionLabel(dist) }>
 						for score, count := range dist.Buckets {
-							// Scores start at 1, so bucket 0 never holds a rating.
-							if score > 0 {
-								<li class="distribution-col" title={ distributionBucketTitle(score, count) }>
-									<span class={ "distribution-bar", distributionBarClass(count, dist.MostInBucket()) }></span>
-									<span class="distribution-tick" aria-hidden="true">{ ui.IntToStr(score) }</span>
-								</li>
-							}
+							<li class="distribution-col">
+								<span class="sr-only">{ distributionBucketTitle(score, count) }</span>
+								<span class="distribution-count" aria-hidden="true">
+									if count > 0 {
+										{ ui.IntToStr(count) }
+									}
+								</span>
+								<span class={ "distribution-bar", distributionBarClass(count, dist.MostInBucket()) } aria-hidden="true"></span>
+								<span class="distribution-tick" aria-hidden="true">{ ui.IntToStr(score) }</span>
+							</li>
 						}
 					</ol>
 				</li>
