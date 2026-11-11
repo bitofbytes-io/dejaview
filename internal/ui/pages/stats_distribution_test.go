@@ -29,7 +29,7 @@ func TestStatsPageRendersRatingDistributions(t *testing.T) {
 		"7.5",
 		"3 ratings of 8",
 		"1 rating of 6",
-		"0 ratings of 0",
+		"0 ratings of 1",
 		"distribution-bar-12",
 		"distribution-bar-4",
 		"distribution-bar-0",

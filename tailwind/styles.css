@@ -780,7 +780,7 @@ body.dv-crt::before { position: fixed; }
 .distribution-head { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
 .distribution-head .trophy-winner { flex-shrink: 1; }
 .distribution-meta { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 13px; line-height: 18px; color: var(--ink-muted); text-align: right; }
-.distribution-chart { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 3px; align-items: end; }
+.distribution-chart { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 3px; align-items: end; }
 .distribution-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 2px; height: 68px; min-width: 0; }
 .distribution-bar { display: block; width: 100%; min-height: 2px; border-radius: 3px 3px 0 0; background: var(--person, var(--neon-cyan)); }
 .distribution-tick { font-family: var(--font-mono); font-size: 11px; line-height: 14px; color: var(--ink-muted); }

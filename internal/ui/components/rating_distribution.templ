@@ -28,10 +28,13 @@ templ RatingDistributions(distributions []model.RatingDistribution) {
 					</div>
 					<ol class="distribution-chart" aria-label={ distributionLabel(dist) }>
 						for score, count := range dist.Buckets {
-							<li class="distribution-col" title={ distributionBucketTitle(score, count) }>
-								<span class={ "distribution-bar", distributionBarClass(count, dist.MostInBucket()) }></span>
-								<span class="distribution-tick" aria-hidden="true">{ ui.IntToStr(score) }</span>
-							</li>
+							// Scores start at 1, so bucket 0 never holds a rating.
+							if score > 0 {
+								<li class="distribution-col" title={ distributionBucketTitle(score, count) }>
+									<span class={ "distribution-bar", distributionBarClass(count, dist.MostInBucket()) }></span>
+									<span class="distribution-tick" aria-hidden="true">{ ui.IntToStr(score) }</span>
+								</li>
+							}
 						}
 					</ol>
 				</li>
