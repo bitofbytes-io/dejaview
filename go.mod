@@ -6,8 +6,8 @@ require (
 	github.com/a-h/templ v0.3.1100
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/google/uuid v1.6.0
-	github.com/jackc/pgx/v5 v5.12.0
-	github.com/pressly/goose/v3 v3.29.0
+	github.com/jackc/pgx/v5 v5.13.0
+	github.com/pressly/goose/v3 v3.30.0
 	github.com/prometheus/client_golang v1.25.0
 )
 
