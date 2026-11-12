@@ -226,6 +226,12 @@ func (c *Client) errorBody(r io.Reader) string {
 // PosterURL constructs the full URL for a poster image
 // Size options: w92, w154, w185, w342, w500, w780, original
 func (c *Client) PosterURL(path string, size string) string {
+	return ImageURL(path, size)
+}
+
+// ImageURL constructs the full URL for a TMDB image path, or "" for an empty
+// path. It builds the URL locally and never calls TMDB.
+func ImageURL(path string, size string) string {
 	if path == "" {
 		return ""
 	}

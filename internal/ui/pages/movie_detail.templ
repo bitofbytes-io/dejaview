@@ -2,12 +2,14 @@ package pages
 
 import (
 	"github.com/drywaters/dejaview/internal/model"
+	"github.com/drywaters/dejaview/internal/tmdb"
 	"github.com/drywaters/dejaview/internal/ui"
 	"github.com/drywaters/dejaview/internal/ui/components"
 	"github.com/drywaters/dejaview/internal/ui/layout"
 )
 
 templ MovieDetailPage(entry *model.Entry, persons []*model.Person, isAuthenticated bool) {
+	{{ meta := entry.Movie.Metadata() }}
 	@layout.Base(entry.Movie.Title) {
 		@layout.Header(isAuthenticated, "movies")
 
@@ -18,6 +20,12 @@ templ MovieDetailPage(entry *model.Entry, persons []*model.Person, isAuthenticat
 				</svg>
 				<span>Back to movies</span>
 			</a>
+
+			if meta.BackdropPath != "" {
+				<div class="detail-backdrop">
+					<img src={ tmdb.ImageURL(meta.BackdropPath, "w1280") } alt="" class="detail-backdrop-image"/>
+				</div>
+			}
 
 			<div class="detail-grid">
 				<!-- Poster column: poster and group card -->
@@ -54,6 +62,19 @@ templ MovieDetailPage(entry *model.Entry, persons []*model.Person, isAuthenticat
 								}
 							</span>
 						</div>
+						if meta.Tagline != "" {
+							<p class="detail-tagline">{ meta.Tagline }</p>
+						}
+						if imdbURL := entry.Movie.IMDbURL(); len(meta.Genres) > 0 || imdbURL != "" {
+							<div class="detail-tags">
+								for _, genre := range meta.Genres {
+									<span class="trophy-winner genre-pill">{ genre }</span>
+								}
+								if imdbURL != "" {
+									<a href={ templ.SafeURL(imdbURL) } class="detail-imdb" target="_blank" rel="noopener noreferrer">IMDb<span class="sr-only"> (opens in a new tab)</span></a>
+								}
+							</div>
+						}
 					</div>
 
 					<!-- Ratings: a form when logged in, read-only otherwise -->
@@ -76,7 +97,7 @@ templ MovieDetailPage(entry *model.Entry, persons []*model.Person, isAuthenticat
 					<!-- Synopsis -->
 					if entry.Movie.Synopsis != nil && *entry.Movie.Synopsis != "" {
 						<section class="detail-synopsis card">
-							<h2 class="card-title">Synopsis</h2>
+							<h2 class="card-title">Overview</h2>
 							<p class="synopsis-text">{ *entry.Movie.Synopsis }</p>
 						</section>
 					}
