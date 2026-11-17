@@ -18,7 +18,7 @@ templ MonthlyPicks(months []model.MonthlyPicks) {
 		<ul class="picks-legend" aria-label="Picks over the last 12 months">
 			for _, total := range monthlyPickerTotals(months) {
 				<li class={ "picks-legend-item", pickerColorClass(total.Person) }>
-					<span class="picks-unit" aria-hidden="true"></span>
+					<span class="picks-unit" aria-hidden="true">{ pickerInitial(total.Person) }</span>
 					<span>{ pickerName(total.Person) } <b>{ ui.IntToStr(total.Count) }</b></span>
 				</li>
 			}
@@ -30,7 +30,7 @@ templ MonthlyPicks(months []model.MonthlyPicks) {
 					<span class="picks-bar" aria-hidden="true">
 						for _, pick := range month.Picks {
 							for i := 0; i < pick.Count; i++ {
-								<span class={ "picks-unit", pickerColorClass(pick.Person) }></span>
+								<span class={ "picks-unit", pickerColorClass(pick.Person) } title={ pickerName(pick.Person) }>{ pickerInitial(pick.Person) }</span>
 							}
 						}
 					</span>
@@ -90,6 +90,15 @@ func pickerName(person *model.Person) string {
 		return "No picker"
 	}
 	return person.Name
+}
+
+// pickerInitial is the letter shown in a picker's blocks, so people who share
+// a colour can still be told apart. Entries with no picker show "?".
+func pickerInitial(person *model.Person) string {
+	if person == nil {
+		return "?"
+	}
+	return person.Initial
 }
 
 // pickerColorClass is the colour class for a picker's blocks, or the grey

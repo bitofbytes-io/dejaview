@@ -37,10 +37,10 @@ func TestStatsPageRendersMonthlyPicks(t *testing.T) {
 			t.Errorf("Trophy Room did not contain %q", want)
 		}
 	}
-	if got := strings.Count(html, `<span class="picks-unit person-mint"></span>`); got != 2 {
+	if got := strings.Count(html, `<span class="picks-unit person-mint" title="Daniel">D</span>`); got != 2 {
 		t.Errorf("found %d mint blocks, want 2", got)
 	}
-	if got := strings.Count(html, `<span class="picks-unit picks-unpicked"></span>`); got != 1 {
+	if got := strings.Count(html, `<span class="picks-unit picks-unpicked" title="No picker">?</span>`); got != 1 {
 		t.Errorf("found %d unpicked blocks, want 1", got)
 	}
 
