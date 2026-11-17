@@ -816,7 +816,7 @@ body.dv-crt::before { position: fixed; }
 .picks-bar:empty { height: 2px; align-self: center; border-radius: var(--radius-pill); background: var(--surface-sunken); }
 .picks-total { font-family: var(--font-mono); font-size: 13px; line-height: 20px; color: var(--ink); text-align: right; }
 .picks-unit { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 18px; height: 18px; border-radius: 3px; background: var(--person, var(--ink-muted)); color: var(--on-neon); font-family: var(--font-mono); font-size: 11px; line-height: 1; font-weight: 700; }
-.picks-unpicked { --person: var(--ink-muted); opacity: 0.5; }
+.picks-unit.picks-unpicked, .picks-unpicked .picks-unit { background: var(--surface-raised); color: var(--ink-muted); box-shadow: inset 0 0 0 1px var(--line-control); }
 .decade-footnote { margin: calc(var(--space-2) * -1) 0 0; font-size: 13px; line-height: 18px; color: var(--ink-muted); }
 @media (min-width: 640px) {
   .decade-row { grid-template-columns: 56px minmax(0, 1fr) 88px auto; }

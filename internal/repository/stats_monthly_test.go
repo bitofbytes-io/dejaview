@@ -14,7 +14,8 @@ import (
 // of months ending with the current one, empty months included, entries
 // grouped by picker, entries with no picker (never set, or the picker was
 // deleted) counted separately and listed last, and entries outside the window
-// or in the future left out.
+// left out: those before its first month and those from the start of the next
+// UTC month onward. Later days of the current month are still counted.
 func TestMonthlyPicksPostgres(t *testing.T) {
 	pool := ratingTestPool(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)

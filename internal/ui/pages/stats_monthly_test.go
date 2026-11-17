@@ -11,7 +11,7 @@ import (
 
 func TestStatsPageRendersMonthlyPicks(t *testing.T) {
 	daniel := &model.Person{ID: uuid.New(), Initial: "D", Name: "Daniel", Color: "mint"}
-	jennifer := &model.Person{ID: uuid.New(), Initial: "J", Name: "Jennifer", Color: "rose"}
+	jennifer := &model.Person{ID: uuid.New(), Initial: "J", Name: "Jennifer", Color: "mint"}
 	march := time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC)
 	html := renderStatsPage(t, &model.StatsData{
 		TotalMoviesWatched: 4,
@@ -37,8 +37,18 @@ func TestStatsPageRendersMonthlyPicks(t *testing.T) {
 			t.Errorf("Trophy Room did not contain %q", want)
 		}
 	}
-	if got := strings.Count(html, `<span class="picks-unit person-mint" title="Daniel">D</span>`); got != 2 {
-		t.Errorf("found %d mint blocks, want 2", got)
+	// Both pickers share a colour, so only the initial, title and count tell
+	// their blocks apart.
+	for _, block := range []struct {
+		html string
+		want int
+	}{
+		{`<span class="picks-unit person-mint" title="Daniel">D</span>`, 2},
+		{`<span class="picks-unit person-mint" title="Jennifer">J</span>`, 1},
+	} {
+		if got := strings.Count(html, block.html); got != block.want {
+			t.Errorf("found %d of %s, want %d", got, block.html, block.want)
+		}
 	}
 	if got := strings.Count(html, `<span class="picks-unit picks-unpicked" title="No picker">?</span>`); got != 1 {
 		t.Errorf("found %d unpicked blocks, want 1", got)
