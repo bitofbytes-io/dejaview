@@ -110,7 +110,7 @@ func (h *DashboardHandler) render(w http.ResponseWriter, r *http.Request, view d
 func (h *DashboardHandler) needsPerson(w http.ResponseWriter, r *http.Request, persons []*model.Person) *model.Person {
 	if values, ok := r.URL.Query()["needs"]; ok {
 		person := personByInitial(persons, values[0])
-		cookie := h.clearMeCookie()
+		cookie := h.clearMeCookie() //nolint:gosec // G124: see clearMeCookie; only Value and MaxAge change here
 		if person != nil {
 			cookie.Value = url.QueryEscape(person.Initial)
 			cookie.MaxAge = meCookieMaxAge
@@ -145,7 +145,7 @@ func (h *DashboardHandler) needsPerson(w http.ResponseWriter, r *http.Request, p
 }
 
 func (h *DashboardHandler) clearMeCookie() *http.Cookie {
-	return &http.Cookie{
+	return &http.Cookie{ //nolint:gosec // G124: Secure is configurable so plain-HTTP local dev works; production sets SECURE_COOKIES
 		Name: meCookie, Path: "/", MaxAge: -1,
 		HttpOnly: true, Secure: h.secureCookies, SameSite: http.SameSiteLaxMode,
 	}

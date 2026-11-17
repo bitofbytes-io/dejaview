@@ -151,7 +151,7 @@ func parseTrustedProxies(value string) ([]netip.Prefix, error) {
 func getEnv(key, defaultVal string) (string, error) {
 	// Check for _FILE variant first (Docker Swarm secrets pattern)
 	if filePath := os.Getenv(key + "_FILE"); filePath != "" {
-		data, err := os.ReadFile(filePath)
+		data, err := os.ReadFile(filePath) //nolint:gosec // G304: *_FILE secret paths come from the operator's environment, not from requests
 		if err != nil {
 			return "", fmt.Errorf("failed to read %s_FILE (%s): %w", key, filePath, err)
 		}
@@ -193,7 +193,7 @@ func getEnvOrFile(key, defaultPath string) (string, error) {
 // Returns empty string (no error) if the file doesn't exist, allowing validation to catch missing required values.
 // Returns an error if the file exists but cannot be read, or if it's empty.
 func readSecret(path, name string) (string, error) {
-	contents, err := os.ReadFile(path)
+	contents, err := os.ReadFile(path) //nolint:gosec // G304: secret paths come from the operator's environment or fixed defaults, not from requests
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return "", nil

@@ -57,7 +57,7 @@ func (m *Manager) NewCookie() (*http.Cookie, error) {
 	}
 	signature := m.sign(payload)
 
-	return &http.Cookie{
+	return &http.Cookie{ //nolint:gosec // G124: Secure is configurable so plain-HTTP local dev works; production sets SECURE_COOKIES
 		Name:     CookieName,
 		Value:    payload + "." + signature,
 		Path:     "/",
@@ -71,7 +71,7 @@ func (m *Manager) NewCookie() (*http.Cookie, error) {
 
 // ClearCookie returns a cookie that clears the browser session.
 func (m *Manager) ClearCookie() *http.Cookie {
-	return &http.Cookie{
+	return &http.Cookie{ //nolint:gosec // G124: Secure is configurable so plain-HTTP local dev works; production sets SECURE_COOKIES
 		Name:     CookieName,
 		Value:    "",
 		Path:     "/",
