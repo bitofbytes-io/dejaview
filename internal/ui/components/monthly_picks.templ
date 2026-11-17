@@ -1,0 +1,114 @@
+package components
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+
+	"github.com/drywaters/dejaview/internal/model"
+	"github.com/drywaters/dejaview/internal/ui"
+)
+
+// MonthlyPicks renders the picks over time chart: a row per month, oldest
+// first, where each movie added that month is one block in its picker's
+// colour. Blocks are grouped by picker, and entries with no picker are grey.
+// A legend above the rows totals each picker over the whole period.
+templ MonthlyPicks(months []model.MonthlyPicks) {
+	if monthlyPicksTotal(months) > 0 {
+		<ul class="picks-legend" aria-label="Picks over the last 12 months">
+			for _, total := range monthlyPickerTotals(months) {
+				<li class={ "picks-legend-item", pickerColorClass(total.Person) }>
+					<span class="picks-unit" aria-hidden="true"></span>
+					<span>{ pickerName(total.Person) } <b>{ ui.IntToStr(total.Count) }</b></span>
+				</li>
+			}
+		</ul>
+		<ol class="picks-list">
+			for _, month := range months {
+				<li class="picks-row" aria-label={ monthlyPicksLabel(month) }>
+					<span class="picks-month" aria-hidden="true">{ month.Month.Format("Jan 06") }</span>
+					<span class="picks-bar" aria-hidden="true">
+						for _, pick := range month.Picks {
+							for i := 0; i < pick.Count; i++ {
+								<span class={ "picks-unit", pickerColorClass(pick.Person) }></span>
+							}
+						}
+					</span>
+					<span class="picks-total" aria-hidden="true">{ ui.IntToStr(month.Total) }</span>
+				</li>
+			}
+		</ol>
+	} else {
+		<div class="top-movies-empty">
+			@Icon("bar-chart", "")
+			<div>
+				<h3>No picks in the last year</h3>
+				<p>Movies added in the last 12 months show up here, by who picked them.</p>
+			</div>
+		</div>
+	}
+}
+
+func monthlyPicksTotal(months []model.MonthlyPicks) int {
+	total := 0
+	for _, month := range months {
+		total += month.Total
+	}
+	return total
+}
+
+// monthlyPickerTotals sums each picker's picks over all months, ordered by
+// name with the unpicked entries last. A picker is identified by ID.
+func monthlyPickerTotals(months []model.MonthlyPicks) []model.PickerCount {
+	var totals []model.PickerCount
+	index := map[string]int{}
+	unpicked := 0
+	for _, month := range months {
+		for _, pick := range month.Picks {
+			if pick.Person == nil {
+				unpicked += pick.Count
+				continue
+			}
+			key := pick.Person.ID.String()
+			if i, ok := index[key]; ok {
+				totals[i].Count += pick.Count
+				continue
+			}
+			index[key] = len(totals)
+			totals = append(totals, pick)
+		}
+	}
+	sort.SliceStable(totals, func(i, j int) bool { return totals[i].Person.Name < totals[j].Person.Name })
+	if unpicked > 0 {
+		totals = append(totals, model.PickerCount{Count: unpicked})
+	}
+	return totals
+}
+
+func pickerName(person *model.Person) string {
+	if person == nil {
+		return "No picker"
+	}
+	return person.Name
+}
+
+// pickerColorClass is the colour class for a picker's blocks, or the grey
+// picks-unpicked for entries with no picker.
+func pickerColorClass(person *model.Person) string {
+	if person == nil {
+		return "picks-unpicked"
+	}
+	return person.ColorClass()
+}
+
+func monthlyPicksLabel(month model.MonthlyPicks) string {
+	label := month.Month.Format("January 2006")
+	if month.Total == 0 {
+		return label + ": no movies"
+	}
+	parts := make([]string, 0, len(month.Picks))
+	for _, pick := range month.Picks {
+		parts = append(parts, fmt.Sprintf("%s %d", pickerName(pick.Person), pick.Count))
+	}
+	return fmt.Sprintf("%s: %s (%s)", label, decadeMovies(month.Total), strings.Join(parts, ", "))
+}

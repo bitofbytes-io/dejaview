@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/drywaters/dejaview/internal/model"
 	"github.com/google/uuid"
@@ -335,6 +336,62 @@ func (r *StatsRepository) GetDecadeStats(ctx context.Context) (model.DecadeBreak
 	}
 
 	return breakdown, rows.Err()
+}
+
+// GetMonthlyPicks returns how many entries were added in each of the last
+// model.MonthsOfPicks calendar months (UTC), ending with the month of now,
+// oldest first, and who picked them. Months with no entries are included with
+// no picks. Entries with no picker, whether none was set or the person was
+// deleted, count as a pick with a nil Person, listed after the named pickers.
+func (r *StatsRepository) GetMonthlyPicks(ctx context.Context, now time.Time) ([]model.MonthlyPicks, error) {
+	now = now.UTC()
+	current := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	first := current.AddDate(0, -(model.MonthsOfPicks - 1), 0)
+
+	query := `
+		SELECT date_trunc('month', e.added_at AT TIME ZONE 'UTC'),
+			p.id, p.initial, p.name, p.color, COUNT(*)
+		FROM entries e
+		LEFT JOIN persons p ON p.id = e.picked_by_person_id
+		WHERE e.added_at >= $1 AND e.added_at < $2
+		GROUP BY 1, p.id
+		ORDER BY 1, p.name NULLS LAST, p.id`
+
+	rows, err := r.pool.Query(ctx, query, first, current.AddDate(0, 1, 0))
+	if err != nil {
+		return nil, fmt.Errorf("get monthly picks: %w", err)
+	}
+	defer rows.Close()
+
+	months := make([]model.MonthlyPicks, model.MonthsOfPicks)
+	byMonth := make(map[time.Time]*model.MonthlyPicks, model.MonthsOfPicks)
+	for i := range months {
+		months[i].Month = first.AddDate(0, i, 0)
+		byMonth[months[i].Month] = &months[i]
+	}
+	for rows.Next() {
+		var month time.Time
+		var personID *uuid.UUID
+		var initial, name, color *string
+		var count int
+		if err := rows.Scan(&month, &personID, &initial, &name, &color, &count); err != nil {
+			return nil, fmt.Errorf("scan monthly picks: %w", err)
+		}
+		bucket, ok := byMonth[month.UTC()]
+		if !ok {
+			continue
+		}
+		pick := model.PickerCount{Count: count}
+		if personID != nil && initial != nil && name != nil && color != nil {
+			pick.Person = &model.Person{ID: *personID, Initial: *initial, Name: *name, Color: *color}
+		}
+		bucket.Picks = append(bucket.Picks, pick)
+		bucket.Total += count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read monthly picks: %w", err)
+	}
+	return months, nil
 }
 
 // GetRatingDistributions returns, for each person who has rated at least one

@@ -805,6 +805,18 @@ body.dv-crt::before { position: fixed; }
 .distribution-bar-10 { height: 40px; }
 .distribution-bar-11 { height: 44px; }
 .distribution-bar-12 { height: 48px; }
+/* Picks over time: a row per month, one block per movie in its picker's colour. */
+.picks-legend { list-style: none; margin: 0 0 var(--space-3); padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
+.picks-legend-item { display: inline-flex; align-items: center; gap: var(--space-2); font-size: 14px; line-height: 20px; color: var(--ink-muted); }
+.picks-legend-item b { font-family: var(--font-mono); font-weight: 600; color: var(--ink); }
+.picks-list { list-style: none; margin: 0; padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); }
+.picks-row { display: grid; grid-template-columns: 56px minmax(0, 1fr) 28px; align-items: center; gap: var(--space-3); min-height: 20px; }
+.picks-month { font-family: var(--font-mono); font-size: 13px; line-height: 20px; color: var(--ink-muted); white-space: nowrap; }
+.picks-bar { display: flex; flex-wrap: wrap; gap: 2px; min-width: 0; }
+.picks-bar:empty { height: 2px; align-self: center; border-radius: var(--radius-pill); background: var(--surface-sunken); }
+.picks-total { font-family: var(--font-mono); font-size: 13px; line-height: 20px; color: var(--ink); text-align: right; }
+.picks-unit { display: inline-block; flex: none; width: 14px; height: 14px; border-radius: 3px; background: var(--person, var(--ink-muted)); }
+.picks-unpicked { --person: var(--ink-muted); opacity: 0.5; }
 .decade-footnote { margin: calc(var(--space-2) * -1) 0 0; font-size: 13px; line-height: 18px; color: var(--ink-muted); }
 @media (min-width: 640px) {
   .decade-row { grid-template-columns: 56px minmax(0, 1fr) 88px auto; }

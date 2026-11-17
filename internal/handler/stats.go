@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"sort"
+	"time"
 
 	"github.com/drywaters/dejaview/internal/middleware"
 	"github.com/drywaters/dejaview/internal/model"
@@ -85,6 +86,11 @@ func (h *StatsHandler) buildStatsData(ctx context.Context) (*model.StatsData, er
 		return nil, fmt.Errorf("get rating distributions: %w", err)
 	}
 
+	monthlyPicks, err := h.statsRepo.GetMonthlyPicks(ctx, time.Now())
+	if err != nil {
+		return nil, fmt.Errorf("get monthly picks: %w", err)
+	}
+
 	tastePairs, err := h.statsRepo.GetTastePairs(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get taste pairs: %w", err)
@@ -109,6 +115,7 @@ func (h *StatsHandler) buildStatsData(ctx context.Context) (*model.StatsData, er
 		TasteMatch:            calculateTasteMatch(trophyStats, tastePairs, mostDivisive),
 		Decades:               decades,
 		Distributions:         distributions,
+		MonthlyPicks:          monthlyPicks,
 		TotalMoviesWatched:    totalWatched,
 		TotalWatchTimeMinutes: totalRuntime,
 		FullyRatedMovies:      fullyRated,
