@@ -39,7 +39,7 @@ func Version(paths ...string) (string, error) {
 }
 
 func fileDigest(path string) ([]byte, error) {
-	file, err := os.Open(path)
+	file, err := os.Open(path) //nolint:gosec // G304: paths are fixed static asset files chosen by main, not user input
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", path, err)
 	}

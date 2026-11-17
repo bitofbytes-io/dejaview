@@ -5,8 +5,19 @@ linters:
   enable:
     - bodyclose
     - errcheck
+    - errorlint
+    - gosec
     - govet
     - staticcheck
+  exclusions:
+    rules:
+      # Test servers, cookies, tokens and migration files are local fixtures
+      # with fake values or repo-relative paths; these rules only matter for
+      # the production server, sessions and request handling.
+      - path: _test\.go
+        linters:
+          - gosec
+        text: "G101|G112|G124|G304"
 
 formatters:
   enable:

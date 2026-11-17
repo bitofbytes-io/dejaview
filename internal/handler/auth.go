@@ -114,7 +114,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		redirectURL = "/"
 	}
 	slog.Info("login successful", "redirect_to", redirectURL)
-	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+	http.Redirect(w, r, redirectURL, http.StatusSeeOther) //nolint:gosec // G710: redirectURL is "/" unless isValidRedirect accepted it as a same-origin relative path
 }
 
 // isValidRedirect checks that the redirect URL is safe (relative path only)
