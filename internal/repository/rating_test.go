@@ -53,11 +53,12 @@ func ratingTestPoolWithParams(t *testing.T, params map[string]string) *pgxpool.P
 	if err != nil {
 		t.Fatal(err)
 	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	config.ConnConfig.RuntimeParams["application_name"] = schema
 	for name, value := range params {
 		config.ConnConfig.RuntimeParams[name] = value
 	}
+	// Set last so extra parameters cannot point the test at another schema.
+	config.ConnConfig.RuntimeParams["search_path"] = schema
+	config.ConnConfig.RuntimeParams["application_name"] = schema
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		t.Fatal(err)
