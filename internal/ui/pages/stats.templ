@@ -90,6 +90,17 @@ templ StatsPage(data *model.StatsData, isAuthenticated bool) {
 					<div class="trophy-room-heading">
 						<h2 class="trophy-room-section-title">
 							@components.Icon("bar-chart", "")
+							<span>Picks Over Time</span>
+						</h2>
+						<p>Movies added each month, by who picked them.</p>
+					</div>
+					@components.MonthlyPicks(data.MonthlyPicks)
+				</section>
+
+				<section class="trophy-room-section">
+					<div class="trophy-room-heading">
+						<h2 class="trophy-room-section-title">
+							@components.Icon("bar-chart", "")
 							<span>How Everyone Rates</span>
 						</h2>
 						<p>Harsh critic or generous fan? Every score, by person.</p>

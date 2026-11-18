@@ -1,6 +1,10 @@
 package model
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // TrophyRatingThreshold returns how many people must rate a movie before it
 // counts toward the Trophy Room: everyone but one, and at least one. With four
@@ -220,6 +224,27 @@ func (d RatingDistribution) MostInBucket() int {
 	return most
 }
 
+// MonthsOfPicks is how many months, ending with the current one, the picks
+// over time chart covers.
+const MonthsOfPicks = 12
+
+// PickerCount is how many entries one picker added in a month. Person is nil
+// for entries with no picker.
+type PickerCount struct {
+	Person *Person
+	Count  int
+}
+
+// MonthlyPicks is how many entries were added in one calendar month (UTC) and
+// who picked them. Picks lists each picker once, ordered by name with the
+// unpicked entries last.
+type MonthlyPicks struct {
+	// Month is the first instant of the month, in UTC.
+	Month time.Time
+	Picks []PickerCount
+	Total int
+}
+
 // StatsData holds the streamlined data rendered by the Trophy Room.
 type StatsData struct {
 	AdvantageHolder *Person
@@ -230,6 +255,8 @@ type StatsData struct {
 	TasteMatch      TasteMatch
 	Decades         DecadeBreakdown
 	Distributions   []RatingDistribution
+	// MonthlyPicks has one item per month, oldest first, empty months included.
+	MonthlyPicks []MonthlyPicks
 
 	TotalMoviesWatched    int
 	TotalWatchTimeMinutes int
