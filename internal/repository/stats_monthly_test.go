@@ -15,11 +15,20 @@ import (
 // grouped by picker, entries with no picker (never set, or the picker was
 // deleted) counted separately and listed last, and entries outside the window
 // left out: those before its first month and those from the start of the next
-// UTC month onward. Later days of the current month are still counted.
+// UTC month onward. Later days of the current month are still counted. The
+// session runs in a zone far from UTC so that months are only right if they are
+// bucketed in UTC rather than in the session's zone.
 func TestMonthlyPicksPostgres(t *testing.T) {
-	pool := ratingTestPool(t)
+	pool := ratingTestPoolWithParams(t, map[string]string{"timezone": "Pacific/Auckland"})
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+	var zone string
+	if err := pool.QueryRow(ctx, `SHOW TIME ZONE`).Scan(&zone); err != nil {
+		t.Fatal(err)
+	}
+	if zone != "Pacific/Auckland" {
+		t.Fatalf("session time zone = %q, want Pacific/Auckland", zone)
+	}
 	stats := NewStatsRepository(pool)
 	now := time.Date(2026, time.November, 17, 12, 0, 0, 0, time.UTC)
 

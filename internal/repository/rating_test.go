@@ -18,6 +18,14 @@ import (
 // Each run uses its own schema and applies the actual forward migrations.
 func ratingTestPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
+	return ratingTestPoolWithParams(t, nil)
+}
+
+// ratingTestPoolWithParams is ratingTestPool with extra PostgreSQL session
+// parameters, such as timezone, set on every connection of this test's pool
+// only.
+func ratingTestPoolWithParams(t *testing.T, params map[string]string) *pgxpool.Pool {
+	t.Helper()
 	databaseURL := os.Getenv("DEJAVIEW_TEST_DATABASE_URL")
 	if databaseURL == "" {
 		t.Skip("DEJAVIEW_TEST_DATABASE_URL is not set")
@@ -47,6 +55,9 @@ func ratingTestPool(t *testing.T) *pgxpool.Pool {
 	}
 	config.ConnConfig.RuntimeParams["search_path"] = schema
 	config.ConnConfig.RuntimeParams["application_name"] = schema
+	for name, value := range params {
+		config.ConnConfig.RuntimeParams[name] = value
+	}
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		t.Fatal(err)
