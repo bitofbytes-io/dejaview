@@ -30,7 +30,14 @@ func TestMonthlyPicksPostgres(t *testing.T) {
 		t.Fatalf("session time zone = %q, want Pacific/Auckland", zone)
 	}
 	stats := NewStatsRepository(pool)
-	now := time.Date(2026, time.November, 17, 12, 0, 0, 0, time.UTC)
+	// 2026-12-01 08:00 in Auckland (UTC+13) is 2026-11-30 19:00 UTC, so the
+	// current month is December locally but November in UTC. A window taken from
+	// now's own zone instead of UTC would be shifted a month.
+	auckland := time.FixedZone("NZDT", 13*60*60)
+	now := time.Date(2026, time.December, 1, 8, 0, 0, 0, auckland)
+	if now.UTC().Month() != time.November || now.Month() != time.December {
+		t.Fatalf("now = %v (UTC %v), want a month that differs between zones", now, now.UTC())
+	}
 
 	got, err := stats.GetMonthlyPicks(ctx, now)
 	if err != nil {
@@ -137,7 +144,7 @@ func TestMonthlyPicksPostgres(t *testing.T) {
 	}
 }
 
-// expectedMonthlyWindow is the window for a "now" of 2026-11-17: the
+// expectedMonthlyWindow is the window for a "now" of 2026-11-30 19:00 UTC: the
 // MonthsOfPicks UTC months from 2025-12 through 2026-11, in order.
 func expectedMonthlyWindow() []time.Time {
 	months := make([]time.Time, model.MonthsOfPicks)
