@@ -36,15 +36,8 @@ func TestMonthlyPicksPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != model.MonthsOfPicks {
-		t.Fatalf("got %d months, want %d", len(got), model.MonthsOfPicks)
-	}
-	if first := got[0].Month; !first.Equal(time.Date(2025, time.December, 1, 0, 0, 0, 0, time.UTC)) {
-		t.Fatalf("first month = %v, want 2025-12-01", first)
-	}
-	if last := got[len(got)-1].Month; !last.Equal(time.Date(2026, time.November, 1, 0, 0, 0, 0, time.UTC)) {
-		t.Fatalf("last month = %v, want 2026-11-01", last)
-	}
+	wantMonths := expectedMonthlyWindow()
+	assertMonthSequence(t, got, wantMonths)
 	for _, month := range got {
 		if month.Total != 0 || len(month.Picks) != 0 {
 			t.Fatalf("month %v of an empty table = %+v, want no picks", month.Month, month)
@@ -119,16 +112,14 @@ func TestMonthlyPicksPostgres(t *testing.T) {
 		initial string // "" for no picker
 		count   int
 	}
-	want := map[time.Month][]pick{
-		time.December: {{"J", 1}},
-		time.March:    {{"D", 2}, {"J", 1}, {"", 2}},
-		time.November: {{"D", 1}},
+	want := map[string][]pick{
+		"2025-12": {{"J", 1}},
+		"2026-03": {{"D", 2}, {"J", 1}, {"", 2}},
+		"2026-11": {{"D", 1}},
 	}
+	assertMonthSequence(t, got, wantMonths)
 	for _, month := range got {
-		picks := want[month.Month.Month()]
-		if month.Month.Month() == time.December && month.Month.Year() != 2025 {
-			picks = nil
-		}
+		picks := want[month.Month.Format("2006-01")]
 		if len(month.Picks) != len(picks) {
 			t.Fatalf("%s: got %+v, want %v", month.Month.Format("2006-01"), month.Picks, picks)
 		}
@@ -142,6 +133,30 @@ func TestMonthlyPicksPostgres(t *testing.T) {
 		}
 		if month.Total != total {
 			t.Fatalf("%s total = %d, want %d", month.Month.Format("2006-01"), month.Total, total)
+		}
+	}
+}
+
+// expectedMonthlyWindow is the window for a "now" of 2026-11-17: the
+// MonthsOfPicks UTC months from 2025-12 through 2026-11, in order.
+func expectedMonthlyWindow() []time.Time {
+	months := make([]time.Time, model.MonthsOfPicks)
+	for i := range months {
+		months[i] = time.Date(2025, time.December+time.Month(i), 1, 0, 0, 0, 0, time.UTC)
+	}
+	return months
+}
+
+// assertMonthSequence requires exactly the wanted months, in order, with none
+// missing, duplicated or shifted.
+func assertMonthSequence(t *testing.T, got []model.MonthlyPicks, want []time.Time) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("got %d months, want %d", len(got), len(want))
+	}
+	for i, w := range want {
+		if !got[i].Month.Equal(w) || got[i].Month.Location() != time.UTC {
+			t.Fatalf("month %d = %v, want %v (UTC)", i, got[i].Month, w)
 		}
 	}
 }
