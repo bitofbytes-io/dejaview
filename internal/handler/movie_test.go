@@ -32,6 +32,7 @@ func TestSearchTMDBRejectsOverlongQuery(t *testing.T) {
 
 type stubMovieRepo struct {
 	existing    *model.Movie
+	getErr      error
 	createErr   error
 	created     []model.CreateMovieInput
 	getByTMDBID []int
@@ -39,7 +40,7 @@ type stubMovieRepo struct {
 
 func (s *stubMovieRepo) GetByTMDBId(ctx context.Context, tmdbID int) (*model.Movie, error) {
 	s.getByTMDBID = append(s.getByTMDBID, tmdbID)
-	return s.existing, nil
+	return s.existing, s.getErr
 }
 
 func (s *stubMovieRepo) Create(ctx context.Context, input model.CreateMovieInput) (*model.Movie, error) {
@@ -52,6 +53,7 @@ func (s *stubMovieRepo) Create(ctx context.Context, input model.CreateMovieInput
 
 type stubMovieEntryRepo struct {
 	state        model.EntryGroupState
+	stateErr     error
 	checkVersion bool
 	beforeCreate func()
 	checkErr     error
@@ -60,7 +62,7 @@ type stubMovieEntryRepo struct {
 }
 
 func (s *stubMovieEntryRepo) GroupState(ctx context.Context) (model.EntryGroupState, error) {
-	return s.state, nil
+	return s.state, s.stateErr
 }
 
 func (s *stubMovieEntryRepo) CheckGroup(ctx context.Context, group int) error {
