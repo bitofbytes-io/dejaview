@@ -126,153 +126,209 @@ func (h *MovieHandler) SearchTMDB(w http.ResponseWriter, r *http.Request) {
 func (h *MovieHandler) AddFromTMDB(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if err := parseLimitedForm(w, r); err != nil {
-		if requestBodyTooLarge(w, err) {
-			return
-		}
-		http.Error(w, "Invalid form data", http.StatusBadRequest)
+	req, err := h.parseAddRequest(w, r)
+	if err != nil {
+		writeAddError(w, err)
+		return
+	}
+	movie, reusedMovie, err := h.resolveMovie(ctx, req.tmdbID)
+	if err != nil {
+		writeAddError(w, err)
+		return
+	}
+	entry, err := h.insertEntry(ctx, movie, req)
+	if err != nil {
+		writeAddError(w, err)
 		return
 	}
 
-	tmdbIDStr := r.FormValue("tmdb_id")
-	groupNumberStr := r.FormValue("group_number")
+	// Return success with HX-Trigger to refresh the group
+	slog.Info("movie entry added", "entry_id", entry.ID, "movie_id", movie.ID, "tmdb_id", req.tmdbID, "group_number", req.groupNumber, "reused_movie", reusedMovie)
+	w.Header().Set("HX-Trigger", `{"showToast": {"message": "Movie added!", "type": "success"}, "refreshGroups": true}`)
+	w.WriteHeader(http.StatusOK)
+}
 
-	tmdbID, err := strconv.Atoi(tmdbIDStr)
+// addRequest is a validated add-from-TMDB form.
+type addRequest struct {
+	tmdbID       int
+	groupNumber  int
+	groupVersion int64
+}
+
+// addError is a failed add step with the response it maps to. Group
+// rejections use the errAddInvalidGroup and errAddGroupChanged sentinels
+// because their responses are shared with other handlers.
+type addError struct {
+	status  int
+	message string
+	trigger string
+}
+
+func (e *addError) Error() string { return e.message }
+
+var (
+	errAddInvalidGroup = errors.New("invalid group number")
+	errAddGroupChanged = errors.New("groups changed")
+)
+
+func addInternalError(message string) *addError {
+	return &addError{status: http.StatusInternalServerError, message: message}
+}
+
+// writeAddError writes the response for an error returned by an add step.
+func writeAddError(w http.ResponseWriter, err error) {
+	var addErr *addError
+	switch {
+	case errors.Is(err, errAddInvalidGroup):
+		rejectAddGroup(w)
+	case errors.Is(err, errAddGroupChanged):
+		rejectChangedGroup(w)
+	case errors.As(err, &addErr):
+		if addErr.trigger != "" {
+			w.Header().Set("HX-Trigger", addErr.trigger)
+		}
+		http.Error(w, addErr.message, addErr.status)
+	default:
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+// parseAddRequest parses the add form and validates its group and group
+// version against current state before anything is stored.
+func (h *MovieHandler) parseAddRequest(w http.ResponseWriter, r *http.Request) (addRequest, error) {
+	ctx := r.Context()
+
+	if err := parseLimitedForm(w, r); err != nil {
+		var sizeErr *http.MaxBytesError
+		if errors.As(err, &sizeErr) {
+			return addRequest{}, &addError{status: http.StatusRequestEntityTooLarge, message: "Request body too large"}
+		}
+		return addRequest{}, &addError{status: http.StatusBadRequest, message: "Invalid form data"}
+	}
+
+	tmdbID, err := strconv.Atoi(r.FormValue("tmdb_id"))
 	if err != nil {
-		http.Error(w, "Invalid TMDB ID", http.StatusBadRequest)
-		return
+		return addRequest{}, &addError{status: http.StatusBadRequest, message: "Invalid TMDB ID"}
 	}
 
 	// Reject a stale group before storing a new movie for it; Create checks
 	// again under the group's lock.
-	groupNumber, err := strconv.Atoi(groupNumberStr)
+	groupNumber, err := strconv.Atoi(r.FormValue("group_number"))
 	if err != nil {
-		rejectAddGroup(w)
-		return
+		return addRequest{}, errAddInvalidGroup
 	}
 	state, err := h.entryRepo.GroupState(ctx)
 	if err != nil {
 		slog.Error("failed to read group state", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
+		return addRequest{}, addInternalError("Internal Server Error")
 	}
 	version := state.Version
 	if supplied := r.FormValue("group_version"); supplied != "" {
 		parsed, err := strconv.ParseInt(supplied, 10, 64)
 		if err != nil || parsed < 0 {
-			http.Error(w, "Invalid group_version", http.StatusBadRequest)
-			return
+			return addRequest{}, &addError{status: http.StatusBadRequest, message: "Invalid group_version"}
 		}
 		if parsed != version {
-			rejectChangedGroup(w)
-			return
+			return addRequest{}, errAddGroupChanged
 		}
 		version = parsed
 	}
 	if err := h.entryRepo.CheckGroup(ctx, groupNumber); errors.Is(err, repository.ErrInvalidGroup) {
-		rejectAddGroup(w)
-		return
+		return addRequest{}, errAddInvalidGroup
 	} else if err != nil {
 		slog.Error("failed to check group", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
+		return addRequest{}, addInternalError("Internal Server Error")
 	}
 
-	// Check if movie already exists in library
-	existingMovie, err := h.movieRepo.GetByTMDBId(ctx, tmdbID)
+	return addRequest{tmdbID: tmdbID, groupNumber: groupNumber, groupVersion: version}, nil
+}
+
+// resolveMovie returns the library movie for a TMDB ID, fetching it from TMDB
+// and storing it when it is not in the library yet. reused reports whether the
+// movie already existed.
+func (h *MovieHandler) resolveMovie(ctx context.Context, tmdbID int) (movie *model.Movie, reused bool, err error) {
+	existing, err := h.movieRepo.GetByTMDBId(ctx, tmdbID)
 	if err != nil {
 		slog.Error("failed to check existing movie", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
+		return nil, false, addInternalError("Internal Server Error")
+	}
+	if existing != nil {
+		return existing, true, nil
 	}
 
-	var movie *model.Movie
-	reusedMovie := existingMovie != nil
-	if existingMovie != nil {
-		movie = existingMovie
-	} else {
-		// Fetch movie details from TMDB
-		details, err := h.tmdbClient.GetMovie(ctx, tmdbID)
-		if err != nil {
-			slog.Error("failed to get TMDB movie", "error", err)
-			http.Error(w, "Failed to fetch movie details", http.StatusInternalServerError)
-			return
-		}
-		if details == nil {
-			http.Error(w, "Movie not found", http.StatusNotFound)
-			return
-		}
-
-		// Build poster URL
-		var posterURL *string
-		if details.PosterPath != nil {
-			url := h.tmdbClient.PosterURL(*details.PosterPath, "w500")
-			posterURL = &url
-		}
-
-		// Store metadata as JSON
-		metadataJSON, err := json.Marshal(details)
-		if err != nil {
-			slog.Error("failed to marshal TMDB metadata", "error", err, "tmdb_id", tmdbID)
-			http.Error(w, "Failed to save movie metadata", http.StatusInternalServerError)
-			return
-		}
-
-		// Create movie in database
-		movie, err = h.movieRepo.Create(ctx, model.CreateMovieInput{
-			Title:          details.Title,
-			ReleaseYear:    tmdb.ReleaseYear(details.ReleaseDate),
-			PosterURL:      posterURL,
-			Synopsis:       &details.Overview,
-			RuntimeMinutes: tmdb.RuntimeMinutes(details.Runtime),
-			TMDBId:         &tmdbID,
-			IMDBId:         details.IMDBId,
-			MetadataJSON:   metadataJSON,
-		})
-		if err != nil {
-			slog.Error("failed to create movie", "error", err)
-			http.Error(w, "Failed to save movie", http.StatusInternalServerError)
-			return
-		}
+	details, err := h.tmdbClient.GetMovie(ctx, tmdbID)
+	if err != nil {
+		slog.Error("failed to get TMDB movie", "error", err)
+		return nil, false, addInternalError("Failed to fetch movie details")
+	}
+	if details == nil {
+		return nil, false, &addError{status: http.StatusNotFound, message: "Movie not found"}
 	}
 
-	// Create entry for this movie
+	var posterURL *string
+	if details.PosterPath != nil {
+		url := h.tmdbClient.PosterURL(*details.PosterPath, "w500")
+		posterURL = &url
+	}
+
+	// Store metadata as JSON
+	metadataJSON, err := json.Marshal(details)
+	if err != nil {
+		slog.Error("failed to marshal TMDB metadata", "error", err, "tmdb_id", tmdbID)
+		return nil, false, addInternalError("Failed to save movie metadata")
+	}
+
+	movie, err = h.movieRepo.Create(ctx, model.CreateMovieInput{
+		Title:          details.Title,
+		ReleaseYear:    tmdb.ReleaseYear(details.ReleaseDate),
+		PosterURL:      posterURL,
+		Synopsis:       &details.Overview,
+		RuntimeMinutes: tmdb.RuntimeMinutes(details.Runtime),
+		TMDBId:         &tmdbID,
+		IMDBId:         details.IMDBId,
+		MetadataJSON:   metadataJSON,
+	})
+	if err != nil {
+		slog.Error("failed to create movie", "error", err)
+		return nil, false, addInternalError("Failed to save movie")
+	}
+	return movie, false, nil
+}
+
+// insertEntry creates the entry for the movie in the requested group and
+// records the dejaview_entries_added_total outcome of the attempt.
+func (h *MovieHandler) insertEntry(ctx context.Context, movie *model.Movie, req addRequest) (*model.Entry, error) {
 	entry, err := h.entryRepo.Create(ctx, model.CreateEntryInput{
 		MovieID:      movie.ID,
-		GroupNumber:  groupNumber,
-		GroupVersion: &version,
+		GroupNumber:  req.groupNumber,
+		GroupVersion: &req.groupVersion,
 	})
-	if errors.Is(err, repository.ErrCommitOutcomeUnknown) {
+	switch {
+	case errors.Is(err, repository.ErrCommitOutcomeUnknown):
 		h.metrics.EntryAdded("unknown")
-	} else if err != nil {
+	case err != nil:
 		h.metrics.EntryAdded("failure")
-	} else {
+	default:
 		h.metrics.EntryAdded("success")
 	}
-	if errors.Is(err, repository.ErrGroupNumberingChanged) {
-		rejectChangedGroup(w)
-		return
-	}
-	if errors.Is(err, repository.ErrInvalidGroup) {
-		rejectAddGroup(w)
-		return
-	}
-	if errors.Is(err, repository.ErrEntryExistsInGroup) {
-		slog.Info("movie already in group", "movie_id", movie.ID, "tmdb_id", tmdbID, "group_number", groupNumber)
-		w.Header().Set("HX-Trigger", fmt.Sprintf(`{"showToast": {"message": "Already in Group %d", "type": "error"}}`, groupNumber))
-		http.Error(w, "Movie is already in that group", http.StatusConflict)
-		return
-	}
-	if err != nil {
-		slog.Error("failed to create entry", "error", err)
-		http.Error(w, "Failed to create entry", http.StatusInternalServerError)
-		return
-	}
 
-	// Return success with HX-Trigger to refresh the group
-	slog.Info("movie entry added", "entry_id", entry.ID, "movie_id", movie.ID, "tmdb_id", tmdbID, "group_number", groupNumber, "reused_movie", reusedMovie)
-	w.Header().Set("HX-Trigger", `{"showToast": {"message": "Movie added!", "type": "success"}, "refreshGroups": true}`)
-	w.WriteHeader(http.StatusOK)
+	switch {
+	case errors.Is(err, repository.ErrGroupNumberingChanged):
+		return nil, errAddGroupChanged
+	case errors.Is(err, repository.ErrInvalidGroup):
+		return nil, errAddInvalidGroup
+	case errors.Is(err, repository.ErrEntryExistsInGroup):
+		slog.Info("movie already in group", "movie_id", movie.ID, "tmdb_id", req.tmdbID, "group_number", req.groupNumber)
+		return nil, &addError{
+			status:  http.StatusConflict,
+			message: "Movie is already in that group",
+			trigger: fmt.Sprintf(`{"showToast": {"message": "Already in Group %d", "type": "error"}}`, req.groupNumber),
+		}
+	case err != nil:
+		slog.Error("failed to create entry", "error", err)
+		return nil, addInternalError("Failed to create entry")
+	}
+	return entry, nil
 }
 
 // rejectAddGroup answers an add whose group is not an existing group or the
