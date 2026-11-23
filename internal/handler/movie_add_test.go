@@ -174,7 +174,12 @@ func TestInsertEntry(t *testing.T) {
 			if rec.Code != tc.wantStatus {
 				t.Fatalf("status %d, want %d", rec.Code, tc.wantStatus)
 			}
-			if trigger := rec.Header().Get("HX-Trigger"); !strings.Contains(trigger, tc.wantTrigger) || strings.Contains(trigger, "Movie added!") {
+			trigger := rec.Header().Get("HX-Trigger")
+			if tc.wantTrigger == "" {
+				if trigger != "" {
+					t.Fatalf("trigger %q, want none", trigger)
+				}
+			} else if !strings.Contains(trigger, tc.wantTrigger) || strings.Contains(trigger, "Movie added!") {
 				t.Fatalf("trigger %q, want it to contain %q", trigger, tc.wantTrigger)
 			}
 			assertDomainMetrics(t, m, "dejaview_entries_added_total", map[string]float64{`{result="` + tc.wantMetric + `"}`: 1})
